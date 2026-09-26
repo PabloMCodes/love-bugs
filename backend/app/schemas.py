@@ -137,6 +137,14 @@ class Robot(StrictModel):
     task: RobotTask | None
 
 
+class RobotsResponse(StrictModel):
+    robots: list[Robot]
+
+
+class TasksResponse(StrictModel):
+    tasks: list[RobotTask]
+
+
 class MarketItem(StrictModel):
     id: str
     name: str

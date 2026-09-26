@@ -56,6 +56,27 @@ error instead of silently choosing a mode. `backend/.env.example` lists the sett
 but the server reads exported environment variables and does not load that file
 automatically.
 
+## Read-only game queries
+
+Teammates can inspect focused resources without downloading and filtering the
+entire world snapshot:
+
+```sh
+curl http://localhost:8000/robots
+curl http://localhost:8000/robots/robot-a
+curl http://localhost:8000/market
+curl http://localhost:8000/tasks
+curl http://localhost:8000/tasks/task-3
+```
+
+`GET /robots` returns `{"robots":[...]}` and `GET /tasks` returns
+`{"tasks":[...]}` in stable creation order. Individual unknown robot or task IDs
+return `404`. The task catalog covers the current session and retains active,
+completed, failed, and cancelled tasks after they leave the robot's active `task`
+field. Failed tasks include their stable error code and message. Reset starts a
+new session with an empty task catalog; older semantic events remain accessible
+through the persisted history endpoints.
+
 ## Localization integration
 
 Camera/localization teammates can publish normalized world coordinates without

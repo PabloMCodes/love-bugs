@@ -190,7 +190,8 @@ class ArrivalRouteTests(unittest.TestCase):
         self.assertEqual(response.json(), {'accepted': True})
         self.assertEqual(arrived.robots[0].game.location, 'farm')
         self.assertIsNone(arrived.robots[0].task)
-        self.assertEqual(arrived.events[-1].type, 'robot_arrived')
+        self.assertEqual(arrived.events[-2].type, 'robot_arrived')
+        self.assertEqual(arrived.events[-1].type, 'task_completed')
 
         revision = arrived.revision
         duplicate = self.client.post('/robots/robot-a/arrived', json=report)

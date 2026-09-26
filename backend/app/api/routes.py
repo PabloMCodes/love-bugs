@@ -8,10 +8,13 @@ from app.schemas import (
     ArrivalReport,
     BlockedReport,
     HealthReport,
+    Market,
     PoseReport,
     Robot,
+    RobotsResponse,
     RobotTask,
     TaskRequest,
+    TasksResponse,
     WorldSnapshot,
 )
 from app.state import WorldStateError, WorldStore
@@ -49,6 +52,32 @@ def create_world_router(store: WorldStore) -> APIRouter:
     @router.get('/world', response_model=WorldSnapshot)
     def world() -> WorldSnapshot:
         return store.snapshot()
+
+    @router.get('/robots', response_model=RobotsResponse)
+    def robots() -> RobotsResponse:
+        return RobotsResponse(robots=store.robots())
+
+    @router.get('/robots/{robot_id}', response_model=Robot)
+    def robot(robot_id: str) -> Robot:
+        try:
+            return store.robot(robot_id)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.get('/market', response_model=Market)
+    def market() -> Market:
+        return store.market()
+
+    @router.get('/tasks', response_model=TasksResponse)
+    def tasks() -> TasksResponse:
+        return TasksResponse(tasks=store.tasks())
+
+    @router.get('/tasks/{task_id}', response_model=RobotTask)
+    def task(task_id: str) -> RobotTask:
+        try:
+            return store.task(task_id)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
 
     @router.post('/game/start', response_model=WorldSnapshot)
     def start_game() -> WorldSnapshot:

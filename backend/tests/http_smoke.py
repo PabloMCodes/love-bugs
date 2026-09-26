@@ -57,17 +57,29 @@ def main():
                         result = client.post('/tasks', json=request)
                         assert result.status_code == 202, result.text
                         assert task_done('robot-b')['game']['money'] == expected
-                        assert client.post('/tasks', json=request).json() == result.json()
+                        revision = client.get('/world').json()['revision']
+                        retry = client.post('/tasks', json=request)
+                        assert retry.status_code == 202
+                        assert retry.json()['id'] == result.json()['id']
+                        assert retry.json()['status'] == 'COMPLETED'
+                        assert client.get('/world').json()['revision'] == revision
                         assert task_done('robot-b')['game']['money'] == expected
                     request = {'request_id': 'harvest', 'robot_id': 'robot-a', 'action': 'HARVEST', 'location': 'farm'}
                     assert client.post('/tasks', json=request).status_code == 202
                     assert task_done('robot-a')['game']['inventory']['crop']['quantity'] == 3
                     events = client.get('/events').json()['events']
                     assert sum(e['type'] == 'task_completed' for e in events) == 3
+                    assert len(client.get('/robots').json()['robots']) == 2
+                    assert client.get('/robots/robot-a').json()['id'] == 'robot-a'
+                    assert len(client.get('/market').json()['items']) == 3
+                    tasks = client.get('/tasks').json()['tasks']
+                    assert len(tasks) == 3
+                    assert all(task['status'] == 'COMPLETED' for task in tasks)
+                    assert client.get(f"/tasks/{tasks[0]['id']}").json() == tasks[0]
                     path = client.get('/robots/robot-a/history').json()
                     assert len(path['position_samples']) > 2
                     assert client.get('/events', params={'session_id': sid}).json()['session_id'] == sid
-                    print('PASS world/start/tasks: movement, harvest, sell, buy, retry without duplicate reward, persisted history')
+                    print('PASS world/start/tasks: movement, harvest, sell, buy, query APIs, retry without duplicate reward, persisted history')
                     payload = {'session_id': sid, 'timestamp': (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat(),
                                'pose': {'x': 22, 'y': 50, 'heading': 90}}
                     assert client.post('/robots/robot-a/pose', json=payload).json()['accepted']
@@ -100,6 +112,7 @@ def main():
                     reset = client.post('/game/reset').json()
                     assert reset['session_id'] != sid and reset['revision'] == 1
                     assert reset['game']['status'] == 'READY'
+                    assert client.get('/tasks').json() == {'tasks': []}
                     assert client.get('/events', params={'session_id': sid}).status_code == 200
                     print('PASS game stop/start/reset and robot stop/resume lifecycle')
             except Exception:

@@ -60,7 +60,8 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertIsNone(billy.task)
         self.assertEqual(billy.game.location, 'farm')
         self.assertEqual((billy.physical.pose.x, billy.physical.pose.y), (20, 50))
-        self.assertEqual(world.events[-1].type, 'robot_arrived')
+        self.assertEqual(world.events[-2].type, 'robot_arrived')
+        self.assertEqual(world.events[-1].type, 'task_completed')
 
     def test_idle_tick_does_not_change_revision(self):
         store = WorldStore()

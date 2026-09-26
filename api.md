@@ -3,9 +3,10 @@
 Status: active MVP contract with partial backend implementation. The authoritative
 world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
 pose, arrival, health, and blocked-state ingestion, and the core game and robot
-stop/reset/resume controls are implemented. Remaining frontend query routes and
-hardware adapters are still planned. Update this document and affected consumers
-together when changing a contract.
+stop/reset/resume controls and read-only world, robot, market, task, event, and
+history queries are implemented. Goal configuration and hardware adapters remain
+planned. Update this document and affected consumers together when changing a
+contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
@@ -197,7 +198,10 @@ Game stop cancels unfinished tasks, disables autonomous dispatch, and requests a
 
 The response uses the task shape embedded in the world example, with a new `id`, status `ASSIGNED`, progress `0`, and `error: null`. `reason` is an optional agent explanation represented as a string or `null` in responses. Frontend requests do not need to supply it.
 
-`request_id` is required and unique per intended task within a session. Retrying the identical request returns the original task without executing it again. Reusing the ID with different content returns `409`. The server checks replay before checking whether the robot is busy.
+`request_id` is required and unique per intended task within a session. Retrying the
+identical request returns the same task in its current canonical state without
+executing it again. Reusing the ID with different content returns `409`. The server
+checks replay before checking whether the robot is busy.
 
 | MVP action | Location | Parameters | Completion |
 | --- | --- | --- | --- |
