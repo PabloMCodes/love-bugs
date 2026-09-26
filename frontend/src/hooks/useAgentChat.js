@@ -36,13 +36,27 @@ export function useAgentChat(world) {
                 setConnected(false);
                 reconnect = window.setTimeout(connect, Math.min(5000, 1000 * 2 ** attempts++));
             };
-            socket.onerror = () => socket.close();
+            socket.onerror = () => {
+                if (disposed) return;
+                setConnected(false);
+            };
         }
         connect();
         return () => {
             disposed = true;
             window.clearTimeout(reconnect);
-            socket?.close();
+
+            if (!socket) return;
+
+            socket.onmessage = null;
+            socket.onerror = null;
+            socket.onclose = null;
+
+            if (socket.readyState === WebSocket.CONNECTING) {
+                socket.onopen = () => socket.close();
+            } else if (socket.readyState === WebSocket.OPEN) {
+                socket.close();
+            }
         };
     }, []);
 
