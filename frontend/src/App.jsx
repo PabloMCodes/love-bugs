@@ -7,11 +7,19 @@ export default function App() {
     const { world, startHarvest, startRobotTravel } = useWorld();
     const billy = world.robots.find((robot) => robot.id === 'robot-a');
     const billyIsAtFarm = billy?.game.location === 'farm';
-    const billyIsTraveling = billy?.task?.status === 'NAVIGATING';
+    const billyIsAtMarket = billy?.game.location === 'market';
+    const billyTravelDestination = (
+        billy?.task?.status === 'NAVIGATING'
+            ? billy.task.location
+            : null
+    );
+    const billyIsTravelingToFarm = billyTravelDestination === 'farm';
+    const billyIsTravelingToMarket = billyTravelDestination === 'market';
     const billyIsHarvesting = (
         billy?.task?.status === 'ACTIVE'
         && billy.task.action === 'HARVEST'
     );
+    const billyWheatQuantity = billy?.game.inventory.crop?.quantity ?? 0;
     const harvestProgress = Math.round((billy?.task?.progress ?? 0) * 100);
 
     return (
@@ -26,9 +34,12 @@ export default function App() {
                         onClick={() => startRobotTravel('robot-a', 'farm')}
                         className="w-fit rounded-lg bg-rose-400 px-4 py-2 font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {billyIsAtFarm && 'Billy arrived at Farm'}
-                        {billyIsTraveling && 'Billy is traveling to Farm'}
-                        {!billyIsAtFarm && !billyIsTraveling && 'Send Billy to Farm'}
+                        {billyIsAtFarm
+                            ? 'Billy arrived at Farm'
+                            : billyIsTravelingToFarm
+                                ? 'Billy is traveling to Farm'
+                                : 'Send Billy to Farm'
+                        }
                     </button>
 
                     <button
@@ -40,6 +51,26 @@ export default function App() {
                         {billyIsHarvesting
                             ? `Harvesting Wheat: ${harvestProgress}%`
                             : 'Harvest Wheat'
+                        }
+                    </button>
+
+                    <button
+                        type="button"
+                        disabled={
+                            billyWheatQuantity === 0
+                            || billyIsAtMarket
+                            || Boolean(billy?.task)
+                        }
+                        onClick={() => startRobotTravel('robot-a', 'market')}
+                        className="w-fit rounded-lg bg-sky-300 px-4 py-2 font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {billyIsAtMarket
+                            ? 'Billy arrived at Market'
+                            : billyIsTravelingToMarket
+                                ? 'Billy is traveling to Market'
+                                : billyWheatQuantity === 0
+                                    ? 'Harvest Wheat first'
+                                    : 'Send Billy to Market'
                         }
                     </button>
                 </div>
