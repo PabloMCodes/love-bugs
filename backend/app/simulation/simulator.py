@@ -4,7 +4,8 @@ import asyncio
 import math
 
 from app.schemas import NavigationStep, Point, Pose
-from app.state import WorldStore
+from app.state import WorldStore, WorldStateError
+import logging
 
 
 def move_pose_toward(current: Pose, target: Point, step_distance: float) -> tuple[Pose, bool]:
@@ -84,7 +85,12 @@ class SimulationRunner:
     async def run(self) -> None:
         try:
             while True:
-                self.tick()
+                try:
+                    await asyncio.to_thread(self.tick)
+                except WorldStateError as error:
+                    if error.code != 'PERSISTENCE_UNAVAILABLE':
+                        raise
+                    logging.getLogger(__name__).warning('History unavailable; simulation tick will retry')
                 await asyncio.sleep(self.interval_seconds)
         except asyncio.CancelledError:
             return
