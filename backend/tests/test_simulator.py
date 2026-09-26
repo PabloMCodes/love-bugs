@@ -71,6 +71,29 @@ class SimulationRunnerTests(unittest.TestCase):
 
         self.assertEqual(store.snapshot().revision, revision)
 
+    def test_return_home_navigates_and_completes_as_return_home(self):
+        store = WorldStore()
+        store.start_game()
+        task = store.assign_task(TaskRequest(
+            request_id='simulation-return-home',
+            robot_id='robot-a',
+            action='RETURN_HOME',
+            location='homebase',
+        ))
+
+        SimulationRunner(store, step_distance=100).tick()
+
+        world = store.snapshot()
+        billy = world.robots[0]
+        self.assertIsNone(billy.task)
+        self.assertEqual(billy.game.location, 'homebase')
+        self.assertEqual((billy.physical.pose.x, billy.physical.pose.y), (50, 30))
+        self.assertEqual(world.events[-1].type, 'task_completed')
+        self.assertEqual(world.events[-1].message, 'Billy returned home.')
+        completed = store.task(task.id)
+        self.assertEqual(completed.action, 'RETURN_HOME')
+        self.assertEqual(completed.status, 'COMPLETED')
+
     def test_fishing_starts_at_lake_and_rewards_inventory_once(self):
         store = WorldStore()
         store.start_game()

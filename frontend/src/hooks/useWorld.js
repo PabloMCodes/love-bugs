@@ -376,7 +376,15 @@ export function useWorld() {
         return () => window.clearInterval(simulationTimer);
     }, []);
 
-    async function startRobotTravel(robotId, destinationId) {
+    async function startRobotTravel(
+        robotId,
+        destinationId,
+        action = taskCatalog.MOVE_TO.action,
+    ) {
+        const taskReason = action === taskCatalog.RETURN_HOME.action
+            ? 'Return to homebase.'
+            : `Travel to ${destinationId}.`;
+
         if (backendSelectedRef.current) {
             try {
                 let currentWorld = worldRef.current;
@@ -389,10 +397,10 @@ export function useWorld() {
                 await submitTask({
                     request_id: createRequestId(),
                     robot_id: robotId,
-                    action: taskCatalog.MOVE_TO.action,
+                    action,
                     location: destinationId,
                     parameters: {},
-                    reason: `Travel to ${destinationId}.`,
+                    reason: taskReason,
                 });
                 setConnection((current) => ({
                     ...current,
@@ -438,12 +446,12 @@ export function useWorld() {
                     task: {
                         id: taskId,
                         robot_id: robot.id,
-                        action: taskCatalog.MOVE_TO.action,
+                        action,
                         location: destinationId,
                         status: 'NAVIGATING',
                         progress: 0,
                         parameters: {},
-                        reason: `Travel to ${destinationId}.`,
+                        reason: taskReason,
                         error: null,
                     },
                 };
@@ -470,7 +478,9 @@ export function useWorld() {
                         type: 'task_assigned',
                         robot_id: robotId,
                         task_id: taskId,
-                        message: `Robot assigned to travel to ${destinationId}.`,
+                        message: action === taskCatalog.RETURN_HOME.action
+                            ? 'Robot assigned to return home.'
+                            : `Robot assigned to travel to ${destinationId}.`,
                         data: {},
                     },
                 ].slice(-100),
@@ -924,7 +934,11 @@ export function useWorld() {
         }
 
         if (proposal.action === taskCatalog.RETURN_HOME.action) {
-            startRobotTravel(proposal.robot_id, taskDefinition.requiredLocation);
+            startRobotTravel(
+                proposal.robot_id,
+                taskDefinition.requiredLocation,
+                taskDefinition.action,
+            );
             return;
         }
 

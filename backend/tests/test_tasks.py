@@ -74,6 +74,37 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(response.json()['action'], 'HARVEST')
         self.assertEqual(response.json()['status'], 'ASSIGNED')
 
+    def test_return_home_requires_homebase_and_no_parameters(self):
+        self.client.post('/game/start')
+        request = {
+            **self.request,
+            'request_id': 'request-return-home',
+            'action': 'RETURN_HOME',
+            'location': 'homebase',
+        }
+
+        accepted = self.client.post('/tasks', json=request)
+
+        self.assertEqual(accepted.status_code, 202)
+        self.assertEqual(accepted.json()['action'], 'RETURN_HOME')
+        self.assertEqual(accepted.json()['location'], 'homebase')
+        self.assertEqual(accepted.json()['reason'], 'Return to homebase.')
+
+        for request_id, updates in (
+            ('request-return-wrong-location', {'location': 'farm'}),
+            ('request-return-parameters', {'parameters': {'item': 'crop'}}),
+        ):
+            fresh_store = WorldStore()
+            with TestClient(create_app(world_store=fresh_store)) as client:
+                client.post('/game/start')
+                response = client.post('/tasks', json={
+                    **request,
+                    'request_id': request_id,
+                    **updates,
+                })
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()['error']['code'], 'INVALID_REQUEST')
+
     def test_collection_task_rejects_wrong_location_and_parameters(self):
         self.client.post('/game/start')
         wrong_location = {

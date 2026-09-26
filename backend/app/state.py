@@ -730,10 +730,10 @@ class WorldStore:
                 )
 
             activity = activity_for(request.action)
-            if request.action not in ('MOVE_TO', 'BUY', 'SELL') and activity is None:
+            if request.action not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL') and activity is None:
                 raise WorldStateError(
                     'INVALID_REQUEST',
-                    'Only MOVE_TO, HARVEST, FISH, BUY, and SELL are implemented by the backend task service.',
+                    'Only MOVE_TO, RETURN_HOME, HARVEST, FISH, BUY, and SELL are implemented by the backend task service.',
                 )
             if request.action not in ('BUY', 'SELL') and request.parameters:
                 raise WorldStateError(
@@ -748,6 +748,11 @@ class WorldStore:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} must take place at {activity.location}.',
+                )
+            if request.action == 'RETURN_HOME' and request.location != 'homebase':
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'RETURN_HOME must use the homebase destination.',
                 )
             if request.action in ('BUY', 'SELL') and request.location != 'market':
                 raise WorldStateError(
@@ -796,12 +801,16 @@ class WorldStore:
                 progress=0,
                 parameters=request.parameters,
                 reason=request.reason or (
-                    f'Travel to {request.location}.'
-                    if request.action == 'MOVE_TO'
+                    'Return to homebase.'
+                    if request.action == 'RETURN_HOME'
                     else (
-                        f'Begin {activity.label} at {request.location}.'
-                        if activity is not None
-                        else f'{request.action.title()} an item at market.'
+                        f'Travel to {request.location}.'
+                        if request.action == 'MOVE_TO'
+                        else (
+                            f'Begin {activity.label} at {request.location}.'
+                            if activity is not None
+                            else f'{request.action.title()} an item at market.'
+                        )
                     )
                 ),
                 error=None,
@@ -818,14 +827,18 @@ class WorldStore:
                 'robot_id': robot.id,
                 'task_id': task.id,
                 'message': (
-                    f'{robot.name} was assigned to travel to {request.location}.'
-                    if request.action == 'MOVE_TO'
+                    f'{robot.name} was assigned to return home.'
+                    if request.action == 'RETURN_HOME'
                     else (
-                        f'{robot.name} was assigned to {activity.label} at {request.location}.'
-                        if activity is not None
+                        f'{robot.name} was assigned to travel to {request.location}.'
+                        if request.action == 'MOVE_TO'
                         else (
-                            f'{robot.name} was assigned to '
-                            f'{request.action.lower()} an item at market.'
+                            f'{robot.name} was assigned to {activity.label} at {request.location}.'
+                            if activity is not None
+                            else (
+                                f'{robot.name} was assigned to '
+                                f'{request.action.lower()} an item at market.'
+                            )
                         )
                     )
                 ),
@@ -964,7 +977,7 @@ class WorldStore:
                     task is None
                     or task['id'] != step.task_id
                     or (
-                        task['action'] not in ('MOVE_TO', 'BUY', 'SELL')
+                        task['action'] not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL')
                         and activity_for(task['action']) is None
                     )
                     or task['status'] not in ('ASSIGNED', 'NAVIGATING')
@@ -1030,7 +1043,11 @@ class WorldStore:
                 'type': 'task_completed',
                 'robot_id': robot['id'],
                 'task_id': task['id'],
-                'message': f"{robot['name']} completed the move.",
+                'message': (
+                    f"{robot['name']} returned home."
+                    if task['action'] == 'RETURN_HOME'
+                    else f"{robot['name']} completed the move."
+                ),
                 'data': {},
             })
         else:

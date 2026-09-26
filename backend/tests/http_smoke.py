@@ -76,19 +76,23 @@ def main():
                     request = {'request_id': 'harvest', 'robot_id': 'robot-a', 'action': 'HARVEST', 'location': 'farm'}
                     assert client.post('/tasks', json=request).status_code == 202
                     assert task_done('robot-a')['game']['inventory']['crop']['quantity'] == 3
+                    request = {'request_id': 'return-home', 'robot_id': 'robot-a',
+                               'action': 'RETURN_HOME', 'location': 'homebase'}
+                    assert client.post('/tasks', json=request).status_code == 202
+                    assert task_done('robot-a')['game']['location'] == 'homebase'
                     events = client.get('/events').json()['events']
-                    assert sum(e['type'] == 'task_completed' for e in events) == 3
+                    assert sum(e['type'] == 'task_completed' for e in events) == 4
                     assert len(client.get('/robots').json()['robots']) == 2
                     assert client.get('/robots/robot-a').json()['id'] == 'robot-a'
                     assert len(client.get('/market').json()['items']) == 3
                     tasks = client.get('/tasks').json()['tasks']
-                    assert len(tasks) == 3
+                    assert len(tasks) == 4
                     assert all(task['status'] == 'COMPLETED' for task in tasks)
                     assert client.get(f"/tasks/{tasks[0]['id']}").json() == tasks[0]
                     path = client.get('/robots/robot-a/history').json()
                     assert len(path['position_samples']) > 2
                     assert client.get('/events', params={'session_id': sid}).json()['session_id'] == sid
-                    print('PASS goal/world/start/tasks: movement, harvest, sell, buy, query APIs, retry without duplicate reward, persisted history')
+                    print('PASS goal/world/start/tasks: movement, return home, harvest, sell, buy, query APIs, retry without duplicate reward, persisted history')
                     payload = {'session_id': sid, 'timestamp': (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat(),
                                'pose': {'x': 22, 'y': 50, 'heading': 90}}
                     assert client.post('/robots/robot-a/pose', json=payload).json()['accepted']

@@ -1,12 +1,12 @@
 # Game and robotics API contract
 
 Status: active MVP contract with partial backend implementation. The authoritative
-world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
+world feed, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
 pose, arrival, health, and blocked-state ingestion, and the core game and robot
 stop/reset/resume controls and read-only world, robot, market, task, event, and
-history queries and goal configuration are implemented. Native `RETURN_HOME`
-handling and hardware adapters remain planned. Update this document and affected
-consumers together when changing a contract.
+history queries and goal configuration are implemented. Hardware adapters remain
+planned. Update this document and affected consumers together when changing a
+contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
