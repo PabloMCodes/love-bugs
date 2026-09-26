@@ -86,7 +86,7 @@ python -m unittest discover -s tests -v
 ## Per-robot agent orchestration
 
 Each robot gets an independent Google ADK `LlmAgent` and runner using Gemini.
-The default model is `gemini-2.5-flash-lite`; set `AGENT_MODEL` to change it.
+The default model is `gemini-3.5-flash-lite`; set `AGENT_MODEL` to change it.
 Agents choose one high-level task and a short public reason. They never control
 motors, assign rewards, or change game state themselves.
 

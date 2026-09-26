@@ -44,7 +44,7 @@ def load_vision_config(path: str | Path) -> VisionConfig:
 
 @dataclass(frozen=True)
 class AgentConfig:
-    model: str = 'gemini-2.5-flash-lite'
+    model: str = 'gemini-3.5-flash-lite'
     interval_seconds: float = 10
     timeout_seconds: float = 20
 
@@ -54,7 +54,7 @@ class AgentConfig:
         import math
 
         config = cls(
-            model=os.getenv('AGENT_MODEL', 'gemini-2.5-flash-lite'),
+            model=os.getenv('AGENT_MODEL', 'gemini-3.5-flash-lite'),
             interval_seconds=float(os.getenv('AGENT_INTERVAL_SECONDS', '10')),
             timeout_seconds=float(os.getenv('AGENT_TIMEOUT_SECONDS', '20')),
         )

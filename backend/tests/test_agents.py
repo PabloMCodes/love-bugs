@@ -178,7 +178,7 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_real_adk_instances_with_mocked_model_response(self):
         from app.agents.gemini import GeminiPlanner, GeminiDecisionSchema
         with patch.dict(os.environ, {'GOOGLE_API_KEY': 'test-only'}, clear=True):
-            planner = GeminiPlanner('gemini-2.5-flash-lite')
+            planner = GeminiPlanner('gemini-3.5-flash-lite')
             first = planner._runner('robot-a')
             second = planner._runner('robot-b')
             self.assertIsNot(first.agent, second.agent)
@@ -205,7 +205,7 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
     def test_missing_key_clear_error(self):
         from app.agents.gemini import GeminiPlanner, GeminiDecisionSchema
         with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(ValueError, 'GOOGLE_API_KEY'):
-            GeminiPlanner('gemini-2.5-flash-lite')
+            GeminiPlanner('gemini-3.5-flash-lite')
 
 
 if __name__ == '__main__':
