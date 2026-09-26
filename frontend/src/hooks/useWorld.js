@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { mockWorldState } from '../data/mockWorldState.js';
 
 export function useWorld() {
-  const [world, setWorld] = useState(mockWorldState);
+    const [world, setWorld] = useState(mockWorldState);
 
-  return { world, setWorld };
+    return { world, setWorld };
 }

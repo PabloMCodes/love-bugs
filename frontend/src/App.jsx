@@ -1,5 +1,9 @@
 // Compose the game dashboard and share world state with its components.
+import { useWorld } from './hooks/useWorld.js';
+
 export default function App() {
+  const { world } = useWorld();
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-stone-950 px-6 text-stone-100">
       <section className="w-full max-w-xl rounded-2xl border border-stone-800 bg-stone-900 p-8">
@@ -8,7 +12,9 @@ export default function App() {
         <p className="mt-4 leading-relaxed text-stone-300">
           The dashboard is ready to build. Game controls and live robot updates will appear here.
         </p>
-        <p className="mt-6 text-sm text-stone-400">Backend not connected.</p>
+        <p className="mt-6 text-sm text-stone-400">
+          Current objective: Earn {world.game.goal.target} gold ({world.game.goal.current} earned)
+        </p>
       </section>
     </main>
   );
