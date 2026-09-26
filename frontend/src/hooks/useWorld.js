@@ -9,7 +9,6 @@ import { getMarketRobot } from '../utils/marketRobots.js';
 
 const simulationStepDistance = 5;
 const simulationTickMilliseconds = 250;
-const harvestTask = taskCatalog.HARVEST;
 
 function createRequestId() {
     return globalThis.crypto?.randomUUID?.()
@@ -604,10 +603,6 @@ export function useWorld() {
         });
     }
 
-    function startHarvest(robotId) {
-        startActivity(robotId, harvestTask.action);
-    }
-
     async function sellInventoryItem(robotId, itemId, requestedQuantity = null) {
         if (backendSelectedRef.current) {
             try {
@@ -972,7 +967,5 @@ export function useWorld() {
         buyMarketItem,
         dispatchAgentTask,
         sellInventoryItem,
-        startHarvest,
-        startRobotTravel,
     };
 }
