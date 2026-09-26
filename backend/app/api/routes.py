@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.errors import ApiError
-from app.schemas import RobotTask, TaskRequest, WorldSnapshot
+from app.schemas import AcceptedResponse, PoseReport, RobotTask, TaskRequest, WorldSnapshot
 from app.state import WorldStateError, WorldStore
 
 
@@ -19,6 +19,7 @@ ERROR_STATUS_CODES = {
     'INSUFFICIENT_INVENTORY': 409,
     'INSUFFICIENT_FUNDS': 409,
     'OUT_OF_STOCK': 409,
+    'SESSION_MISMATCH': 409,
 }
 
 
@@ -48,6 +49,13 @@ def create_world_router(store: WorldStore) -> APIRouter:
     def create_task(request: TaskRequest) -> RobotTask:
         try:
             return store.assign_task(request)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/robots/{robot_id}/pose', response_model=AcceptedResponse)
+    def update_robot_pose(robot_id: str, report: PoseReport) -> AcceptedResponse:
+        try:
+            return AcceptedResponse(accepted=store.update_pose(robot_id, report))
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

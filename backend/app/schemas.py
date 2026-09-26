@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class StrictModel(BaseModel):
@@ -97,6 +97,16 @@ class NavigationStep(StrictModel):
     pose: Pose
     location: str
     arrived: bool
+
+
+class PoseReport(StrictModel):
+    session_id: str = Field(min_length=1, max_length=100)
+    pose: Pose
+    timestamp: AwareDatetime
+
+
+class AcceptedResponse(StrictModel):
+    accepted: bool
 
 
 class Robot(StrictModel):

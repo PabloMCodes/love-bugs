@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and robot communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, timestamped robot pose ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and robot communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -22,6 +22,29 @@ The API and agents submit work to game logic. Game logic owns state changes, tim
 Start with modules in one backend process; separate processes only when integration needs justify it. Keep hardware I/O out of API handlers and game rules. Implement synchronization around shared state and transactions when adding concurrent work.
 
 [api.md](../api.md) remains the shared interface contract. Implement schemas and snapshots first, then tasks with simulation, hardware integration, and autonomous decisions. Choose the agent provider, camera library, and robot transport when those modules are implemented. ESP32 firmware will need its own project once its toolchain is selected; the onboard motor watchdog belongs in that firmware.
+
+## Localization integration
+
+Camera/localization teammates can publish normalized world coordinates without
+accessing game internals. Read the current `session_id` from `GET /world`, then
+send timezone-aware observations:
+
+```sh
+curl -X POST http://localhost:8000/robots/robot-a/pose \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "session_id": "demo-session-001",
+    "pose": {"x": 42.1, "y": 63.5, "heading": 91.2},
+    "timestamp": "2026-09-26T18:00:00Z"
+  }'
+```
+
+An accepted observation returns `{"accepted":true}` and appears in `/world` and
+the next `/events` snapshot. An older or duplicate timestamp returns
+`{"accepted":false}` without changing the world revision. Unknown robots return
+`404`; old session IDs return `409`; coordinates outside the configured map return
+`400`. Pose reports mark tracking as `TRACKED` but do not infer zone arrival or
+change game inventory, tasks, or rewards.
 
 ## Standalone overhead vision
 

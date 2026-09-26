@@ -12,7 +12,7 @@ from app.game.market import (
     quote_sale,
 )
 from app.game.tasks import activity_for
-from app.schemas import NavigationStep, RobotTask, TaskRequest, WorldSnapshot
+from app.schemas import NavigationStep, PoseReport, RobotTask, TaskRequest, WorldSnapshot
 
 
 class WorldStateError(Exception):
@@ -123,6 +123,49 @@ class WorldStore:
     def snapshot(self) -> WorldSnapshot:
         with self._lock:
             return self._world.model_copy(deep=True)
+
+    def update_pose(self, robot_id: str, report: PoseReport) -> bool:
+        with self._lock:
+            if report.session_id != self._world.session_id:
+                raise WorldStateError(
+                    'SESSION_MISMATCH',
+                    'The pose report belongs to a different game session.',
+                )
+
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+            if (
+                robot.physical.pose_updated_at is not None
+                and report.timestamp <= robot.physical.pose_updated_at
+            ):
+                return False
+            if (
+                not math.isfinite(report.pose.x)
+                or not math.isfinite(report.pose.y)
+                or report.pose.x < 0
+                or report.pose.x > self._world.map.width
+                or report.pose.y < 0
+                or report.pose.y > self._world.map.height
+            ):
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'Pose coordinates must be finite and inside the configured map.',
+                )
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot_id)
+            robot_data['physical']['pose'] = report.pose.model_dump(mode='python')
+            robot_data['physical']['pose_updated_at'] = report.timestamp
+            robot_data['physical']['tracking'] = 'TRACKED'
+            world['revision'] += 1
+            world['updated_at'] = now
+            self._world = WorldSnapshot.model_validate(world)
+            return True
 
     def start_game(self) -> WorldSnapshot:
         with self._lock:

@@ -1,9 +1,10 @@
 # Game and robotics API contract
 
 Status: active MVP contract with partial backend implementation. The authoritative
-world feed and simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks are implemented;
-remaining routes and hardware adapters are still planned. Update this document and
-affected consumers together when changing a contract.
+world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
+timestamped pose ingestion are implemented; remaining routes and hardware adapters
+are still planned. Update this document and affected consumers together when
+changing a contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
@@ -254,7 +255,10 @@ Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived
 
 ## Robotics integration boundary
 
-These routes are for localization/navigation adapters, not browser controls. They are proposed adapter interfaces; teammates can implement equivalent in-process calls if these components share a process. The world schema and frontend routes remain unchanged.
+These routes are for localization/navigation adapters, not browser controls. The
+pose route is implemented; the remaining rows are proposed adapter interfaces.
+Teammates can use equivalent in-process calls if components share a process. The
+world schema and frontend routes remain unchanged.
 
 | Caller | Method and path | Request | Success response |
 | --- | --- | --- | --- |
