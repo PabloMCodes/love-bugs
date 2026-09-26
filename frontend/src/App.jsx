@@ -130,7 +130,11 @@ export default function App() {
                         onBuyItem={buyMarketItem}
                         onSellItem={sellInventoryItem}
                         robots={world.robots}
-                        transactionsDisabled={backendOwnsWorld}
+                        buyDisabled={
+                            backendOwnsWorld
+                            || world.game.status === 'COMPLETED'
+                        }
+                        sellDisabled={world.game.status === 'COMPLETED'}
                     />
                     <WorldMap world={world} />
                     <AgentChat

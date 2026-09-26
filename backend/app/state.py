@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import math
 from threading import RLock
 
+from app.game.market import MarketRuleError, apply_sale, quote_sale
 from app.game.tasks import activity_for
 from app.schemas import NavigationStep, RobotTask, TaskRequest, WorldSnapshot
 
@@ -155,12 +156,12 @@ class WorldStore:
                 )
 
             activity = activity_for(request.action)
-            if request.action != 'MOVE_TO' and activity is None:
+            if request.action not in ('MOVE_TO', 'SELL') and activity is None:
                 raise WorldStateError(
                     'INVALID_REQUEST',
-                    'Only MOVE_TO, HARVEST, and FISH are implemented by the backend task service.',
+                    'Only MOVE_TO, HARVEST, FISH, and SELL are implemented by the backend task service.',
                 )
-            if request.parameters:
+            if request.action != 'SELL' and request.parameters:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} does not accept parameters.',
@@ -174,6 +175,8 @@ class WorldStore:
                     'INVALID_REQUEST',
                     f'{request.action} must take place at {activity.location}.',
                 )
+            if request.action == 'SELL' and request.location != 'market':
+                raise WorldStateError('INVALID_REQUEST', 'SELL must take place at market.')
 
             robot = next(
                 (candidate for candidate in self._world.robots if candidate.id == request.robot_id),
@@ -192,6 +195,11 @@ class WorldStore:
                 or robot.physical.pose is None
             ):
                 raise WorldStateError('ROBOT_UNAVAILABLE', f'{robot.id} is unavailable for navigation.')
+            if request.action == 'SELL':
+                try:
+                    quote_sale(robot.game.model_dump(mode='python'), request.parameters)
+                except MarketRuleError as error:
+                    raise WorldStateError(error.code, error.message) from error
 
             now = datetime.now(timezone.utc)
             next_revision = self._world.revision + 1
@@ -205,8 +213,12 @@ class WorldStore:
                 parameters=request.parameters,
                 reason=request.reason or (
                     f'Travel to {request.location}.'
-                    if activity is None
-                    else f'Begin {activity.label} at {request.location}.'
+                    if request.action == 'MOVE_TO'
+                    else (
+                        f'Begin {activity.label} at {request.location}.'
+                        if activity is not None
+                        else 'Sell inventory at market.'
+                    )
                 ),
                 error=None,
             )
@@ -223,8 +235,12 @@ class WorldStore:
                 'task_id': task.id,
                 'message': (
                     f'{robot.name} was assigned to travel to {request.location}.'
-                    if activity is None
-                    else f'{robot.name} was assigned to {activity.label} at {request.location}.'
+                    if request.action == 'MOVE_TO'
+                    else (
+                        f'{robot.name} was assigned to {activity.label} at {request.location}.'
+                        if activity is not None
+                        else f'{robot.name} was assigned to sell inventory at market.'
+                    )
                 ),
                 'data': {},
             })
@@ -263,7 +279,7 @@ class WorldStore:
                     task is None
                     or task['id'] != step.task_id
                     or (
-                        task['action'] != 'MOVE_TO'
+                        task['action'] not in ('MOVE_TO', 'SELL')
                         and activity_for(task['action']) is None
                     )
                     or task['status'] not in ('ASSIGNED', 'NAVIGATING')
@@ -291,7 +307,9 @@ class WorldStore:
                         'data': {},
                     })
                     activity = activity_for(task['action'])
-                    if activity is None:
+                    if task['action'] == 'SELL':
+                        self._complete_sale(world, robot, task, now)
+                    elif activity is None:
                         robot['task'] = None
                     else:
                         task['status'] = 'ACTIVE'
@@ -317,6 +335,91 @@ class WorldStore:
             world['events'] = world['events'][-100:]
             self._world = WorldSnapshot.model_validate(world)
             return self._world.model_copy(deep=True)
+
+    def _complete_sale(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
+        try:
+            quote = apply_sale(robot['game'], task['parameters'])
+        except MarketRuleError as error:
+            robot['task'] = None
+            world['events'].append({
+                'id': f"event-{task['id']}-failed",
+                'timestamp': now,
+                'type': 'task_failed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} could not complete the sale: {error.message}",
+                'data': {'code': error.code},
+            })
+            return
+
+        remaining = robot['game']['inventory'].get(quote.item_id, {}).get('quantity', 0)
+        robot['task'] = None
+        current_gold = sum(item['game']['money'] for item in world['robots'])
+        world['game']['goal']['current'] = current_gold
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} sold {quote.quantity} {quote.item_name}.",
+                'data': {
+                    'item': quote.item_id,
+                    'quantity': -quote.quantity,
+                    'total_quantity': remaining,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-gold",
+                'timestamp': now,
+                'type': 'gold_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} earned {quote.earnings} gold.",
+                'data': {
+                    'earnings': quote.earnings,
+                    'balance': robot['game']['money'],
+                },
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed the sale.",
+                'data': {},
+            },
+        ])
+
+        if current_gold < world['game']['goal']['target']:
+            return
+
+        world['game']['status'] = 'COMPLETED'
+        for other_robot in world['robots']:
+            other_task = other_robot['task']
+            if other_task is None:
+                continue
+            other_robot['task'] = None
+            world['events'].append({
+                'id': f"event-{other_task['id']}-cancelled",
+                'timestamp': now,
+                'type': 'task_cancelled',
+                'robot_id': other_robot['id'],
+                'task_id': other_task['id'],
+                'message': f"{other_robot['name']}'s task was cancelled because the goal was reached.",
+                'data': {},
+            })
+        world['events'].append({
+            'id': f"event-{task['id']}-goal",
+            'timestamp': now,
+            'type': 'game_completed',
+            'robot_id': robot['id'],
+            'task_id': task['id'],
+            'message': f'The crew reached {current_gold} gold and completed the goal.',
+            'data': {},
+        })
 
     def advance_activities(self, elapsed_seconds: float) -> WorldSnapshot:
         if not math.isfinite(elapsed_seconds) or elapsed_seconds <= 0:

@@ -10,7 +10,8 @@ export default function MarketPanel({
     onBuyItem,
     onSellItem,
     robots,
-    transactionsDisabled,
+    buyDisabled,
+    sellDisabled,
 }) {
     const [activePanel, setActivePanel] = useState('buy');
 
@@ -51,14 +52,14 @@ export default function MarketPanel({
                 >
                     {activePanel === 'buy' ? (
                         <BuyPanel
-                            disabled={transactionsDisabled}
+                            disabled={buyDisabled}
                             market={market}
                             onBuyItem={onBuyItem}
                             robots={robots}
                         />
                     ) : (
                         <SellPanel
-                            disabled={transactionsDisabled}
+                            disabled={sellDisabled}
                             onSellItem={onSellItem}
                             robots={robots}
                         />

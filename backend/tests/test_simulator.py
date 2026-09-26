@@ -2,7 +2,7 @@ import unittest
 
 from app.schemas import Point, Pose, TaskRequest
 from app.simulation.simulator import SimulationRunner, move_pose_toward
-from app.state import WorldStore
+from app.state import WorldStore, default_world
 
 
 class MovementTests(unittest.TestCase):
@@ -124,6 +124,61 @@ class SimulationRunnerTests(unittest.TestCase):
         milo = store.snapshot().robots[1]
         self.assertIsNone(milo.task)
         self.assertEqual(milo.game.inventory['crop'].quantity, 6)
+
+    def test_sell_executes_once_after_market_arrival(self):
+        store = WorldStore()
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-sell-001',
+            robot_id='robot-b',
+            action='SELL',
+            location='market',
+            parameters={'item': 'crop', 'quantity': 2},
+        ))
+        simulator = SimulationRunner(store)
+
+        simulator.tick()
+        completed = store.snapshot()
+        milo = completed.robots[1]
+        self.assertIsNone(milo.task)
+        self.assertEqual(milo.game.inventory['crop'].quantity, 1)
+        self.assertEqual(milo.game.money, 64)
+        self.assertEqual(completed.game.goal.current, 104)
+        self.assertEqual(completed.events[-1].type, 'task_completed')
+
+        revision = completed.revision
+        simulator.tick()
+        self.assertEqual(store.snapshot().revision, revision)
+        self.assertEqual(store.snapshot().robots[1].game.money, 64)
+
+    def test_sale_completes_goal_and_cancels_other_work(self):
+        world = default_world()
+        world['game']['goal']['target'] = 100
+        store = WorldStore(world)
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-other-move',
+            robot_id='robot-a',
+            action='MOVE_TO',
+            location='farm',
+        ))
+        store.assign_task(TaskRequest(
+            request_id='simulation-winning-sale',
+            robot_id='robot-b',
+            action='SELL',
+            location='market',
+            parameters={'item': 'crop', 'quantity': 2},
+        ))
+
+        SimulationRunner(store, step_distance=1).tick()
+
+        completed = store.snapshot()
+        self.assertEqual(completed.game.status, 'COMPLETED')
+        self.assertEqual(completed.game.goal.current, 104)
+        self.assertIsNone(completed.robots[0].task)
+        self.assertIsNone(completed.robots[1].task)
+        self.assertIn('task_cancelled', [event.type for event in completed.events])
+        self.assertEqual(completed.events[-1].type, 'game_completed')
 
 
 if __name__ == '__main__':

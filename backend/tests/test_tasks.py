@@ -97,6 +97,45 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(parameters_response.status_code, 400)
         self.assertEqual(parameters_response.json()['error']['code'], 'INVALID_REQUEST')
 
+    def test_sell_task_validates_inventory_and_parameters(self):
+        self.client.post('/game/start')
+        request = {
+            **self.request,
+            'request_id': 'request-sell-001',
+            'robot_id': 'robot-b',
+            'action': 'SELL',
+            'location': 'market',
+            'parameters': {'item': 'crop', 'quantity': 2},
+        }
+
+        accepted = self.client.post('/tasks', json=request)
+
+        self.assertEqual(accepted.status_code, 202)
+        self.assertEqual(accepted.json()['action'], 'SELL')
+        self.assertEqual(accepted.json()['parameters'], request['parameters'])
+
+        fresh_store = WorldStore()
+        with TestClient(create_app(world_store=fresh_store)) as client:
+            client.post('/game/start')
+            unavailable = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-sell-too-many',
+                'parameters': {'item': 'crop', 'quantity': 99},
+            })
+            malformed = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-sell-malformed',
+                'parameters': {'item': 'crop'},
+            })
+
+        self.assertEqual(unavailable.status_code, 409)
+        self.assertEqual(
+            unavailable.json()['error']['code'],
+            'INSUFFICIENT_INVENTORY',
+        )
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(malformed.json()['error']['code'], 'INVALID_REQUEST')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,7 @@
 # Game and robotics API contract
 
 Status: active MVP contract with partial backend implementation. The authoritative
-world feed and simulated `MOVE_TO`, `HARVEST`, and `FISH` tasks are implemented;
+world feed and simulated `MOVE_TO`, `HARVEST`, `FISH`, and `SELL` tasks are implemented;
 remaining routes and hardware adapters are still planned. Update this document and
 affected consumers together when changing a contract.
 
@@ -358,6 +358,7 @@ A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussio
   "text": "I propose harvesting at the farm. Milo, can you cover the lake?",
   "action": "HARVEST",
   "location": "farm",
+  "parameters": {},
   "status": "proposed"
 }
 ```
@@ -367,9 +368,11 @@ the planner's assigned robot, not model-generated IDs. Gemini decisions may incl
 an optional `message` string (1–300 characters); it is kept out of task request
 parameters. Planners receive the latest 20 messages as `agent_messages`. The
 in-process orchestrator also exposes `chat.snapshot()`, publishing `accepted` or
-`waiting` messages after validation and task acceptance. The preview emits only
-`proposed` messages. They are not confirmations of execution; clients must submit
-them through normal task validation and wait for the authoritative world snapshot.
+`waiting` messages after validation and task acceptance. Trade proposals carry
+`{ "item": "...", "quantity": 1 }` in `parameters`; other proposals use an empty
+object. The preview emits only `proposed` messages. They are not confirmations of
+execution; clients must submit them through normal task validation and wait for
+the authoritative world snapshot.
 
 The preview has one shared room and retains 100 messages in memory. New session
 IDs, provider switches, or process restarts clear history. Replace received

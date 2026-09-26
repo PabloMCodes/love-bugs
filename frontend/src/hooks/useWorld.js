@@ -598,11 +598,45 @@ export function useWorld() {
         startActivity(robotId, harvestTask.action);
     }
 
-    function sellInventoryItem(robotId, itemId) {
+    async function sellInventoryItem(robotId, itemId, requestedQuantity = null) {
         if (backendSelectedRef.current) {
-            reportBackendError(new Error(
-                'Selling is not implemented by the backend yet.',
-            ));
+            try {
+                let currentWorld = worldRef.current;
+                const robot = currentWorld.robots.find(
+                    (candidate) => candidate.id === robotId,
+                );
+                const availableQuantity = robot?.game.inventory[itemId]?.quantity;
+                const quantity = requestedQuantity ?? availableQuantity;
+
+                if (
+                    !Number.isInteger(quantity)
+                    || quantity <= 0
+                    || quantity > availableQuantity
+                ) {
+                    throw new Error('That inventory item is no longer available.');
+                }
+
+                if (currentWorld.game.status !== 'RUNNING') {
+                    currentWorld = await startGame();
+                    applyBackendSnapshot(currentWorld);
+                }
+
+                await submitTask({
+                    request_id: createRequestId(),
+                    robot_id: robotId,
+                    action: taskCatalog.SELL.action,
+                    location: taskCatalog.SELL.requiredLocation,
+                    parameters: { item: itemId, quantity },
+                    reason: `Sell ${quantity} ${itemId} at the market.`,
+                });
+                setConnection((current) => ({
+                    ...current,
+                    error: null,
+                }));
+            } catch (error) {
+                reportBackendError(error);
+            }
+
             return;
         }
 
@@ -857,6 +891,18 @@ export function useWorld() {
 
         if (proposal.action === taskCatalog.RETURN_HOME.action) {
             startRobotTravel(proposal.robot_id, taskDefinition.requiredLocation);
+            return;
+        }
+
+        if (
+            proposal.action === taskCatalog.SELL.action
+            && proposal.parameters?.item
+        ) {
+            sellInventoryItem(
+                proposal.robot_id,
+                proposal.parameters.item,
+                proposal.parameters.quantity,
+            );
         }
     }
 

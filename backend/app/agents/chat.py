@@ -36,6 +36,11 @@ class AgentChat:
             'text': decision.message,
             'action': decision.action,
             'location': decision.location,
+            'parameters': (
+                {'item': decision.item, 'quantity': decision.quantity}
+                if decision.action in ('BUY', 'SELL')
+                else {}
+            ),
             'status': status,
         })
         self.messages = self.messages[-100:]

@@ -70,6 +70,10 @@ class DiscussionTests(unittest.IsolatedAsyncioTestCase):
         result = await service.discuss(DiscussionRequest(world=world))
         self.assertIsNone(result['error'])
         self.assertEqual(result['messages'][0]['action'], 'SELL')
+        self.assertEqual(
+            result['messages'][0]['parameters'],
+            {'item': 'fish', 'quantity': 2},
+        )
         self.assertNotIn('sell_price', world['market']['items'][0])
 
     async def test_round_cooldown(self):

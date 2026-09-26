@@ -87,6 +87,10 @@ export default function AgentChat({ onTaskProposal, world }) {
                             <p className="mt-2 text-xs text-stone-400">
                                 Proposed: {message.action.toLowerCase().replaceAll('_', ' ')}
                                 {message.location ? ` · ${message.location}` : ''}
+                                {message.parameters?.item
+                                    ? ` · ${message.parameters.quantity} ${message.parameters.item}`
+                                    : ''
+                                }
                             </p>
                         </article>
                     ))}

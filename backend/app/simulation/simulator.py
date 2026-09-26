@@ -53,7 +53,7 @@ class SimulationRunner:
             task = robot.task
             if (
                 task is None
-                or task.action not in ('MOVE_TO', 'HARVEST', 'FISH')
+                or task.action not in ('MOVE_TO', 'HARVEST', 'FISH', 'SELL')
                 or task.status not in ('ASSIGNED', 'NAVIGATING')
                 or robot.physical.pose is None
                 or not robot.physical.online
