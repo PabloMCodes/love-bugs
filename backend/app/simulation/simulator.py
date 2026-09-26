@@ -46,12 +46,14 @@ class SimulationRunner:
         if world.mode != 'simulation' or world.game.status != 'RUNNING':
             return
 
+        self.store.advance_activities(self.interval_seconds)
+        world = self.store.snapshot()
         steps = []
         for robot in world.robots:
             task = robot.task
             if (
                 task is None
-                or task.action != 'MOVE_TO'
+                or task.action not in ('MOVE_TO', 'HARVEST', 'FISH')
                 or task.status not in ('ASSIGNED', 'NAVIGATING')
                 or robot.physical.pose is None
                 or not robot.physical.online

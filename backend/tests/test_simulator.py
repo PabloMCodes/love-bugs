@@ -70,6 +70,61 @@ class SimulationRunnerTests(unittest.TestCase):
 
         self.assertEqual(store.snapshot().revision, revision)
 
+    def test_fishing_starts_at_lake_and_rewards_inventory_once(self):
+        store = WorldStore()
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-fish-001',
+            robot_id='robot-a',
+            action='FISH',
+            location='lake',
+        ))
+        simulator = SimulationRunner(store, interval_seconds=.25)
+
+        simulator.tick()
+        started = store.snapshot().robots[0]
+        self.assertEqual(started.task.status, 'ACTIVE')
+        self.assertEqual(started.task.progress, 0)
+
+        simulator.tick()
+        self.assertAlmostEqual(store.snapshot().robots[0].task.progress, .1)
+
+        for _ in range(9):
+            simulator.tick()
+
+        completed = store.snapshot()
+        billy = completed.robots[0]
+        self.assertIsNone(billy.task)
+        self.assertEqual(billy.game.inventory['fish'].quantity, 3)
+        self.assertEqual(completed.events[-2].type, 'inventory_updated')
+        self.assertEqual(completed.events[-1].type, 'task_completed')
+
+        simulator.tick()
+        self.assertEqual(store.snapshot().robots[0].game.inventory['fish'].quantity, 3)
+
+    def test_harvest_travels_to_farm_before_activity(self):
+        store = WorldStore()
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-harvest-001',
+            robot_id='robot-b',
+            action='HARVEST',
+            location='farm',
+        ))
+        simulator = SimulationRunner(store, interval_seconds=.25, step_distance=100)
+
+        simulator.tick()
+        milo = store.snapshot().robots[1]
+        self.assertEqual(milo.game.location, 'farm')
+        self.assertEqual(milo.task.status, 'ACTIVE')
+
+        for _ in range(10):
+            simulator.tick()
+
+        milo = store.snapshot().robots[1]
+        self.assertIsNone(milo.task)
+        self.assertEqual(milo.game.inventory['crop'].quantity, 6)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,8 @@
 # Frontend
 
-The React dashboard, using JavaScript, Vite, and Tailwind CSS.
-React, Vite, and Tailwind are configured with a minimal starter screen. Dashboard components and API integration remain commented placeholders.
+The React dashboard uses JavaScript, Vite, and Tailwind CSS. It renders the
+authoritative backend world, follows live WebSocket snapshots, submits movement
+and collection tasks, and retains a local simulation fallback for offline demos.
 
 ## Run locally
 
@@ -23,7 +24,7 @@ npm exec --yes --package=node@24 -- npm ci
 npm exec --yes --package=node@24 -- npm run dev
 ```
 
-`npm run build` creates the production bundle in `dist/`. `npm run preview` serves that bundle locally. The starter screen runs without a backend.
+`npm run build` creates the production bundle in `dist/`. `npm run preview` serves that bundle locally. The dashboard runs in local demo mode without a backend.
 
 ## Structure
 
@@ -45,8 +46,10 @@ service from `backend` with `.venv/bin/python -m uvicorn app.main:app --port 800
 Use **Mock demo → Start chat** to test without credentials, or **Gemini agents**
 to use the backend's exported `GOOGLE_API_KEY`. The browser never receives the key.
 
-Messages are based on the current local simulation and the robots' recent
-conversation. They propose tasks; chat does not move robots or update inventories.
+Messages are based on the current world and the robots' recent conversation.
+While chat is running, new movement, harvest, and fishing proposals are submitted
+to the backend automatically. Market proposals remain unavailable until backend
+transactions are implemented.
 Start/Pause controls the discussion loop. Pausing permits the current round to
 finish. Scroll up to read history; automatic scrolling resumes when you return to
 the bottom. The panel reconnects automatically and restores the shared history.

@@ -89,16 +89,13 @@ export default function App() {
                     <button
                         type="button"
                         disabled={
-                            backendOwnsWorld
-                            || !billyIsAtFarm
+                            !billyIsAtFarm
                             || Boolean(billy?.task)
                         }
                         onClick={() => startHarvest('robot-a')}
                         className="w-fit rounded-lg bg-amber-300 px-4 py-2 font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {backendOwnsWorld
-                            ? 'Backend harvest coming next'
-                            : billyIsHarvesting
+                        {billyIsHarvesting
                             ? `Harvesting Wheat: ${harvestProgress}%`
                             : 'Harvest Wheat'
                         }

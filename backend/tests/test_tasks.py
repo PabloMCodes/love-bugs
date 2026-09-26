@@ -59,6 +59,44 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()['error']['code'], 'REQUEST_ID_CONFLICT')
 
+    def test_collection_task_is_accepted_for_its_required_location(self):
+        self.client.post('/game/start')
+        request = {
+            **self.request,
+            'request_id': 'request-harvest-001',
+            'action': 'HARVEST',
+            'location': 'farm',
+        }
+
+        response = self.client.post('/tasks', json=request)
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['action'], 'HARVEST')
+        self.assertEqual(response.json()['status'], 'ASSIGNED')
+
+    def test_collection_task_rejects_wrong_location_and_parameters(self):
+        self.client.post('/game/start')
+        wrong_location = {
+            **self.request,
+            'request_id': 'request-fish-wrong-location',
+            'action': 'FISH',
+            'location': 'farm',
+        }
+        parameters = {
+            **self.request,
+            'request_id': 'request-harvest-parameters',
+            'action': 'HARVEST',
+            'parameters': {'item': 'crop'},
+        }
+
+        location_response = self.client.post('/tasks', json=wrong_location)
+        parameters_response = self.client.post('/tasks', json=parameters)
+
+        self.assertEqual(location_response.status_code, 400)
+        self.assertEqual(location_response.json()['error']['code'], 'INVALID_REQUEST')
+        self.assertEqual(parameters_response.status_code, 400)
+        self.assertEqual(parameters_response.json()['error']['code'], 'INVALID_REQUEST')
+
 
 if __name__ == '__main__':
     unittest.main()

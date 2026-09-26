@@ -44,7 +44,7 @@ def create_world_router(store: WorldStore) -> APIRouter:
     @router.post('/tasks', response_model=RobotTask, status_code=202)
     def create_task(request: TaskRequest) -> RobotTask:
         try:
-            return store.assign_move_task(request)
+            return store.assign_task(request)
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

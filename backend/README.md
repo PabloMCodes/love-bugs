@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, `MOVE_TO` task assignment and simulated movement, spectator agent chat, and standalone overhead vision are implemented. Activity execution, hardware navigation, and robot communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, and `FISH` tasks, spectator agent chat, and standalone overhead vision are implemented. Market transactions, hardware navigation, and robot communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -25,7 +25,7 @@ Start with modules in one backend process; separate processes only when integrat
 
 ## Standalone overhead vision
 
-Vision is implemented independently of the placeholder backend server. Requires Python 3.10+.
+Vision is implemented independently of the game server. Requires Python 3.10+.
 From the repository root:
 
 ```sh
@@ -147,11 +147,11 @@ Trade checks here are preflight only; the task service must recheck funds, stock
 and inventory atomically at execution. The host owns freshness thresholds and
 must mark stale camera poses as `STALE` before allowing physical tasks.
 
-The frontend currently owns a separate mock simulation on `dev`; this module
-is not wired to it. Numeric inventory counts from `api.md` and the frontend's
-`{quantity, name, sell_price}` entries are both readable, but authoritative trade
-prices always come from `world.market.items`. A shared backend task service and
-world feed are the next integration step; no frontend contract was changed here.
+The frontend now reads the authoritative backend world and submits movement and
+collection tasks to the shared task service. Its local simulation remains an
+offline fallback. The standalone agent orchestrator is not yet hosted by the game
+process; the browser chat preview currently dispatches supported proposals.
+Authoritative trade prices always come from `world.market.items`.
 
 Run agent tests (mocked model responses; no billable calls):
 
@@ -177,19 +177,19 @@ Start the frontend in a second terminal using its README instructions. In the
 mode makes paid/quota-counted calls; mock mode is explicitly scripted. No model
 calls happen until a browser starts the conversation. The key stays on the backend.
 
-Each round sends the current frontend simulation snapshot to the local backend.
+Each round sends the current frontend world snapshot to the local backend.
 Every available robot proposes one action and a brief public `message` to its
 teammates. The second robot receives the first robot's message before answering;
 the next round includes the recent conversation, so both robots can respond.
 These are intentional public coordination messages, not private model reasoning.
 They appear over WebSocket within roughly half a second of each model response.
 
-This is a **discussion-only preview**: proposals do not execute game tasks or
-change the frontend simulation. READY and RUNNING games may discuss; stopped,
-completed, busy, offline, or untracked robots are skipped. The next integration
-step is authoritative backend task execution. The existing `AgentOrchestrator`
-also feeds recent messages into decisions and publishes messages only for accepted
-tasks or WAIT decisions. Rejected decisions are never presented as accepted work.
+The chat service itself is a **discussion-only preview**, but the frontend dispatches
+new proposals while chat is enabled. `MOVE_TO`, `HARVEST`, and `FISH` therefore use
+the authoritative backend task service; unsupported trade proposals are rejected.
+READY and RUNNING games may discuss; stopped, completed, busy, offline, or untracked
+robots are skipped. The standalone `AgentOrchestrator` is not yet hosted by the game
+process.
 
 The service keeps one shared conversation in memory, with at most 100 messages;
 only the latest 20 are sent to models. A new game session or provider switch clears
@@ -210,7 +210,8 @@ Configuration:
 
 Transport and payloads are documented in `api.md`. The implementation lives in
 `app/agents/chat.py`, `app/api/agent_chat.py`, and `app/main.py`; it uses the existing
-per-robot Gemini planner. The game `/world` and `/events` endpoints remain unimplemented.
+per-robot Gemini planner. The game `/world` and `/events` endpoints provide the
+authoritative frontend state.
 
 For the discussion preview only, the frontend's buy-only market catalog is
 augmented with inventory sale items/prices in a copied snapshot. This lets agents

@@ -478,7 +478,7 @@ export function useWorld() {
         });
     }
 
-    function startActivity(robotId, action) {
+    async function startActivity(robotId, action) {
         const taskDefinition = getTaskDefinition(action);
 
         if (taskDefinition?.type !== 'activity') {
@@ -486,9 +486,30 @@ export function useWorld() {
         }
 
         if (backendSelectedRef.current) {
-            reportBackendError(new Error(
-                `${taskDefinition.label} is not implemented by the backend yet.`,
-            ));
+            try {
+                let currentWorld = worldRef.current;
+
+                if (currentWorld.game.status !== 'RUNNING') {
+                    currentWorld = await startGame();
+                    applyBackendSnapshot(currentWorld);
+                }
+
+                await submitTask({
+                    request_id: createRequestId(),
+                    robot_id: robotId,
+                    action: taskDefinition.action,
+                    location: taskDefinition.requiredLocation,
+                    parameters: {},
+                    reason: `${taskDefinition.label} to earn resources.`,
+                });
+                setConnection((current) => ({
+                    ...current,
+                    error: null,
+                }));
+            } catch (error) {
+                reportBackendError(error);
+            }
+
             return;
         }
 

@@ -1,8 +1,10 @@
 """Thread-safe ownership of the authoritative in-memory world snapshot."""
 
 from datetime import datetime, timezone
+import math
 from threading import RLock
 
+from app.game.tasks import activity_for
 from app.schemas import NavigationStep, RobotTask, TaskRequest, WorldSnapshot
 
 
@@ -140,7 +142,7 @@ class WorldStore:
             self._world = WorldSnapshot.model_validate(world)
             return self._world.model_copy(deep=True)
 
-    def assign_move_task(self, request: TaskRequest) -> RobotTask:
+    def assign_task(self, request: TaskRequest) -> RobotTask:
         with self._lock:
             previous = self._task_requests.get(request.request_id)
             if previous:
@@ -152,15 +154,26 @@ class WorldStore:
                     f'Request ID {request.request_id!r} was already used for different task data.',
                 )
 
-            if request.action != 'MOVE_TO':
+            activity = activity_for(request.action)
+            if request.action != 'MOVE_TO' and activity is None:
                 raise WorldStateError(
                     'INVALID_REQUEST',
-                    'Only MOVE_TO is implemented by the backend task service.',
+                    'Only MOVE_TO, HARVEST, and FISH are implemented by the backend task service.',
+                )
+            if request.parameters:
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    f'{request.action} does not accept parameters.',
                 )
             if self._world.game.status != 'RUNNING':
                 raise WorldStateError('GAME_NOT_RUNNING', 'Start the game before assigning tasks.')
             if request.location not in self._world.map.locations:
                 raise WorldStateError('NOT_FOUND', f'Unknown destination {request.location!r}.')
+            if activity is not None and request.location != activity.location:
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    f'{request.action} must take place at {activity.location}.',
+                )
 
             robot = next(
                 (candidate for candidate in self._world.robots if candidate.id == request.robot_id),
@@ -185,12 +198,16 @@ class WorldStore:
             task = RobotTask(
                 id=f'task-{next_revision}',
                 robot_id=robot.id,
-                action='MOVE_TO',
+                action=request.action,
                 location=request.location,
                 status='ASSIGNED',
                 progress=0,
                 parameters=request.parameters,
-                reason=request.reason or f'Travel to {request.location}.',
+                reason=request.reason or (
+                    f'Travel to {request.location}.'
+                    if activity is None
+                    else f'Begin {activity.label} at {request.location}.'
+                ),
                 error=None,
             )
             world = self._world.model_dump(mode='python')
@@ -204,7 +221,11 @@ class WorldStore:
                 'type': 'task_assigned',
                 'robot_id': robot.id,
                 'task_id': task.id,
-                'message': f'{robot.name} was assigned to travel to {request.location}.',
+                'message': (
+                    f'{robot.name} was assigned to travel to {request.location}.'
+                    if activity is None
+                    else f'{robot.name} was assigned to {activity.label} at {request.location}.'
+                ),
                 'data': {},
             })
             world['events'] = world['events'][-100:]
@@ -214,6 +235,10 @@ class WorldStore:
                 task.model_copy(deep=True),
             )
             return task.model_copy(deep=True)
+
+    def assign_move_task(self, request: TaskRequest) -> RobotTask:
+        """Compatibility alias for callers created before activity tasks existed."""
+        return self.assign_task(request)
 
     def apply_navigation_steps(self, steps: list[NavigationStep]) -> WorldSnapshot:
         with self._lock:
@@ -237,7 +262,10 @@ class WorldStore:
                 if (
                     task is None
                     or task['id'] != step.task_id
-                    or task['action'] != 'MOVE_TO'
+                    or (
+                        task['action'] != 'MOVE_TO'
+                        and activity_for(task['action']) is None
+                    )
                     or task['status'] not in ('ASSIGNED', 'NAVIGATING')
                     or task['location'] != step.location
                     or not physical['online']
@@ -253,7 +281,6 @@ class WorldStore:
 
                 if step.arrived:
                     robot['game']['location'] = step.location
-                    robot['task'] = None
                     world['events'].append({
                         'id': f"event-{task['id']}-arrived",
                         'timestamp': now,
@@ -263,9 +290,114 @@ class WorldStore:
                         'message': f"{robot['name']} arrived at {step.location}.",
                         'data': {},
                     })
+                    activity = activity_for(task['action'])
+                    if activity is None:
+                        robot['task'] = None
+                    else:
+                        task['status'] = 'ACTIVE'
+                        task['progress'] = 0
+                        world['events'].append({
+                            'id': f"event-{task['id']}-started",
+                            'timestamp': now,
+                            'type': 'task_started',
+                            'robot_id': robot['id'],
+                            'task_id': task['id'],
+                            'message': f"{robot['name']} started {activity.label}.",
+                            'data': {},
+                        })
                 else:
                     robot['game']['location'] = None
                     task['status'] = 'NAVIGATING'
+
+            if not changed:
+                return self._world.model_copy(deep=True)
+
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'] = world['events'][-100:]
+            self._world = WorldSnapshot.model_validate(world)
+            return self._world.model_copy(deep=True)
+
+    def advance_activities(self, elapsed_seconds: float) -> WorldSnapshot:
+        if not math.isfinite(elapsed_seconds) or elapsed_seconds <= 0:
+            raise ValueError('elapsed_seconds must be a positive finite number')
+
+        with self._lock:
+            if self._world.game.status != 'RUNNING':
+                return self._world.model_copy(deep=True)
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            changed = False
+
+            for robot in world['robots']:
+                task = robot['task']
+                physical = robot['physical']
+                if (
+                    task is None
+                    or task['status'] != 'ACTIVE'
+                    or not physical['online']
+                    or physical['stopped']
+                    or physical['blocked']
+                ):
+                    continue
+
+                activity = activity_for(task['action'])
+                if activity is None or robot['game']['location'] != activity.location:
+                    continue
+
+                progress = min(
+                    1,
+                    task['progress'] + elapsed_seconds / activity.duration_seconds,
+                )
+                task['progress'] = progress
+                changed = True
+
+                if progress < 1 - 1e-9:
+                    continue
+
+                inventory = robot['game']['inventory']
+                current_item = inventory.get(activity.item_id)
+                total_quantity = (
+                    current_item['quantity'] if current_item is not None else 0
+                ) + activity.quantity
+                inventory[activity.item_id] = {
+                    'name': current_item['name'] if current_item is not None else activity.item_name,
+                    'quantity': total_quantity,
+                    'sell_price': (
+                        current_item['sell_price']
+                        if current_item is not None
+                        else activity.sell_price
+                    ),
+                }
+                robot['task'] = None
+                world['events'].extend([
+                    {
+                        'id': f"event-{task['id']}-inventory",
+                        'timestamp': now,
+                        'type': 'inventory_updated',
+                        'robot_id': robot['id'],
+                        'task_id': task['id'],
+                        'message': (
+                            f"{robot['name']} collected {activity.quantity} "
+                            f'{activity.item_name}.'
+                        ),
+                        'data': {
+                            'item': activity.item_id,
+                            'quantity': activity.quantity,
+                            'total_quantity': total_quantity,
+                        },
+                    },
+                    {
+                        'id': f"event-{task['id']}-completed",
+                        'timestamp': now,
+                        'type': 'task_completed',
+                        'robot_id': robot['id'],
+                        'task_id': task['id'],
+                        'message': f"{robot['name']} completed {activity.label}.",
+                        'data': {},
+                    },
+                ])
 
             if not changed:
                 return self._world.model_copy(deep=True)

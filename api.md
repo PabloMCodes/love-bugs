@@ -1,6 +1,9 @@
 # Game and robotics API contract
 
-Status: proposed MVP contract, ready for mock implementation. This document describes the intended interface; it does not imply that a server or hardware integration exists yet. The team can revise it together as the project develops. Update this document and affected consumers together when changing a contract.
+Status: active MVP contract with partial backend implementation. The authoritative
+world feed and simulated `MOVE_TO`, `HARVEST`, and `FISH` tasks are implemented;
+remaining routes and hardware adapters are still planned. Update this document and
+affected consumers together when changing a contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
@@ -333,8 +336,9 @@ Keep these decisions open: frontend/backend frameworks, agent provider, process 
 ## Agent conversation preview
 
 The local chat preview is separate from the canonical world WebSocket. The
-frontend currently owns simulation state, so it supplies a snapshot for a
-**discussion-only** round. No task is executed by these routes.
+frontend supplies its current snapshot for a **discussion-only** round. These
+routes do not execute tasks themselves; the frontend may submit supported
+proposals separately through `POST /tasks` while chat is enabled.
 
 | Route | Purpose |
 | --- | --- |
@@ -364,7 +368,8 @@ an optional `message` string (1–300 characters); it is kept out of task reques
 parameters. Planners receive the latest 20 messages as `agent_messages`. The
 in-process orchestrator also exposes `chat.snapshot()`, publishing `accepted` or
 `waiting` messages after validation and task acceptance. The preview emits only
-`proposed` messages, which must never be treated as confirmations of execution.
+`proposed` messages. They are not confirmations of execution; clients must submit
+them through normal task validation and wait for the authoritative world snapshot.
 
 The preview has one shared room and retains 100 messages in memory. New session
 IDs, provider switches, or process restarts clear history. Replace received
