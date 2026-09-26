@@ -1,13 +1,13 @@
 // Own the current world snapshot, connection status, session changes, and revision checks across REST and WebSocket updates.
 import { useEffect, useState } from 'react';
 import { mockWorldState } from '../data/mockWorldState.js';
+import { getTaskDefinition, taskCatalog } from '../data/taskCatalog.js';
 import { movePoseToward } from '../simulation/movement.js';
 import { getMarketRobot } from '../utils/marketRobots.js';
 
 const simulationStepDistance = 5;
 const simulationTickMilliseconds = 250;
-const harvestProgressPerTick = 0.1;
-const wheatHarvestQuantity = 3;
+const harvestTask = taskCatalog.HARVEST;
 
 export function useWorld() {
     const [world, setWorld] = useState(mockWorldState);
@@ -20,7 +20,7 @@ export function useWorld() {
                         robot.task?.status === 'NAVIGATING'
                         || (
                             robot.task?.status === 'ACTIVE'
-                            && robot.task.action === 'HARVEST'
+                            && getTaskDefinition(robot.task.action)?.type === 'activity'
                         )
                     ),
                 );
@@ -46,6 +46,12 @@ export function useWorld() {
                             simulationStepDistance,
                         );
 
+                        const taskDefinition = getTaskDefinition(robot.task.action);
+                        const beginsActivity = (
+                            movement.arrived
+                            && taskDefinition?.type === 'activity'
+                        );
+
                         if (movement.arrived) {
                             simulationEvents.push({
                                 id: `event-${robot.task.id}-arrived`,
@@ -56,6 +62,18 @@ export function useWorld() {
                                 message: `${robot.name} arrived at ${robot.task.location}.`,
                                 data: {},
                             });
+
+                            if (beginsActivity) {
+                                simulationEvents.push({
+                                    id: `event-${robot.task.id}-started`,
+                                    timestamp: updatedAt,
+                                    type: 'task_started',
+                                    robot_id: robot.id,
+                                    task_id: robot.task.id,
+                                    message: `${robot.name} started ${taskDefinition.label.toLowerCase()}.`,
+                                    data: {},
+                                });
+                            }
                         }
 
                         return {
@@ -69,17 +87,27 @@ export function useWorld() {
                                 ...robot.game,
                                 location: movement.arrived ? robot.task.location : null,
                             },
-                            task: movement.arrived ? null : robot.task,
+                            task: movement.arrived
+                                ? beginsActivity
+                                    ? {
+                                        ...robot.task,
+                                        status: 'ACTIVE',
+                                        progress: 0,
+                                    }
+                                    : null
+                                : robot.task,
                         };
                     }
 
-                    if (
-                        robot.task?.status === 'ACTIVE'
-                        && robot.task.action === 'HARVEST'
-                    ) {
+                    const activityTask = getTaskDefinition(robot.task?.action);
+
+                    if (robot.task?.status === 'ACTIVE' && activityTask?.type === 'activity') {
                         const progress = Math.min(
                             1,
-                            robot.task.progress + harvestProgressPerTick,
+                            robot.task.progress + (
+                                simulationTickMilliseconds
+                                / activityTask.durationMilliseconds
+                            ),
                         );
 
                         if (progress < 1) {
@@ -92,10 +120,12 @@ export function useWorld() {
                             };
                         }
 
-                        const currentWheat = robot.game.inventory.crop;
-                        const wheatQuantity = (
-                            currentWheat?.quantity ?? 0
-                        ) + wheatHarvestQuantity;
+                        const currentItem = (
+                            robot.game.inventory[activityTask.reward.itemId]
+                        );
+                        const itemQuantity = (
+                            currentItem?.quantity ?? 0
+                        ) + activityTask.reward.quantity;
 
                         simulationEvents.push(
                             {
@@ -104,11 +134,11 @@ export function useWorld() {
                                 type: 'inventory_updated',
                                 robot_id: robot.id,
                                 task_id: robot.task.id,
-                                message: `${robot.name} collected ${wheatHarvestQuantity} Wheat.`,
+                                message: `${robot.name} collected ${activityTask.reward.quantity} ${activityTask.reward.name}.`,
                                 data: {
-                                    item: 'crop',
-                                    quantity: wheatHarvestQuantity,
-                                    total_quantity: wheatQuantity,
+                                    item: activityTask.reward.itemId,
+                                    quantity: activityTask.reward.quantity,
+                                    total_quantity: itemQuantity,
                                 },
                             },
                             {
@@ -117,7 +147,7 @@ export function useWorld() {
                                 type: 'task_completed',
                                 robot_id: robot.id,
                                 task_id: robot.task.id,
-                                message: `${robot.name} completed harvesting.`,
+                                message: `${robot.name} completed ${activityTask.label.toLowerCase()}.`,
                                 data: {},
                             },
                         );
@@ -128,10 +158,10 @@ export function useWorld() {
                                 ...robot.game,
                                 inventory: {
                                     ...robot.game.inventory,
-                                    crop: {
-                                        name: currentWheat?.name ?? 'Wheat',
-                                        quantity: wheatQuantity,
-                                        sell_price: currentWheat?.sell_price ?? 12,
+                                    [activityTask.reward.itemId]: {
+                                        name: currentItem?.name ?? activityTask.reward.name,
+                                        quantity: itemQuantity,
+                                        sell_price: currentItem?.sell_price ?? activityTask.reward.sellPrice,
                                     },
                                 },
                             },
@@ -192,7 +222,7 @@ export function useWorld() {
                     task: {
                         id: taskId,
                         robot_id: robot.id,
-                        action: 'MOVE_TO',
+                        action: taskCatalog.MOVE_TO.action,
                         location: destinationId,
                         status: 'NAVIGATING',
                         progress: 0,
@@ -232,42 +262,64 @@ export function useWorld() {
         });
     }
 
-    function startHarvest(robotId) {
+    function startActivity(robotId, action) {
+        const taskDefinition = getTaskDefinition(action);
+
+        if (taskDefinition?.type !== 'activity') {
+            return;
+        }
+
         setWorld((currentWorld) => {
             const updatedAt = new Date().toISOString();
             const taskId = `task-${currentWorld.revision + 1}`;
-            let harvestingRobot = null;
+            let assignedRobot = null;
+            let beginsWithTravel = false;
 
             const robots = currentWorld.robots.map((robot) => {
+                const needsTravel = (
+                    robot.game.location !== taskDefinition.requiredLocation
+                );
+
                 if (
                     robot.id !== robotId
-                    || robot.game.location !== 'farm'
                     || !robot.physical.online
                     || robot.physical.stopped
                     || robot.task
+                    || (
+                        needsTravel
+                        && (
+                            !robot.physical.pose
+                            || !currentWorld.map.locations[taskDefinition.requiredLocation]
+                        )
+                    )
                 ) {
                     return robot;
                 }
 
-                harvestingRobot = robot;
+                assignedRobot = robot;
+                beginsWithTravel = needsTravel;
 
                 return {
                     ...robot,
+                    game: {
+                        ...robot.game,
+                        location: needsTravel ? null : robot.game.location,
+                    },
                     task: {
                         id: taskId,
                         robot_id: robot.id,
-                        action: 'HARVEST',
-                        location: 'farm',
-                        status: 'ACTIVE',
+                        action: taskDefinition.action,
+                        location: taskDefinition.requiredLocation,
+                        status: needsTravel ? 'NAVIGATING' : 'ACTIVE',
                         progress: 0,
-                        parameters: { item: 'crop' },
-                        reason: 'Harvest Wheat to sell at the market.',
+                        parameters: { item: taskDefinition.reward.itemId },
+                        reason: `${taskDefinition.label} to earn resources.`,
                         error: null,
                     },
                 };
             });
 
-            if (!harvestingRobot) {
+            if (!assignedRobot) {
                 return currentWorld;
             }
 
@@ -275,21 +327,31 @@ export function useWorld() {
                 ...currentWorld,
                 revision: currentWorld.revision + 1,
                 updated_at: updatedAt,
+                game: {
+                    ...currentWorld.game,
+                    status: 'RUNNING',
+                },
                 robots,
                 events: [
                     ...currentWorld.events,
                     {
-                        id: `event-${taskId}-started`,
+                        id: `event-${taskId}-${beginsWithTravel ? 'assigned' : 'started'}`,
                         timestamp: updatedAt,
-                        type: 'task_started',
+                        type: beginsWithTravel ? 'task_assigned' : 'task_started',
                         robot_id: robotId,
                         task_id: taskId,
-                        message: `${harvestingRobot.name} started harvesting Wheat.`,
+                        message: beginsWithTravel
+                            ? `${assignedRobot.name} is traveling to ${taskDefinition.requiredLocation} to ${taskDefinition.label.toLowerCase()}.`
+                            : `${assignedRobot.name} started ${taskDefinition.label.toLowerCase()}.`,
                         data: {},
                     },
                 ].slice(-100),
             };
         });
+    }
+
+    function startHarvest(robotId) {
+        startActivity(robotId, harvestTask.action);
     }
 
     function sellInventoryItem(robotId, itemId) {
@@ -518,9 +580,32 @@ export function useWorld() {
         });
     }
 
+    function dispatchAgentTask(proposal) {
+        const taskDefinition = getTaskDefinition(proposal.action);
+
+        if (!taskDefinition || proposal.status !== 'proposed') {
+            return;
+        }
+
+        if (taskDefinition.type === 'activity') {
+            startActivity(proposal.robot_id, proposal.action);
+            return;
+        }
+
+        if (proposal.action === taskCatalog.MOVE_TO.action && proposal.location) {
+            startRobotTravel(proposal.robot_id, proposal.location);
+            return;
+        }
+
+        if (proposal.action === taskCatalog.RETURN_HOME.action) {
+            startRobotTravel(proposal.robot_id, taskDefinition.requiredLocation);
+        }
+    }
+
     return {
         world,
         buyMarketItem,
+        dispatchAgentTask,
         sellInventoryItem,
         startHarvest,
         startRobotTravel,
