@@ -6,12 +6,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agent_chat import DiscussionService, create_router
+from app.api.errors import install_error_handlers
 from app.api.routes import create_world_router
 from app.state import WorldStore
 
 
 def create_app(service=None, world_store=None):
     app = FastAPI(title='Love Bugs')
+    install_error_handlers(app)
     origins = os.getenv('FRONTEND_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
     app.add_middleware(CORSMiddleware, allow_origins=origins.split(','),
                        allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])

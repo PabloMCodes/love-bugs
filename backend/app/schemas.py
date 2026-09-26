@@ -82,6 +82,15 @@ class RobotTask(StrictModel):
     error: TaskError | None
 
 
+class TaskRequest(StrictModel):
+    request_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'RETURN_HOME']
+    location: str = Field(min_length=1, max_length=100)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = Field(default=None, max_length=300)
+
+
 class Robot(StrictModel):
     id: str
     name: str

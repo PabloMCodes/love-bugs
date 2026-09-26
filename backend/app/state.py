@@ -3,7 +3,14 @@
 from datetime import datetime, timezone
 from threading import RLock
 
-from app.schemas import WorldSnapshot
+from app.schemas import RobotTask, TaskRequest, WorldSnapshot
+
+
+class WorldStateError(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 def default_world() -> dict:
@@ -102,7 +109,108 @@ class WorldStore:
         self._lock = RLock()
         initial_world = default_world() if world is None else world
         self._world = WorldSnapshot.model_validate(initial_world)
+        self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
 
     def snapshot(self) -> WorldSnapshot:
         with self._lock:
             return self._world.model_copy(deep=True)
+
+    def start_game(self) -> WorldSnapshot:
+        with self._lock:
+            if self._world.game.status == 'RUNNING':
+                return self._world.model_copy(deep=True)
+            if self._world.game.status == 'COMPLETED':
+                raise WorldStateError('GAME_COMPLETED', 'Reset the completed game before starting again.')
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['game']['status'] = 'RUNNING'
+            world['events'].append({
+                'id': f"event-game-started-{world['revision']}",
+                'timestamp': now,
+                'type': 'game_started',
+                'robot_id': None,
+                'task_id': None,
+                'message': 'The game started.',
+                'data': {},
+            })
+            world['events'] = world['events'][-100:]
+            self._world = WorldSnapshot.model_validate(world)
+            return self._world.model_copy(deep=True)
+
+    def assign_move_task(self, request: TaskRequest) -> RobotTask:
+        with self._lock:
+            previous = self._task_requests.get(request.request_id)
+            if previous:
+                previous_request, previous_task = previous
+                if previous_request == request:
+                    return previous_task.model_copy(deep=True)
+                raise WorldStateError(
+                    'REQUEST_ID_CONFLICT',
+                    f'Request ID {request.request_id!r} was already used for different task data.',
+                )
+
+            if request.action != 'MOVE_TO':
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'Only MOVE_TO is implemented by the backend task service.',
+                )
+            if self._world.game.status != 'RUNNING':
+                raise WorldStateError('GAME_NOT_RUNNING', 'Start the game before assigning tasks.')
+            if request.location not in self._world.map.locations:
+                raise WorldStateError('NOT_FOUND', f'Unknown destination {request.location!r}.')
+
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == request.robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {request.robot_id!r}.')
+            if robot.task is not None:
+                raise WorldStateError('ROBOT_BUSY', f'{robot.id} already has an active task.')
+            if robot.physical.stopped:
+                raise WorldStateError('ROBOT_STOPPED', f'{robot.id} is stopped.')
+            if (
+                not robot.physical.online
+                or robot.physical.blocked
+                or robot.physical.tracking != 'TRACKED'
+                or robot.physical.pose is None
+            ):
+                raise WorldStateError('ROBOT_UNAVAILABLE', f'{robot.id} is unavailable for navigation.')
+
+            now = datetime.now(timezone.utc)
+            next_revision = self._world.revision + 1
+            task = RobotTask(
+                id=f'task-{next_revision}',
+                robot_id=robot.id,
+                action='MOVE_TO',
+                location=request.location,
+                status='ASSIGNED',
+                progress=0,
+                parameters=request.parameters,
+                reason=request.reason or f'Travel to {request.location}.',
+                error=None,
+            )
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot.id)
+            robot_data['task'] = task.model_dump(mode='python')
+            world['revision'] = next_revision
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f'event-{task.id}-assigned',
+                'timestamp': now,
+                'type': 'task_assigned',
+                'robot_id': robot.id,
+                'task_id': task.id,
+                'message': f'{robot.name} was assigned to travel to {request.location}.',
+                'data': {},
+            })
+            world['events'] = world['events'][-100:]
+            self._world = WorldSnapshot.model_validate(world)
+            self._task_requests[request.request_id] = (
+                request.model_copy(deep=True),
+                task.model_copy(deep=True),
+            )
+            return task.model_copy(deep=True)

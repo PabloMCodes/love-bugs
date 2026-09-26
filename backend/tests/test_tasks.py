@@ -1,0 +1,64 @@
+import unittest
+
+from fastapi.testclient import TestClient
+
+from app.main import create_app
+from app.state import WorldStore
+
+
+class TaskRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.store = WorldStore()
+        self.client = TestClient(create_app(world_store=self.store))
+        self.request = {
+            'request_id': 'request-001',
+            'robot_id': 'robot-a',
+            'action': 'MOVE_TO',
+            'location': 'farm',
+            'parameters': {},
+        }
+
+    def tearDown(self):
+        self.client.close()
+
+    def test_game_must_start_before_task_assignment(self):
+        response = self.client.post('/tasks', json=self.request)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['error']['code'], 'GAME_NOT_RUNNING')
+
+    def test_move_task_updates_authoritative_world(self):
+        start = self.client.post('/game/start')
+        response = self.client.post('/tasks', json=self.request)
+        world = self.client.get('/world').json()
+
+        self.assertEqual(start.status_code, 200)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['status'], 'ASSIGNED')
+        self.assertEqual(world['game']['status'], 'RUNNING')
+        self.assertEqual(world['robots'][0]['game']['location'], 'lake')
+        self.assertEqual(world['robots'][0]['task'], response.json())
+        self.assertEqual(world['events'][-1]['type'], 'task_assigned')
+
+    def test_identical_request_retry_is_idempotent(self):
+        self.client.post('/game/start')
+        first = self.client.post('/tasks', json=self.request)
+        revision = self.client.get('/world').json()['revision']
+        second = self.client.post('/tasks', json=self.request)
+
+        self.assertEqual(second.status_code, 202)
+        self.assertEqual(second.json(), first.json())
+        self.assertEqual(self.client.get('/world').json()['revision'], revision)
+
+    def test_request_id_cannot_be_reused_for_different_task(self):
+        self.client.post('/game/start')
+        self.client.post('/tasks', json=self.request)
+        changed = {**self.request, 'location': 'market'}
+        response = self.client.post('/tasks', json=changed)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['error']['code'], 'REQUEST_ID_CONFLICT')
+
+
+if __name__ == '__main__':
+    unittest.main()
