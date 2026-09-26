@@ -1,5 +1,6 @@
 // Display locations from the world snapshot in its logical coordinate system.
-export default function WorldMap({ map }) {
+export default function WorldMap({ world }) {
+    const { map, robots } = world;
     return (
     <section className="w-full max-w-xl">
         <h2 className="mb-3 text-lg font-semibold">World Map</h2>
@@ -19,6 +20,21 @@ export default function WorldMap({ map }) {
             >
                 {id}
             </div>
+            );
+        })}
+
+        {robots.map((robot) =>{
+            const left = (robot.physical.pose.x / map.width) * 100;
+            const top = (robot.physical.pose.y / map.height) * 100;
+
+            return (
+                <div
+                    key={robot.id}
+                    className="absolute flex size-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-blue-300 text-center text-xs font-semibold capitalize text-stone-900 shadow-lg"
+                    style={{ left: `${left}%`, top: `${top}%` }}
+                >
+                    {robot.name}
+                </div>
             );
         })}
         </div>

@@ -28,7 +28,7 @@ export const mockWorldState = {
       name: 'Billy',
       physical: {
         online: true,
-        pose: { x: 50, y: 75, heading: 0 },
+        pose: { x: 47, y: 30, heading: 0 },
         pose_updated_at: '2026-09-26T13:00:00.000Z',
         tracking: 'TRACKED',
         battery: 0.82,
@@ -47,7 +47,7 @@ export const mockWorldState = {
       name: 'Milo',
       physical: {
         online: true,
-        pose: { x: 55, y: 75, heading: 180 },
+        pose: { x: 53, y: 30, heading: 180 },
         pose_updated_at: '2026-09-26T13:00:00.000Z',
         tracking: 'TRACKED',
         battery: 0.94,
