@@ -112,6 +112,12 @@ class HealthReport(StrictModel):
     blocked: bool
 
 
+class ArrivalReport(StrictModel):
+    session_id: str = Field(min_length=1, max_length=100)
+    task_id: str = Field(min_length=1, max_length=100)
+    location: str = Field(min_length=1, max_length=100)
+
+
 class AcceptedResponse(StrictModel):
     accepted: bool
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.errors import ApiError
 from app.schemas import (
     AcceptedResponse,
+    ArrivalReport,
     HealthReport,
     PoseReport,
     RobotTask,
@@ -24,6 +25,7 @@ ERROR_STATUS_CODES = {
     'ROBOT_BUSY': 409,
     'ROBOT_STOPPED': 409,
     'ROBOT_UNAVAILABLE': 409,
+    'TASK_MISMATCH': 409,
     'INSUFFICIENT_INVENTORY': 409,
     'INSUFFICIENT_FUNDS': 409,
     'OUT_OF_STOCK': 409,
@@ -71,6 +73,13 @@ def create_world_router(store: WorldStore) -> APIRouter:
     def update_robot_health(robot_id: str, report: HealthReport) -> AcceptedResponse:
         try:
             return AcceptedResponse(accepted=store.update_health(robot_id, report))
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/robots/{robot_id}/arrived', response_model=AcceptedResponse)
+    def confirm_robot_arrival(robot_id: str, report: ArrivalReport) -> AcceptedResponse:
+        try:
+            return AcceptedResponse(accepted=store.confirm_arrival(robot_id, report))
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

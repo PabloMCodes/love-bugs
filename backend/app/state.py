@@ -13,6 +13,7 @@ from app.game.market import (
 )
 from app.game.tasks import activity_for
 from app.schemas import (
+    ArrivalReport,
     HealthReport,
     NavigationStep,
     PoseReport,
@@ -126,6 +127,7 @@ class WorldStore:
         initial_world = default_world() if world is None else world
         self._world = WorldSnapshot.model_validate(initial_world)
         self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
+        self._accepted_arrivals: dict[tuple[str, str, str], str] = {}
         self._health_seen_at: dict[str, datetime] = {}
         self._recorder = None
 
@@ -406,6 +408,54 @@ class WorldStore:
         """Compatibility alias for callers created before activity tasks existed."""
         return self.assign_task(request)
 
+    def confirm_arrival(self, robot_id: str, report: ArrivalReport) -> bool:
+        with self._lock:
+            if report.session_id != self._world.session_id:
+                raise WorldStateError(
+                    'SESSION_MISMATCH',
+                    'The arrival report belongs to a different game session.',
+                )
+
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+
+            arrival_key = (report.session_id, robot_id, report.task_id)
+            accepted_location = self._accepted_arrivals.get(arrival_key)
+            if accepted_location is not None:
+                if accepted_location == report.location:
+                    return True
+                raise WorldStateError(
+                    'TASK_MISMATCH',
+                    'The arrival location does not match the previously accepted report.',
+                )
+
+            task = robot.task
+            if (
+                task is None
+                or task.id != report.task_id
+                or task.location != report.location
+                or task.status not in ('ASSIGNED', 'NAVIGATING')
+            ):
+                raise WorldStateError(
+                    'TASK_MISMATCH',
+                    'The arrival report does not match the robot\'s active navigation task.',
+                )
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot_id)
+            self._apply_arrival(world, robot_data, robot_data['task'], report.location, now)
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._accepted_arrivals[arrival_key] = report.location
+            return True
+
     def apply_navigation_steps(self, steps: list[NavigationStep]) -> WorldSnapshot:
         with self._lock:
             if not steps:
@@ -414,6 +464,7 @@ class WorldStore:
             now = datetime.now(timezone.utc)
             world = self._world.model_dump(mode='python')
             changed = False
+            accepted_arrivals = []
 
             for step in steps:
                 robot = next(
@@ -446,35 +497,8 @@ class WorldStore:
                 changed = True
 
                 if step.arrived:
-                    robot['game']['location'] = step.location
-                    world['events'].append({
-                        'id': f"event-{task['id']}-arrived",
-                        'timestamp': now,
-                        'type': 'robot_arrived',
-                        'robot_id': robot['id'],
-                        'task_id': task['id'],
-                        'message': f"{robot['name']} arrived at {step.location}.",
-                        'data': {},
-                    })
-                    activity = activity_for(task['action'])
-                    if task['action'] == 'BUY':
-                        self._complete_purchase(world, robot, task, now)
-                    elif task['action'] == 'SELL':
-                        self._complete_sale(world, robot, task, now)
-                    elif activity is None:
-                        robot['task'] = None
-                    else:
-                        task['status'] = 'ACTIVE'
-                        task['progress'] = 0
-                        world['events'].append({
-                            'id': f"event-{task['id']}-started",
-                            'timestamp': now,
-                            'type': 'task_started',
-                            'robot_id': robot['id'],
-                            'task_id': task['id'],
-                            'message': f"{robot['name']} started {activity.label}.",
-                            'data': {},
-                        })
+                    self._apply_arrival(world, robot, task, step.location, now)
+                    accepted_arrivals.append((robot['id'], task['id'], step.location))
                 else:
                     robot['game']['location'] = None
                     task['status'] = 'NAVIGATING'
@@ -486,7 +510,48 @@ class WorldStore:
             world['updated_at'] = now
             world['events'] = world['events'][-100:]
             self._publish(world)
+            for robot_id, task_id, location in accepted_arrivals:
+                arrival_key = (self._world.session_id, robot_id, task_id)
+                self._accepted_arrivals[arrival_key] = location
             return self._world.model_copy(deep=True)
+
+    def _apply_arrival(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        location: str,
+        now: datetime,
+    ) -> None:
+        robot['game']['location'] = location
+        world['events'].append({
+            'id': f"event-{task['id']}-arrived",
+            'timestamp': now,
+            'type': 'robot_arrived',
+            'robot_id': robot['id'],
+            'task_id': task['id'],
+            'message': f"{robot['name']} arrived at {location}.",
+            'data': {},
+        })
+        activity = activity_for(task['action'])
+        if task['action'] == 'BUY':
+            self._complete_purchase(world, robot, task, now)
+        elif task['action'] == 'SELL':
+            self._complete_sale(world, robot, task, now)
+        elif activity is None:
+            robot['task'] = None
+        else:
+            task['status'] = 'ACTIVE'
+            task['progress'] = 0
+            world['events'].append({
+                'id': f"event-{task['id']}-started",
+                'timestamp': now,
+                'type': 'task_started',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} started {activity.label}.",
+                'data': {},
+            })
 
     def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
         try:

@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot pose and health ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot pose, arrival, and health ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -45,6 +45,28 @@ the next `/events` snapshot. An older or duplicate timestamp returns
 `404`; old session IDs return `409`; coordinates outside the configured map return
 `400`. Pose reports mark tracking as `TRACKED` but do not infer zone arrival or
 change game inventory, tasks, or rewards.
+
+## Navigation arrival integration
+
+After navigation reaches the assigned destination, report it with the current
+session, task, and location IDs:
+
+```sh
+curl -X POST http://localhost:8000/robots/robot-a/arrived \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "session_id": "demo-session-001",
+    "task_id": "task-3",
+    "location": "farm"
+  }'
+```
+
+Use `GET /world` to obtain the active session and task IDs rather than hardcoding
+the example values. The report must match the robot's active `ASSIGNED` or
+`NAVIGATING` task. Valid reports return `{"accepted":true}` and apply the same
+arrival transition used by simulation. Repeating an accepted report is safe and
+does not execute its task again. Old sessions, mismatched tasks, and mismatched
+locations return `409`.
 
 ## Robot health integration
 

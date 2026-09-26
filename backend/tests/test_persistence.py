@@ -81,6 +81,42 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(len(samples), 2)
             self.assertEqual(samples[-1]['source'], 'pose_report')
 
+    def test_failed_arrival_write_can_be_retried_without_false_idempotency(self):
+        app = create_app(settings=self.settings, run_simulator=False)
+        with TestClient(app) as client:
+            client.post('/game/start').raise_for_status()
+            task = client.post('/tasks', json={
+                'request_id': 'arrival-retry',
+                'robot_id': 'robot-a',
+                'action': 'MOVE_TO',
+                'location': 'farm',
+            }).json()
+            report = {
+                'session_id': client.get('/world').json()['session_id'],
+                'task_id': task['id'],
+                'location': 'farm',
+            }
+            before = client.get('/world').json()
+            real_execute = app.state.history.execute
+
+            def fail_snapshot(conn, sql, params=()):
+                if 'INSERT INTO world_state' in sql:
+                    raise RuntimeError('private database details')
+                return real_execute(conn, sql, params)
+
+            with patch.object(app.state.history, 'execute', side_effect=fail_snapshot):
+                failed = client.post('/robots/robot-a/arrived', json=report)
+
+            self.assertEqual(failed.status_code, 503)
+            self.assertEqual(client.get('/world').json(), before)
+
+            retry = client.post('/robots/robot-a/arrived', json=report)
+            final = client.get('/world').json()
+            self.assertEqual(retry.json(), {'accepted': True})
+            self.assertIsNone(final['robots'][0]['task'])
+            self.assertEqual(final['robots'][0]['game']['location'], 'farm')
+            self.assertEqual(Store(self.settings).world(report['session_id']), final)
+
     @unittest.skipUnless(os.getenv('TEST_DATABASE_URL'), 'Live Tiger Data credentials not configured')
     def test_tiger_insert_read(self):
         import psycopg

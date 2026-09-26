@@ -2,7 +2,7 @@
 
 Status: active MVP contract with partial backend implementation. The authoritative
 world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
-pose and health ingestion are implemented; remaining routes and hardware adapters
+pose, arrival, and health ingestion are implemented; remaining routes and hardware adapters
 are still planned. Update this document and affected consumers together when
 changing a contract.
 
@@ -230,7 +230,7 @@ All HTTP failures use:
 }
 ```
 
-Use `400` for invalid JSON/fields/actions, `404` for unknown resources, `409` for conflicting state or unavailable funds/stock, and `503` for an unavailable required subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SUBSYSTEM_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
+Use `400` for invalid JSON/fields/actions, `404` for unknown resources, `409` for conflicting state or unavailable funds/stock, and `503` for an unavailable required subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`, `INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SUBSYSTEM_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
 
 ## Live updates: WebSocket /events
 
@@ -256,7 +256,7 @@ Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived
 ## Robotics integration boundary
 
 These routes are for localization/navigation adapters, not browser controls. The
-pose and health routes are implemented; the remaining rows are proposed adapter interfaces.
+pose, arrival, and health routes are implemented; the blocked row is a proposed adapter interface.
 Teammates can use equivalent in-process calls if components share a process. The
 world schema and frontend routes remain unchanged.
 

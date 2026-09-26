@@ -153,5 +153,137 @@ class HealthRouteTests(unittest.TestCase):
         self.assertEqual(invalid_battery.status_code, 422)
 
 
+class ArrivalRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.store = WorldStore()
+        self.client = TestClient(create_app(world_store=self.store))
+        self.client.post('/game/start')
+
+    def tearDown(self):
+        self.client.close()
+
+    def assign_task(self, **overrides):
+        request = {
+            'request_id': 'arrival-request-001',
+            'robot_id': 'robot-a',
+            'action': 'MOVE_TO',
+            'location': 'farm',
+            'parameters': {},
+        }
+        request.update(overrides)
+        response = self.client.post('/tasks', json=request)
+        self.assertEqual(response.status_code, 202)
+        return response.json()
+
+    def test_arrival_completes_move_task_and_is_idempotent(self):
+        task = self.assign_task()
+        report = {
+            'session_id': self.store.snapshot().session_id,
+            'task_id': task['id'],
+            'location': 'farm',
+        }
+
+        response = self.client.post('/robots/robot-a/arrived', json=report)
+        arrived = self.store.snapshot()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'accepted': True})
+        self.assertEqual(arrived.robots[0].game.location, 'farm')
+        self.assertIsNone(arrived.robots[0].task)
+        self.assertEqual(arrived.events[-1].type, 'robot_arrived')
+
+        revision = arrived.revision
+        duplicate = self.client.post('/robots/robot-a/arrived', json=report)
+        self.assertEqual(duplicate.json(), {'accepted': True})
+        self.assertEqual(self.store.snapshot().revision, revision)
+
+    def test_arrival_starts_activity_without_granting_reward(self):
+        task = self.assign_task(
+            request_id='arrival-harvest-001',
+            action='HARVEST',
+        )
+        before_quantity = self.store.snapshot().robots[0].game.inventory.get('crop')
+        report = {
+            'session_id': self.store.snapshot().session_id,
+            'task_id': task['id'],
+            'location': 'farm',
+        }
+
+        response = self.client.post('/robots/robot-a/arrived', json=report)
+        arrived = self.store.snapshot()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(arrived.robots[0].task.status, 'ACTIVE')
+        self.assertEqual(arrived.robots[0].task.progress, 0)
+        self.assertEqual(arrived.robots[0].game.inventory.get('crop'), before_quantity)
+        self.assertEqual(arrived.events[-2].type, 'robot_arrived')
+        self.assertEqual(arrived.events[-1].type, 'task_started')
+
+        revision = arrived.revision
+        duplicate = self.client.post('/robots/robot-a/arrived', json=report)
+        self.assertEqual(duplicate.json(), {'accepted': True})
+        self.assertEqual(self.store.snapshot().revision, revision)
+
+    def test_arrival_executes_purchase_only_once(self):
+        task = self.assign_task(
+            request_id='arrival-buy-001',
+            robot_id='robot-b',
+            action='BUY',
+            location='market',
+            parameters={'item': 'seeds', 'quantity': 2},
+        )
+        report = {
+            'session_id': self.store.snapshot().session_id,
+            'task_id': task['id'],
+            'location': 'market',
+        }
+
+        first = self.client.post('/robots/robot-b/arrived', json=report)
+        purchased = self.store.snapshot()
+        quantity = purchased.robots[1].game.inventory['seeds'].quantity
+        balance = purchased.robots[1].game.money
+        revision = purchased.revision
+        duplicate = self.client.post('/robots/robot-b/arrived', json=report)
+
+        self.assertEqual(first.json(), {'accepted': True})
+        self.assertEqual(duplicate.json(), {'accepted': True})
+        self.assertEqual(quantity, 2)
+        self.assertEqual(balance, 30)
+        self.assertEqual(self.store.snapshot().robots[1].game.inventory['seeds'].quantity, 2)
+        self.assertEqual(self.store.snapshot().robots[1].game.money, 30)
+        self.assertEqual(self.store.snapshot().revision, revision)
+
+    def test_mismatched_arrivals_are_rejected(self):
+        task = self.assign_task()
+        report = {
+            'session_id': self.store.snapshot().session_id,
+            'task_id': task['id'],
+            'location': 'farm',
+        }
+
+        wrong_session = self.client.post('/robots/robot-a/arrived', json={
+            **report,
+            'session_id': 'old-session',
+        })
+        unknown_robot = self.client.post('/robots/unknown/arrived', json=report)
+        wrong_task = self.client.post('/robots/robot-a/arrived', json={
+            **report,
+            'task_id': 'task-other',
+        })
+        wrong_location = self.client.post('/robots/robot-a/arrived', json={
+            **report,
+            'location': 'market',
+        })
+
+        self.assertEqual(wrong_session.status_code, 409)
+        self.assertEqual(wrong_session.json()['error']['code'], 'SESSION_MISMATCH')
+        self.assertEqual(unknown_robot.status_code, 404)
+        self.assertEqual(unknown_robot.json()['error']['code'], 'NOT_FOUND')
+        self.assertEqual(wrong_task.status_code, 409)
+        self.assertEqual(wrong_task.json()['error']['code'], 'TASK_MISMATCH')
+        self.assertEqual(wrong_location.status_code, 409)
+        self.assertEqual(wrong_location.json()['error']['code'], 'TASK_MISMATCH')
+
+
 if __name__ == '__main__':
     unittest.main()
