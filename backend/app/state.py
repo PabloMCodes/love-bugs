@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from threading import RLock
 
-from app.schemas import RobotTask, TaskRequest, WorldSnapshot
+from app.schemas import NavigationStep, RobotTask, TaskRequest, WorldSnapshot
 
 
 class WorldStateError(Exception):
@@ -214,3 +214,64 @@ class WorldStore:
                 task.model_copy(deep=True),
             )
             return task.model_copy(deep=True)
+
+    def apply_navigation_steps(self, steps: list[NavigationStep]) -> WorldSnapshot:
+        with self._lock:
+            if not steps:
+                return self._world.model_copy(deep=True)
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            changed = False
+
+            for step in steps:
+                robot = next(
+                    (item for item in world['robots'] if item['id'] == step.robot_id),
+                    None,
+                )
+                if robot is None:
+                    continue
+
+                task = robot['task']
+                physical = robot['physical']
+                if (
+                    task is None
+                    or task['id'] != step.task_id
+                    or task['action'] != 'MOVE_TO'
+                    or task['status'] not in ('ASSIGNED', 'NAVIGATING')
+                    or task['location'] != step.location
+                    or not physical['online']
+                    or physical['stopped']
+                    or physical['blocked']
+                    or physical['tracking'] != 'TRACKED'
+                ):
+                    continue
+
+                physical['pose'] = step.pose.model_dump(mode='python')
+                physical['pose_updated_at'] = now
+                changed = True
+
+                if step.arrived:
+                    robot['game']['location'] = step.location
+                    robot['task'] = None
+                    world['events'].append({
+                        'id': f"event-{task['id']}-arrived",
+                        'timestamp': now,
+                        'type': 'robot_arrived',
+                        'robot_id': robot['id'],
+                        'task_id': task['id'],
+                        'message': f"{robot['name']} arrived at {step.location}.",
+                        'data': {},
+                    })
+                else:
+                    robot['game']['location'] = None
+                    task['status'] = 'NAVIGATING'
+
+            if not changed:
+                return self._world.model_copy(deep=True)
+
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'] = world['events'][-100:]
+            self._world = WorldSnapshot.model_validate(world)
+            return self._world.model_copy(deep=True)

@@ -91,6 +91,14 @@ class TaskRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class NavigationStep(StrictModel):
+    robot_id: str
+    task_id: str
+    pose: Pose
+    location: str
+    arrived: bool
+
+
 class Robot(StrictModel):
     id: str
     name: str
