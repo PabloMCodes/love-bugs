@@ -66,8 +66,8 @@ function RobotCard({ robot }) {
     const taskProgress = Math.round((robot.task?.progress ?? 0) * 100);
 
     return (
-        <article className="rounded-2xl border border-stone-800 bg-stone-900 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <article className="flex h-40 flex-col overflow-hidden rounded-2xl border border-stone-800 bg-stone-900 p-4">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
                 <div>
                     <div className="flex items-center gap-2">
                         <h3 className="text-lg font-semibold">{robot.name}</h3>
@@ -95,7 +95,7 @@ function RobotCard({ robot }) {
                 </dl>
             </div>
 
-            <div className="mt-3 grid gap-3 border-t border-stone-800 pt-3 sm:grid-cols-2">
+            <div className="mt-3 grid min-h-0 flex-1 gap-3 border-t border-stone-800 pt-3 sm:grid-cols-2">
                 <div>
                     <div className="flex items-center justify-between gap-3">
                         <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
@@ -123,14 +123,14 @@ function RobotCard({ robot }) {
                     )}
                 </div>
 
-                <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                <div className="flex min-h-0 flex-col">
+                    <h4 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-stone-400">
                         Inventory
                     </h4>
                     {inventoryItems.length === 0 ? (
                         <p className="mt-1 text-sm text-stone-500">Empty</p>
                     ) : (
-                        <div className="mt-1 flex flex-wrap gap-1.5">
+                        <div className="mt-1 flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto">
                             {inventoryItems.map((item) => (
                                 <span
                                     key={item.id}
@@ -149,7 +149,7 @@ function RobotCard({ robot }) {
 
 export default function RobotPanel({ robots }) {
     return (
-        <section className="w-full">
+        <section className="w-full shrink-0">
             <h2 className="mb-3 text-lg font-semibold">Robot Tracker</h2>
             <div className="grid gap-4 lg:grid-cols-2">
                 {robots.map((robot) => (
