@@ -125,6 +125,25 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([o.status for o in await task], ['error', 'error'])
         self.assertEqual(self.requests, [])
 
+    async def test_api_error_reports_status_and_redacts_key(self):
+        from google.genai.errors import ClientError
+        secret = 'test-private-api-key'
+        class RejectedPlanner:
+            async def decide(inner, world, robot_id):
+                raise ClientError(403, {'error': {
+                    'status': 'PERMISSION_DENIED',
+                    'message': f'Access denied for {secret}; https://example.test/?key=other-secret',
+                }})
+        with patch.dict(os.environ, {'GOOGLE_API_KEY': secret}):
+            with self.assertLogs('app.agents.orchestrator', level='WARNING') as logs:
+                result = await AgentOrchestrator(RejectedPlanner()).tick(lambda: self.world, self.submit)
+        output = json.dumps([outcome.to_dict() for outcome in result]) + str(logs.output)
+        self.assertIn('403 PERMISSION_DENIED', output)
+        self.assertNotIn(secret, output)
+        self.assertNotIn('other-secret', output)
+        self.assertIn('[REDACTED]', output)
+        self.assertEqual(self.requests, [])
+
     async def test_uncertain_submission_blocks_retry(self):
         async def uncertain(session_id, request):
             raise TimeoutError('reply lost')

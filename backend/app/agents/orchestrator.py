@@ -5,15 +5,31 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 import logging
 import math
+import os
+import re
+from urllib.parse import quote
 import time
 from typing import Awaitable, Callable
 from uuid import uuid4
 
+from google.genai.errors import APIError
 from pydantic import ValidationError
 
 from app.agents.planner import Planner, available, validate_decision
 
 logger = logging.getLogger(__name__)
+
+
+def api_error_summary(error: APIError) -> str:
+    """Include service diagnostics without response headers or API credentials."""
+    message = f'Gemini API {error.code} {error.status or "ERROR"}: {error.message or "Request failed"}'
+    for name in ('GOOGLE_API_KEY', 'GEMINI_API_KEY'):
+        secret = os.environ.get(name)
+        if secret:
+            message = message.replace(secret, '[REDACTED]').replace(quote(secret, safe=''), '[REDACTED]')
+    message = re.sub(r'(?i)([?&](?:key|api_key)=)[^&\s]+', r'\1[REDACTED]', message)
+    message = re.sub(r'AIza[A-Za-z0-9_-]+', '[REDACTED]', message)
+    return ' '.join(message.split())[:1500]
 
 
 @dataclass
@@ -84,7 +100,11 @@ class AgentOrchestrator:
                             logger.warning('Validation field %s: %s',
                                            '.'.join(map(str, detail['loc'])) or '<decision>',
                                            detail['type'])
-                    outcomes.append(Outcome(robot_id, 'error', 'Planning failed or decision no longer valid'))
+                    reason = 'Planning failed or decision no longer valid'
+                    if isinstance(error, APIError):
+                        reason = api_error_summary(error)
+                        logger.warning('%s', reason)
+                    outcomes.append(Outcome(robot_id, 'error', reason))
                     continue
                 if decision.action == 'WAIT':
                     outcomes.append(Outcome(robot_id, 'waiting', decision.reason))
