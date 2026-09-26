@@ -82,3 +82,82 @@ Run synthetic detection, zone transition, video EOF, and capture failure tests:
 ```sh
 python -m unittest discover -s tests -v
 ```
+
+## Per-robot agent orchestration
+
+Each robot gets an independent Google ADK `LlmAgent` and runner using Gemini.
+The default model is `gemini-2.5-flash-lite`; set `AGENT_MODEL` to change it.
+Agents choose one high-level task and a short public reason. They never control
+motors, assign rewards, or change game state themselves.
+
+Install the updated `requirements.txt`, then run one offline planning round:
+
+```sh
+python -m app.agents --provider mock
+```
+
+This explicit mock policy proposes harvesting for Billy and fishing for Milo.
+It accepts tasks into a temporary in-memory demo snapshot only; it does not run
+movement, harvest timers, or the frontend simulation. Output is labeled `dry_run`.
+No API key or network access is used in mock mode.
+
+For real Gemini decisions, set `GOOGLE_API_KEY` in your shell to an AI Studio API
+key, set `GOOGLE_GENAI_USE_VERTEXAI=FALSE`, and run:
+
+```sh
+python -m app.agents --provider gemini
+```
+
+That makes real model calls but still uses the demo task sink, with no hardware
+or backend calls. `--world /path/to/world.json` accepts a world snapshot instead;
+the file is never modified. The game must be `RUNNING`, below its gold goal, with
+idle, online, unblocked, unstopped robots whose tracking is `TRACKED` and pose is
+known. Otherwise planning is skipped. Missing credentials, invalid decisions,
+and model failures do not silently switch to the mock policy.
+
+`backend/.env.example` lists configuration; the CLI reads exported environment
+variables, not `.env` automatically. Defaults: `AGENT_INTERVAL_SECONDS=10` between
+attempts per robot, `AGENT_TIMEOUT_SECONDS=20` per model call or submission. Each decision uses
+one bounded model call, the current structured world, and no camera frames or
+conversation history. Temporary ADK sessions are deleted after each decision.
+
+Responsibilities:
+
+- `app/agents/planner.py`: structured decisions, availability/trade checks, mock policy.
+- `app/agents/gemini.py`: independent ADK agents, bounded JSON model responses.
+- `app/agents/orchestrator.py`: scheduling, latest-state revalidation, task submission.
+- `app/agents/__main__.py`: standalone dry-run demonstration.
+
+For backend integration, keep one `AgentOrchestrator` for the game process and call
+`await orchestrator.tick(read_world, submit_task)` from the backend lifecycle.
+`read_world()` returns the current authoritative snapshot. Async
+`submit_task(session_id, request)` must atomically revalidate through the same
+service used by manual tasks, handle request-ID idempotency, reject old sessions,
+and return `True` only after the accepted task is visible in the snapshot.
+The request follows `api.md`; the host should publish an `agent_decision` event
+from accepted outcomes. WAIT is internal and never submitted as an API task.
+
+The scheduler runs agents sequentially so each sees its teammate's newly accepted
+tasks. Overlapping ticks are skipped; busy robots never trigger model calls.
+Planning errors are isolated per robot and retried only after the cooldown.
+An uncertain submission blocks further planning for that robot until the host
+reconciles the request ID and calls `reconcile(session_id, robot_id)`, or a new
+game session starts. Stop/reset during planning is checked before submission.
+Trade checks here are preflight only; the task service must recheck funds, stock,
+and inventory atomically at execution. The host owns freshness thresholds and
+must mark stale camera poses as `STALE` before allowing physical tasks.
+
+The frontend currently owns a separate mock simulation on `dev`; this module
+is not wired to it. Numeric inventory counts from `api.md` and the frontend's
+`{quantity, name, sell_price}` entries are both readable, but authoritative trade
+prices always come from `world.market.items`. A shared backend task service and
+world feed are the next integration step; no frontend contract was changed here.
+
+Run agent tests (mocked model responses; no billable calls):
+
+```sh
+python -m unittest discover -s tests -p 'test_agents.py' -v
+```
+
+References: [Google ADK](https://google.github.io/adk-docs/agents/llm-agents/) and
+[Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
