@@ -12,7 +12,14 @@ from app.game.market import (
     quote_sale,
 )
 from app.game.tasks import activity_for
-from app.schemas import NavigationStep, PoseReport, RobotTask, TaskRequest, WorldSnapshot
+from app.schemas import (
+    HealthReport,
+    NavigationStep,
+    PoseReport,
+    RobotTask,
+    TaskRequest,
+    WorldSnapshot,
+)
 
 
 class WorldStateError(Exception):
@@ -119,6 +126,7 @@ class WorldStore:
         initial_world = default_world() if world is None else world
         self._world = WorldSnapshot.model_validate(initial_world)
         self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
+        self._health_seen_at: dict[str, datetime] = {}
 
     def snapshot(self) -> WorldSnapshot:
         with self._lock:
@@ -164,6 +172,73 @@ class WorldStore:
             robot_data['physical']['tracking'] = 'TRACKED'
             world['revision'] += 1
             world['updated_at'] = now
+            self._world = WorldSnapshot.model_validate(world)
+            return True
+
+    def update_health(self, robot_id: str, report: HealthReport) -> bool:
+        with self._lock:
+            if report.session_id != self._world.session_id:
+                raise WorldStateError(
+                    'SESSION_MISMATCH',
+                    'The health report belongs to a different game session.',
+                )
+
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+
+            now = datetime.now(timezone.utc)
+            self._health_seen_at[robot_id] = now
+            if (
+                robot.physical.online == report.online
+                and robot.physical.battery == report.battery
+                and robot.physical.blocked == report.blocked
+            ):
+                return True
+
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot_id)
+            physical = robot_data['physical']
+            events = []
+
+            if physical['online'] != report.online:
+                events.append({
+                    'id': f"event-health-{world['revision'] + 1}-online",
+                    'timestamp': now,
+                    'type': 'robot_online' if report.online else 'robot_offline',
+                    'robot_id': robot_id,
+                    'task_id': robot_data['task']['id'] if robot_data['task'] else None,
+                    'message': (
+                        f"{robot_data['name']} came online."
+                        if report.online
+                        else f"{robot_data['name']} went offline."
+                    ),
+                    'data': {'online': report.online},
+                })
+            if physical['blocked'] != report.blocked:
+                events.append({
+                    'id': f"event-health-{world['revision'] + 1}-blocked",
+                    'timestamp': now,
+                    'type': 'robot_blocked' if report.blocked else 'robot_unblocked',
+                    'robot_id': robot_id,
+                    'task_id': robot_data['task']['id'] if robot_data['task'] else None,
+                    'message': (
+                        f"{robot_data['name']} reported blocked movement."
+                        if report.blocked
+                        else f"{robot_data['name']} is no longer blocked."
+                    ),
+                    'data': {'blocked': report.blocked},
+                })
+
+            physical['online'] = report.online
+            physical['battery'] = report.battery
+            physical['blocked'] = report.blocked
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'] = (world['events'] + events)[-100:]
             self._world = WorldSnapshot.model_validate(world)
             return True
 

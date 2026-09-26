@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, timestamped robot pose ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and robot communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot pose and health ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -45,6 +45,29 @@ the next `/events` snapshot. An older or duplicate timestamp returns
 `404`; old session IDs return `409`; coordinates outside the configured map return
 `400`. Pose reports mark tracking as `TRACKED` but do not infer zone arrival or
 change game inventory, tasks, or rewards.
+
+## Robot health integration
+
+The ESP32 communication adapter can publish connectivity, battery, and blocked
+state using the same current game session ID:
+
+```sh
+curl -X POST http://localhost:8000/robots/robot-a/health \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "session_id": "demo-session-001",
+    "online": true,
+    "battery": 0.82,
+    "blocked": false
+  }'
+```
+
+Battery is a fraction from `0` to `1`, or `null` when unavailable. Valid reports
+return `{"accepted":true}`. Repeated heartbeats with unchanged values refresh the
+backend's internal last-seen time without increasing the world revision. Online
+and blocked transitions appear in the world event feed. An offline or blocked
+robot cannot receive or advance movement tasks, but health reports do not directly
+cancel its current task; explicit blocked and stop handling are separate adapters.
 
 ## Standalone overhead vision
 

@@ -105,6 +105,13 @@ class PoseReport(StrictModel):
     timestamp: AwareDatetime
 
 
+class HealthReport(StrictModel):
+    session_id: str = Field(min_length=1, max_length=100)
+    online: bool
+    battery: float | None = Field(default=None, ge=0, le=1)
+    blocked: bool
+
+
 class AcceptedResponse(StrictModel):
     accepted: bool
 

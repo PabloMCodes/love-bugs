@@ -85,5 +85,73 @@ class PoseRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
 
 
+class HealthRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.store = WorldStore()
+        self.client = TestClient(create_app(world_store=self.store))
+        self.report = {
+            'session_id': self.store.snapshot().session_id,
+            'online': False,
+            'battery': .35,
+            'blocked': True,
+        }
+
+    def tearDown(self):
+        self.client.close()
+
+    def test_health_updates_authoritative_physical_state_and_events(self):
+        previous_revision = self.store.snapshot().revision
+
+        response = self.client.post('/robots/robot-a/health', json=self.report)
+        world = self.store.snapshot()
+        billy = world.robots[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'accepted': True})
+        self.assertEqual(world.revision, previous_revision + 1)
+        self.assertFalse(billy.physical.online)
+        self.assertEqual(billy.physical.battery, .35)
+        self.assertTrue(billy.physical.blocked)
+        self.assertEqual(
+            [event.type for event in world.events[-2:]],
+            ['robot_offline', 'robot_blocked'],
+        )
+
+    def test_identical_health_heartbeat_does_not_publish_another_revision(self):
+        self.client.post('/robots/robot-a/health', json=self.report)
+        revision = self.store.snapshot().revision
+
+        response = self.client.post('/robots/robot-a/health', json=self.report)
+
+        self.assertEqual(response.json(), {'accepted': True})
+        self.assertEqual(self.store.snapshot().revision, revision)
+
+    def test_health_allows_unknown_battery(self):
+        response = self.client.post('/robots/robot-a/health', json={
+            **self.report,
+            'battery': None,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.store.snapshot().robots[0].physical.battery)
+
+    def test_invalid_health_reports_are_rejected(self):
+        wrong_session = self.client.post('/robots/robot-a/health', json={
+            **self.report,
+            'session_id': 'old-session',
+        })
+        unknown_robot = self.client.post('/robots/unknown/health', json=self.report)
+        invalid_battery = self.client.post('/robots/robot-a/health', json={
+            **self.report,
+            'battery': 1.1,
+        })
+
+        self.assertEqual(wrong_session.status_code, 409)
+        self.assertEqual(wrong_session.json()['error']['code'], 'SESSION_MISMATCH')
+        self.assertEqual(unknown_robot.status_code, 404)
+        self.assertEqual(unknown_robot.json()['error']['code'], 'NOT_FOUND')
+        self.assertEqual(invalid_battery.status_code, 422)
+
+
 if __name__ == '__main__':
     unittest.main()
