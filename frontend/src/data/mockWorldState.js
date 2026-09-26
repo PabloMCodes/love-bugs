@@ -16,9 +16,9 @@ export const mockWorldState = {
     width: 100,
     height: 100,
     locations: {
-      homebase: { x: 50, y: 75 },
-      farm: { x: 20, y: 25 },
-      lake: { x: 75, y: 75 },
+      homebase: { x: 50, y: 30 },
+      farm: { x: 20, y: 50 },
+      lake: { x: 12, y: 30 },
       market: { x: 80, y: 25 },
     },
   },
