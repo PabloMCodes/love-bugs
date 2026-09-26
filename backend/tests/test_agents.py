@@ -137,6 +137,16 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
+    def test_decision_schema_converts_for_gemini(self):
+        # Exercise the SDK conversion that runs before any HTTP request. ADK's
+        # fake-model tests do not catch unsupported JSON Schema constraints.
+        from google.genai import Client, _transformers
+        with Client(api_key='test-only') as client:
+            schema = _transformers.t_schema(client._api_client, Decision)
+        self.assertEqual(schema.properties['quantity'].minimum, 1)
+        self.assertTrue(schema.properties['quantity'].nullable)
+
+
     async def test_real_adk_instances_with_mocked_model_response(self):
         from app.agents.gemini import GeminiPlanner
         with patch.dict(os.environ, {'GOOGLE_API_KEY': 'test-only'}, clear=True):

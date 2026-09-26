@@ -12,7 +12,7 @@ class Decision(BaseModel):
     action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'RETURN_HOME', 'WAIT']
     location: str | None = None
     item: str | None = None
-    quantity: int | None = Field(default=None, strict=True, gt=0)
+    quantity: int | None = Field(default=None, strict=True, ge=1)
     reason: str = Field(min_length=1, max_length=300)
 
     @model_validator(mode='after')

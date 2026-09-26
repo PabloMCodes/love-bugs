@@ -9,6 +9,8 @@ import time
 from typing import Awaitable, Callable
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from app.agents.planner import Planner, available, validate_decision
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,12 @@ class AgentOrchestrator:
                     validate_decision(latest, robot_id, decision)
                 except Exception as error:
                     logger.warning('Robot %s planning rejected (%s)', robot_id, type(error).__name__)
+                    if isinstance(error, ValidationError):
+                        # Log field locations/types, never input values or credentials.
+                        for detail in error.errors(include_input=False, include_context=False):
+                            logger.warning('Validation field %s: %s',
+                                           '.'.join(map(str, detail['loc'])) or '<decision>',
+                                           detail['type'])
                     outcomes.append(Outcome(robot_id, 'error', 'Planning failed or decision no longer valid'))
                     continue
                 if decision.action == 'WAIT':
