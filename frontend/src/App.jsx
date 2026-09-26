@@ -16,6 +16,7 @@ export default function App() {
           Current objective: Earn {world.game.goal.target} gold ({world.game.goal.current} earned)
         </p>
       </section>
+      <WorldMap world={world} />
     </main>
   );
 }
