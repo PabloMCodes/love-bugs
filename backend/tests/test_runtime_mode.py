@@ -25,6 +25,8 @@ class RuntimeModeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, 'GAME_MODE'):
             Settings(game_mode='unsupported')
+        with self.assertRaisesRegex(ValueError, 'Telemetry'):
+            Settings(health_timeout_seconds=0)
 
     def test_simulation_mode_is_default_and_starts_simulator(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -34,6 +36,7 @@ class RuntimeModeTests(unittest.TestCase):
 
             self.assertEqual(world['mode'], 'simulation')
             self.assertTrue(app.state.simulator_enabled)
+            self.assertFalse(app.state.telemetry_watchdog_enabled)
             self.assertTrue(all(robot['physical']['pose'] for robot in world['robots']))
 
     def test_explicit_override_can_disable_simulator_for_tests(self):
@@ -56,6 +59,7 @@ class RuntimeModeTests(unittest.TestCase):
                 self.assertEqual(initial['mode'], 'hardware')
                 self.assertFalse(app.state.simulator_enabled)
                 self.assertTrue(app.state.game_loop_enabled)
+                self.assertTrue(app.state.telemetry_watchdog_enabled)
                 self.assertFalse(billy['physical']['online'])
                 self.assertIsNone(billy['physical']['pose'])
                 self.assertIsNone(billy['physical']['pose_updated_at'])
@@ -157,6 +161,51 @@ class RuntimeModeTests(unittest.TestCase):
                     completed['physical']['pose'],
                     before['physical']['pose'],
                 )
+
+    def test_hardware_watchdog_expires_missing_reports_automatically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Settings(
+                database_url=None,
+                sqlite_path=str(Path(directory) / 'watchdog.sqlite3'),
+                game_mode='hardware',
+                health_timeout_seconds=.05,
+                pose_timeout_seconds=.05,
+                telemetry_check_interval_seconds=.01,
+            )
+            app = create_app(settings=settings)
+            with TestClient(app) as client:
+                initial = client.get('/world').json()
+                session_id = initial['session_id']
+                client.post('/robots/robot-a/health', json={
+                    'session_id': session_id,
+                    'online': True,
+                    'battery': .8,
+                    'blocked': False,
+                }).raise_for_status()
+                client.post('/robots/robot-a/pose', json={
+                    'session_id': session_id,
+                    'pose': {'x': 12, 'y': 30, 'heading': 0},
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }).raise_for_status()
+
+                deadline = time.monotonic() + 1
+                while time.monotonic() < deadline:
+                    billy = client.get('/world').json()['robots'][0]
+                    if (
+                        not billy['physical']['online']
+                        and billy['physical']['tracking'] == 'STALE'
+                    ):
+                        break
+                    time.sleep(.01)
+                else:
+                    self.fail('Telemetry watchdog did not expire missing reports')
+
+                event_types = [
+                    event['type']
+                    for event in client.get('/events').json()['events']
+                ]
+                self.assertIn('robot_offline', event_types)
+                self.assertIn('tracking_stale', event_types)
 
 
 if __name__ == '__main__':

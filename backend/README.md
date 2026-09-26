@@ -171,6 +171,26 @@ and blocked transitions appear in the world event feed. An offline or blocked
 robot cannot receive or advance movement tasks, but health reports do not directly
 cancel its current task; explicit blocked and stop handling are separate adapters.
 
+## Telemetry freshness
+
+Hardware mode runs a backend watchdog with these defaults:
+
+```sh
+HEALTH_TIMEOUT_SECONDS=5
+POSE_TIMEOUT_SECONDS=2
+TELEMETRY_CHECK_INTERVAL_SECONDS=0.25
+```
+
+All values must be positive finite seconds and are read when the server starts.
+Health and localization adapters must report more frequently than their respective
+timeouts. Missing health reports change `physical.online` to `false`; missing
+newer pose reports change tracking from `TRACKED` to `STALE`. The last pose is
+preserved for display, but stale/offline robots cannot receive or advance tasks.
+The current task remains assigned so a recovery policy can resume or explicitly
+stop it. Fresh health and pose reports restore availability. Expiration publishes
+`robot_offline` and `tracking_stale` events and is persisted like other world
+transitions. The watchdog is disabled in simulation mode.
+
 ## Standalone overhead vision
 
 Vision is implemented independently of the game server. Requires Python 3.10+.

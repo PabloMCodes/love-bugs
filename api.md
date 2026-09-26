@@ -256,7 +256,7 @@ The abbreviated `data` above must contain the **entire canonical world object** 
 
 The frontend replaces its state with each newer snapshot, deduplicates feed events by `(session_id, event.id)`, and discards lower/equal revisions within a session. Only the current socket connection may apply updates. A different session clears old tasks, events, and revision tracking. On reconnect, the server sends current state; replay of every missed event is not required. Display disconnection and retry with bounded backoff, for example 1, 2, 4, then 5 seconds. A REST snapshot used at startup follows the same revision checks and must not overwrite newer socket state.
 
-Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `gold_updated`, `market_updated`, `help_requested`, `help_accepted`, `robot_blocked`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
+Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `gold_updated`, `market_updated`, `help_requested`, `help_accepted`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
 
 ## Robotics integration boundary
 
@@ -277,8 +277,12 @@ A blocking report sets the robot's blocked state, stops the affected task from
 advancing, and emits one feed event. Repeating it while the robot remains blocked
 is idempotent. A deliberate health/recovery report can clear the blocked state;
 fail or stop the task separately if it cannot recover. Loss of connectivity or
-fresh tracking must suspend live driving. Hardware thresholds and arrival
-tolerance are configuration to agree on during calibration.
+fresh tracking suspends task advancement. In hardware mode, the backend marks a
+robot offline after `HEALTH_TIMEOUT_SECONDS` without a health heartbeat and marks
+tracking `STALE` after `POSE_TIMEOUT_SECONDS` without a newer accepted pose. The
+last pose remains available for display but cannot authorize navigation. Fresh
+reports restore `online` and `TRACKED`. Tune these thresholds and arrival tolerance
+during hardware calibration.
 
 Backend-to-navigation command shape:
 

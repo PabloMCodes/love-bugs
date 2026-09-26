@@ -16,6 +16,7 @@ from app.state import WorldStore, default_world
 from app.config import Settings
 from app.persistence.store import Store
 from app.persistence.recorder import WorldRecorder
+from app.robots.watchdog import TelemetryWatchdog
 from app.api.history import create_history_router
 from uuid import uuid4
 
@@ -37,6 +38,16 @@ def create_app(service=None, world_store=None, run_simulator=None, *, settings=N
         and store.snapshot().mode == 'simulation'
     )
     simulator = SimulationRunner(store)
+    telemetry_watchdog_enabled = (
+        game_loop_enabled
+        and store.snapshot().mode == 'hardware'
+    )
+    telemetry_watchdog = TelemetryWatchdog(
+        store,
+        health_timeout_seconds=config.health_timeout_seconds,
+        pose_timeout_seconds=config.pose_timeout_seconds,
+        interval_seconds=config.telemetry_check_interval_seconds,
+    )
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -51,9 +62,17 @@ def create_app(service=None, world_store=None, run_simulator=None, *, settings=N
             if game_loop_enabled
             else None
         )
+        telemetry_watchdog_task = (
+            asyncio.create_task(telemetry_watchdog.run())
+            if telemetry_watchdog_enabled
+            else None
+        )
         try:
             yield
         finally:
+            if telemetry_watchdog_task:
+                telemetry_watchdog_task.cancel()
+                await telemetry_watchdog_task
             if game_loop_task:
                 game_loop_task.cancel()
                 await game_loop_task
@@ -73,6 +92,8 @@ def create_app(service=None, world_store=None, run_simulator=None, *, settings=N
     app.state.simulator = simulator
     app.state.simulator_enabled = simulator_enabled
     app.state.game_loop_enabled = game_loop_enabled
+    app.state.telemetry_watchdog = telemetry_watchdog
+    app.state.telemetry_watchdog_enabled = telemetry_watchdog_enabled
     app.state.settings = config
     return app
 

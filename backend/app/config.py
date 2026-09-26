@@ -1,6 +1,7 @@
 """Runtime configuration for overhead vision and robot agents."""
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,8 +73,24 @@ class Settings:
     database_url: str | None = field(default_factory=lambda: os.getenv("DATABASE_URL") or None)
     sqlite_path: str = field(default_factory=lambda: os.getenv("SQLITE_PATH", "./lovebugs.sqlite3"))
     game_mode: str = field(default_factory=lambda: os.getenv('GAME_MODE', 'simulation'))
+    health_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv('HEALTH_TIMEOUT_SECONDS', '5')),
+    )
+    pose_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv('POSE_TIMEOUT_SECONDS', '2')),
+    )
+    telemetry_check_interval_seconds: float = field(
+        default_factory=lambda: float(os.getenv('TELEMETRY_CHECK_INTERVAL_SECONDS', '.25')),
+    )
 
     def __post_init__(self):
         self.game_mode = self.game_mode.strip().lower()
         if self.game_mode not in ('simulation', 'hardware'):
             raise ValueError('GAME_MODE must be either simulation or hardware')
+        timeout_values = (
+            self.health_timeout_seconds,
+            self.pose_timeout_seconds,
+            self.telemetry_check_interval_seconds,
+        )
+        if any(not math.isfinite(value) or value <= 0 for value in timeout_values):
+            raise ValueError('Telemetry timeouts and check interval must be positive finite numbers')

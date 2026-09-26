@@ -152,6 +152,7 @@ class WorldStore:
         self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
         self._accepted_arrivals: dict[tuple[str, str, str], str] = {}
         self._health_seen_at: dict[str, datetime] = {}
+        self._pose_seen_at: dict[str, datetime] = {}
         self._robot_stop_requests: set[str] = set()
         self._recorder = None
 
@@ -212,6 +213,7 @@ class WorldStore:
             world['revision'] += 1
             world['updated_at'] = now
             self._publish(world, position_source="pose_report")
+            self._pose_seen_at[robot_id] = now
             return True
 
     def update_health(self, robot_id: str, report: HealthReport) -> bool:
@@ -230,12 +232,12 @@ class WorldStore:
                 raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
 
             now = datetime.now(timezone.utc)
-            self._health_seen_at[robot_id] = now
             if (
                 robot.physical.online == report.online
                 and robot.physical.battery == report.battery
                 and robot.physical.blocked == report.blocked
             ):
+                self._health_seen_at[robot_id] = now
                 return True
 
             world = self._world.model_dump(mode='python')
@@ -279,7 +281,78 @@ class WorldStore:
             world['updated_at'] = now
             world['events'] = (world['events'] + events)[-100:]
             self._publish(world)
+            self._health_seen_at[robot_id] = now
             return True
+
+    def expire_stale_telemetry(
+        self,
+        checked_at: datetime,
+        *,
+        health_timeout_seconds: float,
+        pose_timeout_seconds: float,
+    ) -> WorldSnapshot:
+        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+            raise ValueError('checked_at must include a timezone')
+        if any(
+            not math.isfinite(value) or value <= 0
+            for value in (health_timeout_seconds, pose_timeout_seconds)
+        ):
+            raise ValueError('Telemetry timeouts must be positive finite numbers')
+
+        with self._lock:
+            if self._world.mode != 'hardware':
+                return self._world.model_copy(deep=True)
+
+            world = self._world.model_dump(mode='python')
+            events = []
+            next_revision = world['revision'] + 1
+            for robot in world['robots']:
+                robot_id = robot['id']
+                task_id = robot['task']['id'] if robot['task'] else None
+                health_seen_at = self._health_seen_at.get(robot_id)
+                if (
+                    robot['physical']['online']
+                    and health_seen_at is not None
+                    and (checked_at - health_seen_at).total_seconds()
+                    >= health_timeout_seconds
+                ):
+                    robot['physical']['online'] = False
+                    events.append({
+                        'id': f'event-telemetry-{next_revision}-{robot_id}-offline',
+                        'timestamp': checked_at,
+                        'type': 'robot_offline',
+                        'robot_id': robot_id,
+                        'task_id': task_id,
+                        'message': f"{robot['name']} went offline after missing health reports.",
+                        'data': {'reason': 'health_timeout'},
+                    })
+
+                pose_seen_at = self._pose_seen_at.get(robot_id)
+                if (
+                    robot['physical']['tracking'] == 'TRACKED'
+                    and pose_seen_at is not None
+                    and (checked_at - pose_seen_at).total_seconds()
+                    >= pose_timeout_seconds
+                ):
+                    robot['physical']['tracking'] = 'STALE'
+                    events.append({
+                        'id': f'event-telemetry-{next_revision}-{robot_id}-tracking',
+                        'timestamp': checked_at,
+                        'type': 'tracking_stale',
+                        'robot_id': robot_id,
+                        'task_id': task_id,
+                        'message': f"{robot['name']}'s tracking became stale.",
+                        'data': {'reason': 'pose_timeout'},
+                    })
+
+            if not events:
+                return self._world.model_copy(deep=True)
+
+            world['revision'] = next_revision
+            world['updated_at'] = checked_at
+            world['events'] = (world['events'] + events)[-100:]
+            self._publish(world)
+            return self._world.model_copy(deep=True)
 
     def start_game(self) -> WorldSnapshot:
         with self._lock:
@@ -406,6 +479,7 @@ class WorldStore:
             self._task_requests.clear()
             self._accepted_arrivals.clear()
             self._health_seen_at.clear()
+            self._pose_seen_at.clear()
             self._robot_stop_requests.clear()
             return self._world.model_copy(deep=True)
 
@@ -1040,6 +1114,8 @@ class WorldStore:
                     or not physical['online']
                     or physical['stopped']
                     or physical['blocked']
+                    or physical['tracking'] != 'TRACKED'
+                    or physical['pose'] is None
                 ):
                     continue
 
