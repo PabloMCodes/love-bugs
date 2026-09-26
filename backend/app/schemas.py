@@ -118,6 +118,13 @@ class ArrivalReport(StrictModel):
     location: str = Field(min_length=1, max_length=100)
 
 
+class BlockedReport(StrictModel):
+    session_id: str = Field(min_length=1, max_length=100)
+    task_id: str = Field(min_length=1, max_length=100)
+    reason: str = Field(min_length=1, max_length=300)
+    duration_ms: int = Field(ge=0)
+
+
 class AcceptedResponse(StrictModel):
     accepted: bool
 

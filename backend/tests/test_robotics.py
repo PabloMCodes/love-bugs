@@ -285,5 +285,124 @@ class ArrivalRouteTests(unittest.TestCase):
         self.assertEqual(wrong_location.json()['error']['code'], 'TASK_MISMATCH')
 
 
+class BlockedRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.store = WorldStore()
+        self.client = TestClient(create_app(world_store=self.store))
+        self.client.post('/game/start')
+        task_response = self.client.post('/tasks', json={
+            'request_id': 'blocked-request-001',
+            'robot_id': 'robot-a',
+            'action': 'MOVE_TO',
+            'location': 'farm',
+            'parameters': {},
+        })
+        self.assertEqual(task_response.status_code, 202)
+        self.task = task_response.json()
+        self.report = {
+            'session_id': self.store.snapshot().session_id,
+            'task_id': self.task['id'],
+            'reason': 'obstacle',
+            'duration_ms': 4000,
+        }
+
+    def tearDown(self):
+        self.client.close()
+
+    def test_blocked_report_pauses_navigation_and_emits_event(self):
+        previous_revision = self.store.snapshot().revision
+
+        response = self.client.post('/robots/robot-a/blocked', json=self.report)
+        world = self.store.snapshot()
+        billy = world.robots[0]
+        event = world.events[-1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'accepted': True})
+        self.assertEqual(world.revision, previous_revision + 1)
+        self.assertTrue(billy.physical.blocked)
+        self.assertEqual(billy.task.id, self.task['id'])
+        self.assertEqual(event.type, 'robot_blocked')
+        self.assertEqual(event.task_id, self.task['id'])
+        self.assertEqual(event.data, {'reason': 'obstacle', 'duration_ms': 4000})
+
+        blocked_pose = billy.physical.pose.model_copy(deep=True)
+        self.client.app.state.simulator.tick()
+        after_tick = self.store.snapshot()
+        self.assertEqual(after_tick.revision, world.revision)
+        self.assertEqual(after_tick.robots[0].physical.pose, blocked_pose)
+
+        recovery = self.client.post('/robots/robot-a/health', json={
+            'session_id': self.store.snapshot().session_id,
+            'online': True,
+            'battery': .82,
+            'blocked': False,
+        })
+        self.assertEqual(recovery.json(), {'accepted': True})
+        recovered_revision = self.store.snapshot().revision
+        self.client.app.state.simulator.tick()
+        moving = self.store.snapshot()
+        self.assertEqual(moving.revision, recovered_revision + 1)
+        self.assertEqual(moving.robots[0].task.status, 'NAVIGATING')
+        self.assertNotEqual(moving.robots[0].physical.pose, blocked_pose)
+
+    def test_duplicate_blocked_report_has_no_repeated_side_effect(self):
+        self.client.post('/robots/robot-a/blocked', json=self.report)
+        revision = self.store.snapshot().revision
+        event_count = len(self.store.snapshot().events)
+
+        duplicate = self.client.post('/robots/robot-a/blocked', json=self.report)
+
+        self.assertEqual(duplicate.json(), {'accepted': True})
+        self.assertEqual(self.store.snapshot().revision, revision)
+        self.assertEqual(len(self.store.snapshot().events), event_count)
+
+    def test_mismatched_and_invalid_blocked_reports_are_rejected(self):
+        wrong_session = self.client.post('/robots/robot-a/blocked', json={
+            **self.report,
+            'session_id': 'old-session',
+        })
+        unknown_robot = self.client.post('/robots/unknown/blocked', json=self.report)
+        wrong_task = self.client.post('/robots/robot-a/blocked', json={
+            **self.report,
+            'task_id': 'task-other',
+        })
+        negative_duration = self.client.post('/robots/robot-a/blocked', json={
+            **self.report,
+            'duration_ms': -1,
+        })
+
+        self.assertEqual(wrong_session.status_code, 409)
+        self.assertEqual(wrong_session.json()['error']['code'], 'SESSION_MISMATCH')
+        self.assertEqual(unknown_robot.status_code, 404)
+        self.assertEqual(unknown_robot.json()['error']['code'], 'NOT_FOUND')
+        self.assertEqual(wrong_task.status_code, 409)
+        self.assertEqual(wrong_task.json()['error']['code'], 'TASK_MISMATCH')
+        self.assertEqual(negative_duration.status_code, 422)
+
+    def test_blocked_report_rejects_non_navigation_activity(self):
+        activity_store = WorldStore()
+        activity_client = TestClient(create_app(world_store=activity_store))
+        self.addCleanup(activity_client.close)
+        activity_client.post('/game/start')
+        task = activity_client.post('/tasks', json={
+            'request_id': 'active-task',
+            'robot_id': 'robot-a',
+            'action': 'FISH',
+            'location': 'lake',
+        }).json()
+        activity_client.app.state.simulator.tick()
+
+        response = activity_client.post('/robots/robot-a/blocked', json={
+            'session_id': activity_store.snapshot().session_id,
+            'task_id': task['id'],
+            'reason': 'not a navigation obstruction',
+            'duration_ms': 0,
+        })
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['error']['code'], 'TASK_MISMATCH')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot pose, arrival, and health ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot pose, arrival, health, and blocked-state ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -67,6 +67,28 @@ the example values. The report must match the robot's active `ASSIGNED` or
 arrival transition used by simulation. Repeating an accepted report is safe and
 does not execute its task again. Old sessions, mismatched tasks, and mismatched
 locations return `409`.
+
+## Navigation blocked integration
+
+When navigation cannot continue, report the obstruction against the active task:
+
+```sh
+curl -X POST http://localhost:8000/robots/robot-a/blocked \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "session_id": "demo-session-001",
+    "task_id": "task-3",
+    "reason": "obstacle",
+    "duration_ms": 4000
+  }'
+```
+
+The task must still be `ASSIGNED` or `NAVIGATING`. An accepted report sets the
+robot's `physical.blocked` flag, pauses task advancement, and emits a
+`robot_blocked` event containing the reason and duration. Repeating a report while
+the robot remains blocked is safe and has no additional side effects. A deliberate
+health report with `blocked: false` clears the condition so navigation can resume.
+Old sessions and mismatched tasks return `409`.
 
 ## Robot health integration
 

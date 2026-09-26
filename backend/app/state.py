@@ -14,6 +14,7 @@ from app.game.market import (
 from app.game.tasks import activity_for
 from app.schemas import (
     ArrivalReport,
+    BlockedReport,
     HealthReport,
     NavigationStep,
     PoseReport,
@@ -454,6 +455,55 @@ class WorldStore:
             world['events'] = world['events'][-100:]
             self._publish(world)
             self._accepted_arrivals[arrival_key] = report.location
+            return True
+
+    def report_blocked(self, robot_id: str, report: BlockedReport) -> bool:
+        with self._lock:
+            if report.session_id != self._world.session_id:
+                raise WorldStateError(
+                    'SESSION_MISMATCH',
+                    'The blocked report belongs to a different game session.',
+                )
+
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+            task = robot.task
+            if (
+                task is None
+                or task.id != report.task_id
+                or task.status not in ('ASSIGNED', 'NAVIGATING')
+            ):
+                raise WorldStateError(
+                    'TASK_MISMATCH',
+                    'The blocked report does not match the robot\'s active navigation task.',
+                )
+            if robot.physical.blocked:
+                return True
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot_id)
+            robot_data['physical']['blocked'] = True
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f"event-blocked-{world['revision']}",
+                'timestamp': now,
+                'type': 'robot_blocked',
+                'robot_id': robot_id,
+                'task_id': task.id,
+                'message': f"{robot.name} reported blocked movement: {report.reason}.",
+                'data': {
+                    'reason': report.reason,
+                    'duration_ms': report.duration_ms,
+                },
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
             return True
 
     def apply_navigation_steps(self, steps: list[NavigationStep]) -> WorldSnapshot:

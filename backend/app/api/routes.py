@@ -6,6 +6,7 @@ from app.api.errors import ApiError
 from app.schemas import (
     AcceptedResponse,
     ArrivalReport,
+    BlockedReport,
     HealthReport,
     PoseReport,
     RobotTask,
@@ -80,6 +81,13 @@ def create_world_router(store: WorldStore) -> APIRouter:
     def confirm_robot_arrival(robot_id: str, report: ArrivalReport) -> AcceptedResponse:
         try:
             return AcceptedResponse(accepted=store.confirm_arrival(robot_id, report))
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/robots/{robot_id}/blocked', response_model=AcceptedResponse)
+    def report_robot_blocked(robot_id: str, report: BlockedReport) -> AcceptedResponse:
+        try:
+            return AcceptedResponse(accepted=store.report_blocked(robot_id, report))
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

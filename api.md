@@ -2,9 +2,9 @@
 
 Status: active MVP contract with partial backend implementation. The authoritative
 world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
-pose, arrival, and health ingestion are implemented; remaining routes and hardware adapters
-are still planned. Update this document and affected consumers together when
-changing a contract.
+pose, arrival, health, and blocked-state ingestion are implemented; remaining
+game lifecycle routes and hardware adapters are still planned. Update this
+document and affected consumers together when changing a contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
@@ -255,8 +255,7 @@ Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived
 
 ## Robotics integration boundary
 
-These routes are for localization/navigation adapters, not browser controls. The
-pose, arrival, and health routes are implemented; the blocked row is a proposed adapter interface.
+These implemented routes are for localization/navigation adapters, not browser controls.
 Teammates can use equivalent in-process calls if components share a process. The
 world schema and frontend routes remain unchanged.
 
@@ -269,7 +268,12 @@ world schema and frontend routes remain unchanged.
 
 Reject reports for an old session with `409`. Ignore older/equal pose timestamps with `200` and `{ "accepted": false }`. Arrival must match the robot's active navigation task and intended location. An already accepted arrival for that task is idempotent; a cancelled or mismatched task returns `409`. Arrival starts an activity once; it does not grant a reward. The backend owns timers and task completion; there is no public endpoint that lets the frontend mark work complete.
 
-A blocking report stops the affected motion and emits a feed event. Recovery policy can be chosen by the navigation team; resume only through a deliberate recovery decision, and fail the task if it cannot recover. Loss of connectivity or fresh tracking must suspend live driving. Hardware thresholds and arrival tolerance are configuration to agree on during calibration.
+A blocking report sets the robot's blocked state, stops the affected task from
+advancing, and emits one feed event. Repeating it while the robot remains blocked
+is idempotent. A deliberate health/recovery report can clear the blocked state;
+fail or stop the task separately if it cannot recover. Loss of connectivity or
+fresh tracking must suspend live driving. Hardware thresholds and arrival
+tolerance are configuration to agree on during calibration.
 
 Backend-to-navigation command shape:
 
