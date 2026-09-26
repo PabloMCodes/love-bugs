@@ -1,28 +1,58 @@
 // Show backend prices and submit buy or sell tasks for a selected robot; prices apply at execution.
+import { useState } from 'react';
+import BuyPanel from './BuyPanel.jsx';
+import SellPanel from './SellPanel.jsx';
 
-export default function MarketPanel({ market, map }) {
-  return (
-    <section className="w-full max-w-xl">
-      <h2 className="mb-3 text-lg font-semibold">Market</h2>
-      <div
-        className="w-full overflow-hidden rounded-2xl border border-stone-800 bg-stone-900"
-        style={{ aspectRatio: `${map.width} / ${map.height}` }}
-      >
-        <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
-          {market.items.map((item) => (
+const marketTabs = ['buy', 'sell'];
+
+export default function MarketPanel({ market, map, robots }) {
+    const [activePanel, setActivePanel] = useState('buy');
+
+    return (
+        <section className="w-full max-w-xl">
+            <h2 className="mb-3 text-lg font-semibold">Market</h2>
+
             <div
-              key={item.id}
-              className="shrink-0 rounded-xl border border-stone-700 bg-stone-800 p-4"
+                className="flex w-full flex-col overflow-hidden rounded-2xl border border-stone-800 bg-stone-900"
+                style={{ aspectRatio: `${map.width} / ${map.height}` }}
             >
-              <h3 className="font-semibold">{item.name}</h3>
-              <div className="mt-3 space-y-1 text-sm text-stone-300">
-                <p>Buy: {item.buy_price ?? 'Not available'}</p>
-                <p>Sell: {item.sell_price ?? 'Not available'}</p>
-              </div>
+                <div
+                    className="grid grid-cols-2 border-b border-stone-800 p-3"
+                    role="tablist"
+                    aria-label="Market mode"
+                >
+                    {marketTabs.map((tab) => {
+                        const isActive = activePanel === tab;
+
+                        return (
+                            <button
+                                key={tab}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                onClick={() => setActivePanel(tab)}
+                                className={isActive
+                                    ? 'rounded-lg bg-rose-400 px-4 py-2 text-sm font-semibold capitalize text-stone-950'
+                                    : 'rounded-lg px-4 py-2 text-sm font-semibold capitalize text-stone-400 hover:bg-stone-800 hover:text-stone-100'
+                                }
+                            >
+                                {tab}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div
+                    className="min-h-0 flex-1 overflow-y-auto p-4"
+                    role="tabpanel"
+                >
+                    {activePanel === 'buy' ? (
+                        <BuyPanel market={market} />
+                    ) : (
+                        <SellPanel robots={robots} />
+                    )}
+                </div>
             </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+        </section>
+    );
 }

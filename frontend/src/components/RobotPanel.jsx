@@ -1,1 +1,1 @@
-// Show each robot's health, wallet, inventory, and current task, with stop and resume controls.
+// Show each robot's health, wallet, inventory, location, and current task.
