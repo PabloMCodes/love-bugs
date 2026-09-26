@@ -35,7 +35,10 @@ npm exec --yes --package=node@24 -- npm run dev
 - `src/hooks/useWorld.js`: current snapshot and session/revision handling.
 - `src/api/`: HTTP requests and the live WebSocket connection.
 
-Use the world model and endpoints in [api.md](../api.md). The backend owns game rules, prices, rewards, and task completion. The browser talks only to the backend and renders the returned robot list without assuming a fixed count.
+Use the stable MVP v1 world model and endpoints in [api.md](../api.md), and follow
+the frontend section of the [integration checklist](../INTEGRATION.md). The backend
+owns game rules, prices, rewards, and task completion. The browser talks only to
+the backend and renders the returned robot list without assuming a fixed count.
 
 Start with the world snapshot and live updates, then connect the dashboard controls. Add assets and more components when needed.
 

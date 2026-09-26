@@ -1,12 +1,21 @@
 # Game and robotics API contract
 
-Status: active MVP contract with partial backend implementation. The authoritative
-world feed, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
-pose, arrival, health, and blocked-state ingestion, and the core game and robot
-stop/reset/resume controls and read-only world, robot, market, task, event, and
-history queries and goal configuration are implemented. Hardware adapters remain
-planned. Update this document and affected consumers together when changing a
-contract.
+Status: **stable MVP v1 application contract**. The authoritative world feed,
+goal and lifecycle controls, all documented task actions, read-only queries,
+history, and robotics-ingestion routes are implemented and tested. Teammates may
+build against the HTTP paths, payloads, error meanings, world schema, and WebSocket
+envelope below. Existing fields and meanings require a coordinated contract
+change; additive endpoints and event types are allowed. Physical hardware adapters
+remain integration work and the provisional ESP32 transport is not frozen.
+
+For the practical subsystem handoff and acceptance checks, see
+[INTEGRATION.md](INTEGRATION.md).
+
+Contract version 1 permits additive endpoints, optional response fields, and event
+types. Do not remove or rename fields, change their types or meanings, or alter an
+existing route's behavior without coordinating every affected subsystem and
+updating this document, examples, tests, and consumers in the same change. A
+breaking world-schema revision must increment `schema_version`.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
@@ -239,7 +248,13 @@ All HTTP failures use:
 }
 ```
 
-Use `400` for invalid JSON/fields/actions, `404` for unknown resources, `409` for conflicting state or unavailable funds/stock, and `503` for an unavailable required subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`, `GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`, `INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SUBSYSTEM_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
+Use `400` for semantically invalid requests, `404` for unknown resources, `409`
+for conflicting state or unavailable funds/stock, `422` for malformed or
+schema-invalid payloads handled by FastAPI, and `503` for an unavailable required
+subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`,
+`GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`,
+`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, and
+`PERSISTENCE_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
 
 ## Live updates: WebSocket /events
 
