@@ -7,7 +7,6 @@ const marketTabs = ['buy', 'sell'];
 
 export default function MarketPanel({
     market,
-    map,
     onBuyItem,
     onSellItem,
     robots,
@@ -15,13 +14,10 @@ export default function MarketPanel({
     const [activePanel, setActivePanel] = useState('buy');
 
     return (
-        <section className="w-full max-w-xl">
+        <section className="flex h-full min-h-0 w-full flex-col">
             <h2 className="mb-3 text-lg font-semibold">Market</h2>
 
-            <div
-                className="flex w-full flex-col overflow-hidden rounded-2xl border border-stone-800 bg-stone-900"
-                style={{ aspectRatio: `${map.width} / ${map.height}` }}
-            >
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-stone-800 bg-stone-900">
                 <div
                     className="grid grid-cols-2 border-b border-stone-800 p-3"
                     role="tablist"

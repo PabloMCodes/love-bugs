@@ -1,6 +1,7 @@
 // Compose the game dashboard and share world state with its components.
 import { useWorld } from './hooks/useWorld.js';
 import MarketPanel from './components/MarketPanel.jsx';
+import RobotPanel from './components/RobotPanel.jsx';
 import WorldMap from './components/WorldMap.jsx';
 
 export default function App() {
@@ -29,8 +30,8 @@ export default function App() {
     const harvestProgress = Math.round((billy?.task?.progress ?? 0) * 100);
 
     return (
-        <main className="min-h-screen bg-stone-950 px-6 py-10 text-stone-100">
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <main className="h-dvh overflow-hidden bg-stone-950 px-6 py-4 text-stone-100">
+            <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-4 overflow-y-auto lg:overflow-hidden">
                 <h1 className="text-3xl font-semibold">Love Bugs</h1>
 
                 <div className="flex flex-wrap gap-3">
@@ -81,10 +82,11 @@ export default function App() {
                     </button>
                 </div>
 
-                <div className="grid w-full items-start gap-6 lg:grid-cols-2">
+                <RobotPanel robots={world.robots} />
+
+                <div className="grid min-h-80 w-full grid-rows-2 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-1">
                     <MarketPanel
                         market={world.market}
-                        map={world.map}
                         onBuyItem={buyMarketItem}
                         onSellItem={sellInventoryItem}
                         robots={world.robots}

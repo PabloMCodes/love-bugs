@@ -3,12 +3,9 @@ export default function WorldMap({ world }) {
     const { map, robots } = world;
 
     return (
-        <section className="w-full max-w-xl">
+        <section className="flex h-full min-h-0 w-full flex-col">
             <h2 className="mb-3 text-lg font-semibold">World Map</h2>
-            <div
-                className="relative w-full overflow-hidden rounded-2xl border border-green-800 bg-green-700 shadow-xl"
-                style={{ aspectRatio: `${map.width} / ${map.height}` }}
-            >
+            <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-green-800 bg-green-700 shadow-xl">
                 {Object.entries(map.locations).map(([id, location]) => {
                     const left = (location.x / map.width) * 100;
                     const top = (location.y / map.height) * 100;
