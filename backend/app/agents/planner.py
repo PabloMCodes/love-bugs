@@ -1,5 +1,7 @@
 """Per-robot decisions and deterministic checks against the shared task contract."""
 
+from app.agents.protocol import AgentAction, AgentContext
+
 import math
 from typing import Literal, Protocol
 
@@ -112,3 +114,28 @@ class MockPlanner:
         return Decision(action=action, location=location,
                         message=f'{reply}I propose collecting at the {location}. Let’s cover both spots.',
                         reason='Collect resources while my teammate covers the other location.')
+
+
+class DeterministicOrderAgent:
+    def __init__(self, robot_id: str):
+        self.robot_id = robot_id
+
+    def propose(self, context: AgentContext) -> AgentAction | None:
+        if context.robot_id != self.robot_id:
+            raise ValueError("Agent identity mismatch")
+        robot = next(r for r in context.world["robots"] if r["id"] == self.robot_id)
+        inventory = robot["game"]["inventory"]
+        common = dict(session_id=context.world["session_id"],
+                      objective_id=context.objective["id"], robot_id=self.robot_id)
+        if self.robot_id == "robot-a" and context.objective["phase"] == "ASSIGNED":
+            if inventory.get("wheat", 0) >= 1 and inventory.get("fish", 0) == 0:
+                return AgentAction(**common, action="REQUEST_HELP",
+                                   request_id=context.objective["id"] + ":fish",
+                                   reason="Milo, I have the wheat for our order, but I cannot finish it alone. Could you bring a fish Home?")
+        if self.robot_id == "robot-b" and context.objective["phase"] == "HELP_REQUESTED":
+            requests = [m for m in context.inbox if m["type"] == "HELP_REQUESTED"]
+            if requests and inventory.get("fish", 0) >= 1:
+                return AgentAction(**common, action="HELP_PARTNER",
+                                   request_id=requests[-1]["request_id"],
+                                   reason="On my way, Billy! I will bring my fish Home for our order instead of selling it.")
+        return None
