@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, game start, `MOVE_TO` task assignment and simulated movement, spectator agent chat, and standalone overhead vision are implemented. Activity execution, hardware navigation, and robot communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, `MOVE_TO` task assignment and simulated movement, spectator agent chat, and standalone overhead vision are implemented. Activity execution, hardware navigation, and robot communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.

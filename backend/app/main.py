@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agent_chat import DiscussionService, create_router
 from app.api.errors import install_error_handlers
+from app.api.events import create_events_router
 from app.api.routes import create_world_router
 from app.simulation.simulator import SimulationRunner
 from app.state import WorldStore
@@ -40,6 +41,7 @@ def create_app(service=None, world_store=None, run_simulator=None):
                        allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])
     app.include_router(create_router(service if service is not None else DiscussionService()))
     app.include_router(create_world_router(store))
+    app.include_router(create_events_router(store))
     app.state.world_store = store
     app.state.simulator = simulator
     return app
