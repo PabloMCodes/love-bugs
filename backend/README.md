@@ -5,8 +5,8 @@ The first persistence slice runs a deterministic simulation fixture: two robots
 arrive at Home (`homebase`), their meeting point. Startup atomically stores their
 positions, arrival events, and a canonical READY world. The opt-in cooperation
 controls below run a scripted shared-order scenario with validated agent proposals and
-arrivals. This scenario uses no live AI, real driving, generic task API, or background simulation
-clock is implemented. Frontend and firmware are unchanged.
+arrivals. This scenario uses no live AI or real driving; it has no generic task API
+or background simulation clock. It is separate from the frontend/Gemini demo.
 
 ## Local setup (no credentials)
 
@@ -572,10 +572,13 @@ the next round includes the recent conversation, so both robots can respond.
 These are intentional public coordination messages, not private model reasoning.
 They appear over WebSocket within roughly half a second of each model response.
 
-This is a **discussion-only preview**: proposals do not execute game tasks or
-change the frontend simulation. READY and RUNNING games may discuss; stopped,
-completed, busy, offline, or untracked robots are skipped. The next integration
-step is authoritative backend task execution. The existing `AgentOrchestrator`
+The chat backend only proposes actions. On current `main`, the frontend consumes
+new proposals while chat is enabled and dispatches supported movement/collection
+actions into its own simulation. Proposals can be ignored by frontend validation;
+`status: proposed` is not proof of execution. The backend chat service itself does
+not mutate either game loop. READY and RUNNING games may discuss; stopped,
+completed, busy, offline, or untracked robots are skipped. For the current demo, the frontend remains the source of truth; the proposed next
+step is recording its outcomes without replacing its simulation. The existing `AgentOrchestrator`
 also feeds recent messages into decisions and publishes messages only for accepted
 tasks or WAIT decisions. Rejected decisions are never presented as accepted work.
 
@@ -634,3 +637,38 @@ produce one success and one conflict, award 5 gold to each robot exactly once,
 and reject another completion. Reset restores the fixture in a new session.
 This does not verify a live Tiger Data connection or make Gemini calls; the
 PostgreSQL integration test requires `TEST_DATABASE_URL` as documented above.
+
+
+## Proposed bridge for the current frontend demo (not implemented)
+
+As of `main` commit `9d94d70`, P/J's frontend owns simulation state and dispatches
+chat proposals. The backend cooperation endpoints are a separate scripted demo,
+not a recording of their Gemini flow. Keep `/world` and cooperation controls
+separate from any future imported session; do not point their UI at our fixture.
+
+The smallest bridge is an additive ingestion endpoint accepting batches of the
+existing frontend events and changed poses, plus separately labelled agent
+proposals. Preserve producer session IDs, revisions, timestamps and payloads.
+Use a unique run ID (the current frontend fixture reuses `demo-session-001`),
+retry-safe event IDs, and correlation from proposal ID to accepted task ID.
+Recording failures should not block their simulation. Confirm the host, transport,
+retry ownership, coordinate frame and a real payload before implementing it.
+
+Existing events already have `id`, `timestamp`, `type`, `robot_id`, `task_id`,
+`message`, and `data`. World snapshots contain session/revision and poses with
+`pose_updated_at`. Chat messages instead use `text`, `action`, `location`, and
+`status`; they need a labelled mapping, not an assumption that proposals executed.
+Frontend inventories are item objects (including quantity and price), and its map
+and prices differ from the backend fixture. Preserve these values in recordings.
+
+The store supports transactional events/poses and SQLite or Tiger hypertables,
+but has no public ingestion API. Duplicate batches currently fail rather than
+acknowledge retries; public history reads only the backend's current session.
+An adapter needs isolated imported sessions, idempotent ingestion, ordering and
+session-selectable reads. Exact replay also needs an initial snapshot plus
+complete ordered changes or revision snapshots: the current event feed is capped
+at 100, event timestamps can tie, and events alone omit some state. The store's
+latest-only world snapshot does not provide full replay today.
+
+Wait for one captured real world/event/chat payload bundle before implementing.
+No ingestion route or change to P/J's simulation is included in this PR.
