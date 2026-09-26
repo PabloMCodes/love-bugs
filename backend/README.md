@@ -161,3 +161,58 @@ python -m unittest discover -s tests -p 'test_agents.py' -v
 
 References: [Google ADK](https://google.github.io/adk-docs/agents/llm-agents/) and
 [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+## Live spectator conversation
+
+Run the chat API from `backend` in a terminal with your exported Gemini API key:
+
+```sh
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Start the frontend in a second terminal using its README instructions. In the
+**Robot conversation** panel, choose **Mock demo** or **Gemini agents**, then
+**Start chat**. Pause stops future rounds; an in-flight round may finish. Gemini
+mode makes paid/quota-counted calls; mock mode is explicitly scripted. No model
+calls happen until a browser starts the conversation. The key stays on the backend.
+
+Each round sends the current frontend simulation snapshot to the local backend.
+Every available robot proposes one action and a brief public `message` to its
+teammates. The second robot receives the first robot's message before answering;
+the next round includes the recent conversation, so both robots can respond.
+These are intentional public coordination messages, not private model reasoning.
+They appear over WebSocket within roughly half a second of each model response.
+
+This is a **discussion-only preview**: proposals do not execute game tasks or
+change the frontend simulation. READY and RUNNING games may discuss; stopped,
+completed, busy, offline, or untracked robots are skipped. The next integration
+step is authoritative backend task execution. The existing `AgentOrchestrator`
+also feeds recent messages into decisions and publishes messages only for accepted
+tasks or WAIT decisions. Rejected decisions are never presented as accepted work.
+
+The service keeps one shared conversation in memory, with at most 100 messages;
+only the latest 20 are sent to models. A new game session or provider switch clears
+the history. Restarting the backend clears it too. One browser should operate the
+Start/Pause controls; other browsers can watch the same live feed without starting
+another loop. Concurrent rounds are rejected, and the default 10-second cooldown
+is enforced server-side. Browser rounds wait at least 12 seconds after completion.
+Model errors pause that browser's loop and display a redacted error, without
+fabricating chat messages. Reconnecting viewers receive the latest full history.
+
+Configuration:
+
+- Backend `FRONTEND_ORIGINS`: comma-separated allowed browser origins; defaults to
+  `http://localhost:5173,http://127.0.0.1:5173`.
+- Frontend `VITE_API_BASE_URL`: backend URL; defaults to `http://localhost:8000`.
+- Existing `GOOGLE_API_KEY`, `AGENT_MODEL`, `AGENT_TIMEOUT_SECONDS`, and
+  `AGENT_INTERVAL_SECONDS` still apply. Restart the server after changing them.
+
+Transport and payloads are documented in `api.md`. The implementation lives in
+`app/agents/chat.py`, `app/api/agent_chat.py`, and `app/main.py`; it uses the existing
+per-robot Gemini planner. The game `/world` and `/events` endpoints remain unimplemented.
+
+For the discussion preview only, the frontend's buy-only market catalog is
+augmented with inventory sale items/prices in a copied snapshot. This lets agents
+understand the current dashboard without changing its data. This adapter is never
+used by authoritative task validation or real transaction execution.

@@ -327,3 +327,52 @@ Initially scripted task requests can exercise this scenario; autonomous agent de
 Recommended order: canonical world fixture → `GET /world` and `/events` → frontend rendering → task lifecycle with simulated motion → inventory and market → hardware adapters → autonomous decisions → cooperation. Components can be built concurrently against these contracts; this order assigns no people or ownership.
 
 Keep these decisions open: frontend/backend frameworks, agent provider, process boundaries, robot transport, camera and marker choice, calibration and arena dimensions, actual names/artwork, game balancing, co-op mechanics, optional camera feeds, deployment/authentication, and additional sponsor integrations. Before adding any externally exposed deployment or changing shared formats, agree on the necessary contract updates together.
+
+## Agent conversation preview
+
+The local chat preview is separate from the canonical world WebSocket. The
+frontend currently owns simulation state, so it supplies a snapshot for a
+**discussion-only** round. No task is executed by these routes.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /agent-chat/round` | Body `{ "provider": "mock" or "gemini", "world": <snapshot> }`; discuss one proposed action per available robot and return chat snapshot. |
+| `GET /agent-chat` | Return the current bounded conversation snapshot. |
+| WebSocket `/agent-chat/events` | Send full conversation snapshots every 500 ms, including history on reconnect. |
+
+A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussion"`,
+`running`, `error` (string or null), `interval_seconds`, and `messages`. Each message:
+
+```json
+{
+  "id": "unique-message-id",
+  "timestamp": "2026-09-26T18:00:00+00:00",
+  "robot_id": "robot-a",
+  "name": "Billy",
+  "text": "I propose harvesting at the farm. Milo, can you cover the lake?",
+  "action": "HARVEST",
+  "location": "farm",
+  "status": "proposed"
+}
+```
+
+Messages are broadcasts to teammates and spectators. Sender identity comes from
+the planner's assigned robot, not model-generated IDs. Gemini decisions may include
+an optional `message` string (1–300 characters); it is kept out of task request
+parameters. Planners receive the latest 20 messages as `agent_messages`. The
+in-process orchestrator also exposes `chat.snapshot()`, publishing `accepted` or
+`waiting` messages after validation and task acceptance. The preview emits only
+`proposed` messages, which must never be treated as confirmations of execution.
+
+The preview has one shared room and retains 100 messages in memory. New session
+IDs, provider switches, or process restarts clear history. Replace received
+snapshots rather than appending them to avoid duplicates. Only one round can run
+at a time (`409` otherwise); cooldown violations return `429`. Invalid request
+snapshots return `422`; missing Gemini credentials return `503`. These preview
+errors use FastAPI's `{ "detail": ... }` format. A model failure returns a snapshot
+with `error` set and any messages already generated; the frontend pauses its loop.
+The canonical game error envelope and `/events` protocol are unchanged.
+
+The preview copies the supplied market catalog, defaults missing price fields to
+null, and appends sale items from the frontend's inventory objects if absent.
+This is a display/simulation adapter only; it never authorizes real transactions.

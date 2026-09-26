@@ -15,6 +15,7 @@ from uuid import uuid4
 from google.genai.errors import APIError
 from pydantic import ValidationError
 
+from app.agents.chat import AgentChat
 from app.agents.planner import Planner, available, validate_decision
 
 logger = logging.getLogger(__name__)
@@ -44,9 +45,10 @@ class Outcome:
 
 
 class AgentOrchestrator:
-    def __init__(self, planner: Planner, *, interval: float = 10, timeout: float = 20):
+    def __init__(self, planner: Planner, *, interval: float = 10, timeout: float = 20, chat: AgentChat | None = None):
         if any(not math.isfinite(value) or value <= 0 for value in (interval, timeout)):
             raise ValueError('Agent interval and timeout must be positive')
+        self.chat = chat if chat is not None else AgentChat()
         self.planner = planner
         self.interval = interval
         self.timeout = timeout
@@ -71,6 +73,7 @@ class AgentOrchestrator:
             if session_id != self._session_id:
                 self._next_attempt.clear()
                 self._session_id = session_id
+                self.chat.reset(session_id)
             outcomes = []
             # Independent agents run sequentially so each sees accepted teammate tasks.
             for robot in initial['robots']:
@@ -86,7 +89,7 @@ class AgentOrchestrator:
                     continue
                 self._next_attempt[key] = time.monotonic() + self.interval
                 try:
-                    decision = await asyncio.wait_for(self.planner.decide(world, robot_id), self.timeout)
+                    decision = await asyncio.wait_for(self.planner.decide(self.chat.context(world), robot_id), self.timeout)
                     latest = deepcopy(read_world())
                     if latest['session_id'] != session_id:
                         outcomes.append(Outcome(robot_id, 'rejected', 'Game session changed'))
@@ -107,6 +110,7 @@ class AgentOrchestrator:
                     outcomes.append(Outcome(robot_id, 'error', reason))
                     continue
                 if decision.action == 'WAIT':
+                    self.chat.publish(latest, robot_id, decision, status='waiting')
                     outcomes.append(Outcome(robot_id, 'waiting', decision.reason))
                     continue
                 parameters = ({'item': decision.item, 'quantity': decision.quantity}
@@ -126,6 +130,8 @@ class AgentOrchestrator:
                     logger.error('Robot %s submission uncertain (%s)', robot_id, type(error).__name__)
                     outcomes.append(Outcome(robot_id, 'uncertain', 'Reconcile task before resuming', request))
                     continue
+                if accepted:
+                    self.chat.publish(latest, robot_id, decision, status='accepted')
                 outcomes.append(Outcome(robot_id, 'accepted' if accepted else 'rejected',
                                         decision.reason, request))
             return outcomes

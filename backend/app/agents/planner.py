@@ -15,8 +15,12 @@ class Decision(BaseModel):
     quantity: int | None = Field(default=None, strict=True, ge=1)
     reason: str = Field(min_length=1, max_length=300)
 
+    message: str | None = Field(default=None, min_length=1, max_length=300)
+
     @model_validator(mode='after')
     def check_parameters(self):
+        if self.message is not None and not self.message.strip():
+            raise ValueError('Public messages must not be blank')
         if not self.reason.strip():
             raise ValueError('A decision must explain its purpose')
         if self.action == 'WAIT':
@@ -40,11 +44,11 @@ def get_robot(world: dict, robot_id: str) -> dict:
     return next(robot for robot in world['robots'] if robot['id'] == robot_id)
 
 
-def available(world: dict, robot: dict) -> bool:
+def available(world: dict, robot: dict, *, discussion: bool = False) -> bool:
     physical = robot['physical']
     goal = world['game']['goal']
     return (
-        world['game']['status'] == 'RUNNING'
+        world['game']['status'] in (('READY', 'RUNNING') if discussion else ('RUNNING',))
         and goal['current'] < goal['target']
         and physical['online']
         and not physical['stopped']
@@ -61,9 +65,9 @@ def inventory_quantity(robot: dict, item: str) -> int:
     return value.get('quantity', 0) if isinstance(value, dict) else value
 
 
-def validate_decision(world: dict, robot_id: str, decision: Decision) -> None:
+def validate_decision(world: dict, robot_id: str, decision: Decision, *, discussion: bool = False) -> None:
     robot = get_robot(world, robot_id)
-    if not available(world, robot):
+    if not available(world, robot, discussion=discussion):
         raise ValueError('Robot or game is unavailable for a new task')
     if decision.action == 'WAIT':
         return
@@ -99,8 +103,12 @@ class MockPlanner:
             quantity = inventory_quantity(robot, item['id'])
             if quantity > 0 and item['sell_price'] is not None:
                 return Decision(action='SELL', location='market', item=item['id'],
-                                quantity=quantity, reason='Sell inventory toward our shared gold goal.')
+                                quantity=quantity, reason='Sell inventory toward our shared gold goal.',
+                                message='I propose selling my inventory. Can you keep collecting resources?')
         index = [robot['id'] for robot in world['robots']].index(robot_id)
         action, location = ('HARVEST', 'farm') if index % 2 == 0 else ('FISH', 'lake')
+        heard = world.get('agent_messages', [])
+        reply = 'Got it, teammate! ' if heard else 'Team, here is my plan: '
         return Decision(action=action, location=location,
+                        message=f'{reply}I propose collecting at the {location}. Let’s cover both spots.',
                         reason='Collect resources while my teammate covers the other location.')

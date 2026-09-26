@@ -55,6 +55,7 @@ async def run(args):
 
     outcomes = await orchestrator.tick(lambda: world, submit)
     print(json.dumps({'mode': 'dry_run', 'provider': args.provider,
+                      'messages': orchestrator.chat.snapshot()['messages'],
                       'outcomes': [outcome.to_dict() for outcome in outcomes]}, indent=2))
     return int(any(outcome.status in ('error', 'uncertain') for outcome in outcomes))
 

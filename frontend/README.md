@@ -37,3 +37,21 @@ npm exec --yes --package=node@24 -- npm run dev
 Use the world model and endpoints in [api.md](../api.md). The backend owns game rules, prices, rewards, and task completion. The browser talks only to the backend and renders the returned robot list without assuming a fixed count.
 
 Start with the world snapshot and live updates, then connect the dashboard controls. Add assets and more components when needed.
+
+## Robot conversation
+
+The dashboard now includes a live spectator chat panel. Start the backend chat
+service from `backend` with `.venv/bin/python -m uvicorn app.main:app --port 8000`.
+Use **Mock demo → Start chat** to test without credentials, or **Gemini agents**
+to use the backend's exported `GOOGLE_API_KEY`. The browser never receives the key.
+
+Messages are based on the current local simulation and the robots' recent
+conversation. They propose tasks; chat does not move robots or update inventories.
+Start/Pause controls the discussion loop. Pausing permits the current round to
+finish. Scroll up to read history; automatic scrolling resumes when you return to
+the bottom. The panel reconnects automatically and restores the shared history.
+
+Set `VITE_API_BASE_URL` in a local `.env` if the backend is elsewhere; restart Vite
+afterward. The default is `http://localhost:8000`. Allow the frontend's exact origin
+through backend `FRONTEND_ORIGINS` if Vite runs on a different port. Use one browser
+as the chat operator; other spectators only need to open the page.

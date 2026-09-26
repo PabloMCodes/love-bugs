@@ -3,6 +3,7 @@ import { useWorld } from './hooks/useWorld.js';
 import MarketPanel from './components/MarketPanel.jsx';
 import RobotPanel from './components/RobotPanel.jsx';
 import WorldMap from './components/WorldMap.jsx';
+import AgentChat from './components/AgentChat.jsx';
 
 export default function App() {
     const {
@@ -84,7 +85,7 @@ export default function App() {
 
                 <RobotPanel robots={world.robots} />
 
-                <div className="grid min-h-80 w-full grid-rows-2 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-1">
+                <div className="grid min-h-80 w-full auto-rows-[20rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-3 lg:grid-rows-1 lg:auto-rows-auto">
                     <MarketPanel
                         market={world.market}
                         onBuyItem={buyMarketItem}
@@ -92,6 +93,7 @@ export default function App() {
                         robots={world.robots}
                     />
                     <WorldMap world={world} />
+                    <AgentChat world={world} />
                 </div>
             </div>
         </main>

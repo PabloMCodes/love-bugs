@@ -195,9 +195,12 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
                         text=json.dumps({'action': 'HARVEST', 'location': 'farm', 'reason': 'Earn gold'})
                     )]))
             first.agent.model = FakeModel(model='test-model')
-            decision = await planner.decide(demo_world(), 'robot-a')
+            world = demo_world()
+            world['agent_messages'] = [{'robot_id': 'robot-b', 'text': 'Can you cover the farm?'}]
+            decision = await planner.decide(world, 'robot-a')
             self.assertEqual(len(captured), 1)
             self.assertIn('robot-a', captured[0].contents[-1].parts[0].text)
+            self.assertIn('Can you cover the farm?', captured[0].contents[-1].parts[0].text)
             self.assertEqual(decision.action, 'HARVEST')
             sessions = await planner.sessions.list_sessions(app_name='love_bugs', user_id='robot-a')
             self.assertEqual(sessions.sessions, [])
