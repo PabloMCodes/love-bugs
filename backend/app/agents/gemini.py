@@ -9,8 +9,17 @@ from google.adk.agents.run_config import RunConfig
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
+from pydantic import ConfigDict
 
 from app.agents.planner import Decision
+
+
+class GeminiDecisionSchema(Decision):
+    """One proposed robot task."""
+
+    # extra='forbid' emits additionalProperties, rejected by response_schema.
+    # Returned JSON is still parsed using the strict Decision model below.
+    model_config = ConfigDict(extra='ignore')
 
 
 class GeminiPlanner:
@@ -43,7 +52,7 @@ class GeminiPlanner:
                     'Trades require item and positive integer quantity; other actions use nulls. '
                     'Give a short spectator-facing reason. Never invent results or change state.'
                 ),
-                output_schema=Decision,
+                output_schema=GeminiDecisionSchema,
                 include_contents='none',
                 generate_content_config=types.GenerateContentConfig(
                     temperature=.2, max_output_tokens=512,

@@ -160,20 +160,29 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
         # Exercise the SDK conversion that runs before any HTTP request. ADK's
         # fake-model tests do not catch unsupported JSON Schema constraints.
         from google.genai import Client, _transformers
+        from app.agents.gemini import GeminiDecisionSchema
         with Client(api_key='test-only') as client:
-            schema = _transformers.t_schema(client._api_client, Decision)
+            schema = _transformers.t_schema(client._api_client, GeminiDecisionSchema)
         self.assertEqual(schema.properties['quantity'].minimum, 1)
         self.assertTrue(schema.properties['quantity'].nullable)
+        wire_schema = schema.model_dump(mode='json', by_alias=True, exclude_none=True)
+        self.assertNotIn('additionalProperties', wire_schema)
+        self.assertNotIn('additional_properties', wire_schema)
+        with self.assertRaises(ValidationError):
+            Decision.model_validate_json(json.dumps({
+                'action': 'HARVEST', 'location': 'farm', 'reason': 'Earn gold',
+                'motor_speed': 1,
+            }))
 
 
     async def test_real_adk_instances_with_mocked_model_response(self):
-        from app.agents.gemini import GeminiPlanner
+        from app.agents.gemini import GeminiPlanner, GeminiDecisionSchema
         with patch.dict(os.environ, {'GOOGLE_API_KEY': 'test-only'}, clear=True):
             planner = GeminiPlanner('gemini-2.5-flash-lite')
             first = planner._runner('robot-a')
             second = planner._runner('robot-b')
             self.assertIsNot(first.agent, second.agent)
-            self.assertIs(first.agent.output_schema, Decision)
+            self.assertIs(first.agent.output_schema, GeminiDecisionSchema)
             self.assertEqual(first.agent.tools, [])
             from google.adk.models.base_llm import BaseLlm
             from google.adk.models.llm_response import LlmResponse
@@ -194,7 +203,7 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sessions.sessions, [])
 
     def test_missing_key_clear_error(self):
-        from app.agents.gemini import GeminiPlanner
+        from app.agents.gemini import GeminiPlanner, GeminiDecisionSchema
         with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(ValueError, 'GOOGLE_API_KEY'):
             GeminiPlanner('gemini-2.5-flash-lite')
 
