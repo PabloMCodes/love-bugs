@@ -86,6 +86,22 @@ def main():
                         assert json.loads(ws.recv(timeout=5)) == chat
                     assert client.get('/world', headers={'Origin': 'http://localhost:5173'}).headers['access-control-allow-origin'] == 'http://localhost:5173'
                     print('PASS mock chat GET/POST/WebSocket and frontend CORS')
+                    stopped = client.post('/game/stop').json()
+                    assert stopped['game']['status'] == 'STOPPED'
+                    assert all(robot['physical']['stopped'] for robot in stopped['robots'])
+                    restarted = client.post('/game/start').json()
+                    assert all(not robot['physical']['stopped'] for robot in restarted['robots'])
+                    assert client.post('/robots/robot-a/stop').json()['physical']['stopped']
+                    client.post('/game/stop').raise_for_status()
+                    restarted = client.post('/game/start').json()
+                    assert restarted['robots'][0]['physical']['stopped']
+                    assert not restarted['robots'][1]['physical']['stopped']
+                    assert not client.post('/robots/robot-a/resume').json()['physical']['stopped']
+                    reset = client.post('/game/reset').json()
+                    assert reset['session_id'] != sid and reset['revision'] == 1
+                    assert reset['game']['status'] == 'READY'
+                    assert client.get('/events', params={'session_id': sid}).status_code == 200
+                    print('PASS game stop/start/reset and robot stop/resume lifecycle')
             except Exception:
                 log.flush()
                 log.seek(0)

@@ -1,4 +1,4 @@
-"""Read-only routes for the authoritative world snapshot."""
+"""HTTP routes for authoritative world and robot state transitions."""
 
 from fastapi import APIRouter
 
@@ -9,6 +9,7 @@ from app.schemas import (
     BlockedReport,
     HealthReport,
     PoseReport,
+    Robot,
     RobotTask,
     TaskRequest,
     WorldSnapshot,
@@ -56,6 +57,20 @@ def create_world_router(store: WorldStore) -> APIRouter:
         except WorldStateError as error:
             raise translate_world_error(error) from error
 
+    @router.post('/game/stop', response_model=WorldSnapshot)
+    def stop_game() -> WorldSnapshot:
+        try:
+            return store.stop_game()
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/game/reset', response_model=WorldSnapshot)
+    def reset_game() -> WorldSnapshot:
+        try:
+            return store.reset_game()
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
     @router.post('/tasks', response_model=RobotTask, status_code=202)
     def create_task(request: TaskRequest) -> RobotTask:
         try:
@@ -88,6 +103,20 @@ def create_world_router(store: WorldStore) -> APIRouter:
     def report_robot_blocked(robot_id: str, report: BlockedReport) -> AcceptedResponse:
         try:
             return AcceptedResponse(accepted=store.report_blocked(robot_id, report))
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/robots/{robot_id}/stop', response_model=Robot)
+    def stop_robot(robot_id: str) -> Robot:
+        try:
+            return store.stop_robot(robot_id)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/robots/{robot_id}/resume', response_model=Robot)
+    def resume_robot(robot_id: str) -> Robot:
+        try:
+            return store.resume_robot(robot_id)
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

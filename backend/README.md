@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot pose, arrival, health, and blocked-state ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
+`GET /world`, live `/events` snapshots, game lifecycle controls, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot stop/resume, pose, arrival, health, and blocked-state ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -89,6 +89,31 @@ robot's `physical.blocked` flag, pauses task advancement, and emits a
 the robot remains blocked is safe and has no additional side effects. A deliberate
 health report with `blocked: false` clears the condition so navigation can resume.
 Old sessions and mismatched tasks return `409`.
+
+## Game and robot safety controls
+
+The backend exposes these bodyless control requests:
+
+```sh
+curl -X POST http://localhost:8000/game/stop
+curl -X POST http://localhost:8000/game/start
+curl -X POST http://localhost:8000/game/reset
+curl -X POST http://localhost:8000/robots/robot-a/stop
+curl -X POST http://localhost:8000/robots/robot-a/resume
+```
+
+Stopping the game cancels active tasks, latches every robot's `stopped` flag, and
+pauses autonomous work. Starting again clears the game-level stop, but a robot
+stopped through its own endpoint remains stopped until explicitly resumed.
+Robot resume requires a running game, an online robot, fresh tracking, a known
+pose, and no blocked condition. Repeating start or stop calls is safe and does not
+repeat events.
+
+Reset first stops and archives the current session, then creates a new `READY`
+session at revision `1`. Simulation robots are placed at home and remain stopped
+until the game starts. Hardware robots keep their last telemetry and pose, but
+tracking becomes `STALE` so fresh localization is required before navigation.
+Previous sessions remain available through the history endpoints.
 
 ## Robot health integration
 

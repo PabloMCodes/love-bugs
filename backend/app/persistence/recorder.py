@@ -9,6 +9,8 @@ class WorldRecorder:
 
     def record(self, current, previous, *, position_source=None):
         world = current.model_dump(mode='json')
+        if previous is not None and previous.session_id != current.session_id:
+            previous = None
         previous_events = {event.id for event in previous.events} if previous else set()
         previous_robots = {robot.id: robot for robot in previous.robots} if previous else {}
         events = [Event.model_validate(event) for event in world['events']

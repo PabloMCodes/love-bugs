@@ -117,6 +117,32 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(final['robots'][0]['game']['location'], 'farm')
             self.assertEqual(Store(self.settings).world(report['session_id']), final)
 
+    def test_reset_starts_new_persisted_session_and_keeps_old_history(self):
+        app = create_app(settings=self.settings, run_simulator=False)
+        with TestClient(app) as client:
+            started = client.post('/game/start').json()
+            old_session = started['session_id']
+            old_events = client.get('/events').json()['events']
+
+            reset = client.post('/game/reset')
+            fresh = reset.json()
+
+            self.assertEqual(reset.status_code, 200)
+            self.assertNotEqual(fresh['session_id'], old_session)
+            self.assertEqual(fresh['revision'], 1)
+            self.assertEqual(fresh['events'][0]['type'], 'game_ready')
+            archived_events = client.get(
+                '/events',
+                params={'session_id': old_session},
+            ).json()['events']
+            self.assertEqual(archived_events[:len(old_events)], old_events)
+            self.assertEqual(archived_events[-1]['type'], 'game_stopped')
+            self.assertEqual(Store(self.settings).world(fresh['session_id']), fresh)
+            for robot_id in ('robot-a', 'robot-b'):
+                history = client.get(f'/robots/{robot_id}/history').json()
+                self.assertEqual(len(history['position_samples']), 1)
+                self.assertEqual(history['position_samples'][0]['source'], 'reset')
+
     @unittest.skipUnless(os.getenv('TEST_DATABASE_URL'), 'Live Tiger Data credentials not configured')
     def test_tiger_insert_read(self):
         import psycopg

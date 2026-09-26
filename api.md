@@ -2,9 +2,10 @@
 
 Status: active MVP contract with partial backend implementation. The authoritative
 world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
-pose, arrival, health, and blocked-state ingestion are implemented; remaining
-game lifecycle routes and hardware adapters are still planned. Update this
-document and affected consumers together when changing a contract.
+pose, arrival, health, and blocked-state ingestion, and the core game and robot
+stop/reset/resume controls are implemented. Remaining frontend query routes and
+hardware adapters are still planned. Update this document and affected consumers
+together when changing a contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 

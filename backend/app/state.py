@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import math
 from threading import RLock
+from uuid import uuid4
 
 from app.game.market import (
     MarketRuleError,
@@ -18,6 +19,7 @@ from app.schemas import (
     HealthReport,
     NavigationStep,
     PoseReport,
+    Robot,
     RobotTask,
     TaskRequest,
     WorldSnapshot,
@@ -127,9 +129,11 @@ class WorldStore:
         self._lock = RLock()
         initial_world = default_world() if world is None else world
         self._world = WorldSnapshot.model_validate(initial_world)
+        self._initial_world = self._world.model_copy(deep=True)
         self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
         self._accepted_arrivals: dict[tuple[str, str, str], str] = {}
         self._health_seen_at: dict[str, datetime] = {}
+        self._robot_stop_requests: set[str] = set()
         self._recorder = None
 
     def attach_recorder(self, recorder):
@@ -270,6 +274,9 @@ class WorldStore:
             world['revision'] += 1
             world['updated_at'] = now
             world['game']['status'] = 'RUNNING'
+            for robot in world['robots']:
+                if robot['id'] not in self._robot_stop_requests:
+                    robot['physical']['stopped'] = False
             world['events'].append({
                 'id': f"event-game-started-{world['revision']}",
                 'timestamp': now,
@@ -282,6 +289,236 @@ class WorldStore:
             world['events'] = world['events'][-100:]
             self._publish(world)
             return self._world.model_copy(deep=True)
+
+    def stop_game(self) -> WorldSnapshot:
+        with self._lock:
+            target_status = (
+                'COMPLETED'
+                if self._world.game.status == 'COMPLETED'
+                else 'STOPPED'
+            )
+            if (
+                self._world.game.status == target_status
+                and all(
+                    robot.physical.stopped and robot.task is None
+                    for robot in self._world.robots
+                )
+            ):
+                return self._world.model_copy(deep=True)
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            world['game']['status'] = target_status
+            cancelled_task_ids = []
+            for robot in world['robots']:
+                task_id = self._cancel_task(world, robot, now, 'the game was stopped')
+                if task_id is not None:
+                    cancelled_task_ids.append(task_id)
+                robot['physical']['stopped'] = True
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f"event-game-stopped-{world['revision']}",
+                'timestamp': now,
+                'type': 'game_stopped',
+                'robot_id': None,
+                'task_id': None,
+                'message': 'The game was stopped.',
+                'data': {},
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._mark_tasks_cancelled(cancelled_task_ids)
+            return self._world.model_copy(deep=True)
+
+    def reset_game(self) -> WorldSnapshot:
+        with self._lock:
+            self.stop_game()
+            now = datetime.now(timezone.utc)
+            world = self._initial_world.model_dump(mode='python')
+            world['session_id'] = str(uuid4())
+            world['revision'] = 1
+            world['updated_at'] = now
+            world['game']['status'] = 'READY'
+
+            current_robots = {robot.id: robot for robot in self._world.robots}
+            home = world['map']['locations'].get('homebase')
+            for robot in world['robots']:
+                robot['task'] = None
+                robot['physical']['stopped'] = True
+                if world['mode'] == 'simulation':
+                    robot['physical']['blocked'] = False
+                    if home is not None:
+                        heading = (
+                            robot['physical']['pose']['heading']
+                            if robot['physical']['pose'] is not None
+                            else 0
+                        )
+                        robot['physical']['pose'] = {
+                            'x': home['x'],
+                            'y': home['y'],
+                            'heading': heading,
+                        }
+                        robot['physical']['pose_updated_at'] = now
+                        robot['physical']['tracking'] = 'TRACKED'
+                        robot['game']['location'] = 'homebase'
+                else:
+                    current = current_robots.get(robot['id'])
+                    if current is not None:
+                        robot['physical'] = current.physical.model_dump(mode='python')
+                        robot['physical']['stopped'] = True
+                        robot['physical']['tracking'] = (
+                            'STALE'
+                            if robot['physical']['pose'] is not None
+                            else 'UNKNOWN'
+                        )
+                    robot['game']['location'] = None
+
+            world['events'] = [{
+                'id': 'event-game-ready-1',
+                'timestamp': now,
+                'type': 'game_ready',
+                'robot_id': None,
+                'task_id': None,
+                'message': 'A new game session is ready.',
+                'data': {},
+            }]
+            self._publish(world, position_source='reset')
+            self._task_requests.clear()
+            self._accepted_arrivals.clear()
+            self._health_seen_at.clear()
+            self._robot_stop_requests.clear()
+            return self._world.model_copy(deep=True)
+
+    def stop_robot(self, robot_id: str) -> Robot:
+        with self._lock:
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+            if (
+                robot_id in self._robot_stop_requests
+                and robot.physical.stopped
+                and robot.task is None
+            ):
+                return robot.model_copy(deep=True)
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot_id)
+            cancelled_task_id = self._cancel_task(
+                world,
+                robot_data,
+                now,
+                'the robot was stopped',
+            )
+            robot_data['physical']['stopped'] = True
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f"event-{robot_id}-stopped-{world['revision']}",
+                'timestamp': now,
+                'type': 'robot_stopped',
+                'robot_id': robot_id,
+                'task_id': None,
+                'message': f"{robot_data['name']} was stopped.",
+                'data': {},
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            if cancelled_task_id is not None:
+                self._mark_tasks_cancelled([cancelled_task_id])
+            self._robot_stop_requests.add(robot_id)
+            return next(
+                candidate.model_copy(deep=True)
+                for candidate in self._world.robots
+                if candidate.id == robot_id
+            )
+
+    def resume_robot(self, robot_id: str) -> Robot:
+        with self._lock:
+            robot = next(
+                (candidate for candidate in self._world.robots if candidate.id == robot_id),
+                None,
+            )
+            if robot is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+            if self._world.game.status != 'RUNNING':
+                raise WorldStateError(
+                    'GAME_NOT_RUNNING',
+                    'Start the game before resuming a robot.',
+                )
+            if (
+                not robot.physical.online
+                or robot.physical.blocked
+                or robot.physical.tracking != 'TRACKED'
+                or robot.physical.pose is None
+            ):
+                raise WorldStateError(
+                    'ROBOT_UNAVAILABLE',
+                    f'{robot.id} is unavailable for navigation.',
+                )
+            if not robot.physical.stopped:
+                self._robot_stop_requests.discard(robot_id)
+                return robot.model_copy(deep=True)
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            robot_data = next(item for item in world['robots'] if item['id'] == robot_id)
+            robot_data['physical']['stopped'] = False
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f"event-{robot_id}-resumed-{world['revision']}",
+                'timestamp': now,
+                'type': 'robot_resumed',
+                'robot_id': robot_id,
+                'task_id': None,
+                'message': f"{robot_data['name']} was resumed.",
+                'data': {},
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._robot_stop_requests.discard(robot_id)
+            return next(
+                candidate.model_copy(deep=True)
+                for candidate in self._world.robots
+                if candidate.id == robot_id
+            )
+
+    def _cancel_task(
+        self,
+        world: dict,
+        robot: dict,
+        now: datetime,
+        reason: str,
+    ) -> str | None:
+        task = robot['task']
+        if task is None:
+            return None
+        robot['task'] = None
+        world['events'].append({
+            'id': f"event-{task['id']}-cancelled",
+            'timestamp': now,
+            'type': 'task_cancelled',
+            'robot_id': robot['id'],
+            'task_id': task['id'],
+            'message': f"{robot['name']}'s task was cancelled because {reason}.",
+            'data': {},
+        })
+        return task['id']
+
+    def _mark_tasks_cancelled(self, task_ids: list[str]) -> None:
+        cancelled = set(task_ids)
+        for request_id, (request, task) in self._task_requests.items():
+            if task.id not in cancelled:
+                continue
+            self._task_requests[request_id] = (
+                request,
+                task.model_copy(update={'status': 'CANCELLED'}),
+            )
 
     def assign_task(self, request: TaskRequest) -> RobotTask:
         with self._lock:
