@@ -1,10 +1,7 @@
-export default function SellPanel({ robots }) {
-    const robotsByAvailability = [...robots].sort((firstRobot, secondRobot) => {
-        const firstIsAtMarket = firstRobot.game.location === 'market';
-        const secondIsAtMarket = secondRobot.game.location === 'market';
+import { sortRobotsByMarketAvailability } from '../utils/marketRobots.js';
 
-        return Number(secondIsAtMarket) - Number(firstIsAtMarket);
-    });
+export default function SellPanel({ onSellItem, robots }) {
+    const robotsByAvailability = sortRobotsByMarketAvailability(robots);
 
     return (
         <div className="flex flex-col gap-3">
@@ -12,7 +9,10 @@ export default function SellPanel({ robots }) {
                 const isAtMarket = robot.game.location === 'market';
                 const inventoryItems = Object.entries(robot.game.inventory ?? {})
                     .map(([id, item]) => ({ id, ...item }))
-                    .filter((item) => item.quantity > 0);
+                    .filter((item) => (
+                        item.quantity > 0
+                        && Number.isFinite(item.sell_price)
+                    ));
 
                 return (
                     <section
@@ -48,9 +48,19 @@ export default function SellPanel({ robots }) {
                                                 Quantity: {item.quantity}
                                             </p>
                                         </div>
-                                        <p className="shrink-0 text-sm font-semibold text-amber-300">
-                                            {item.sell_price} gold each
-                                        </p>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                            <p className="text-sm font-semibold text-amber-300">
+                                                {item.sell_price} gold each
+                                            </p>
+                                            <button
+                                                type="button"
+                                                disabled={!isAtMarket}
+                                                onClick={() => onSellItem(robot.id, item.id)}
+                                                className="rounded-md bg-emerald-400 px-3 py-1 text-xs font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                Sell all
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

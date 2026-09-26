@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { mockWorldState } from '../data/mockWorldState.js';
 import { movePoseToward } from '../simulation/movement.js';
+import { getMarketRobot } from '../utils/marketRobots.js';
 
 const simulationStepDistance = 5;
 const simulationTickMilliseconds = 250;
@@ -291,5 +292,237 @@ export function useWorld() {
         });
     }
 
-    return { world, startHarvest, startRobotTravel };
+    function sellInventoryItem(robotId, itemId) {
+        setWorld((currentWorld) => {
+            let seller = null;
+            let soldItem = null;
+            let earnings = 0;
+
+            const robots = currentWorld.robots.map((robot) => {
+                const item = robot.game.inventory[itemId];
+
+                if (
+                    robot.id !== robotId
+                    || robot.game.location !== 'market'
+                    || !robot.physical.online
+                    || robot.physical.stopped
+                    || robot.task
+                    || !item
+                    || item.quantity <= 0
+                    || !Number.isFinite(item.sell_price)
+                ) {
+                    return robot;
+                }
+
+                seller = robot;
+                soldItem = item;
+                earnings = item.quantity * item.sell_price;
+
+                const inventory = { ...robot.game.inventory };
+                delete inventory[itemId];
+
+                return {
+                    ...robot,
+                    game: {
+                        ...robot.game,
+                        money: robot.game.money + earnings,
+                        inventory,
+                    },
+                };
+            });
+
+            if (!seller || !soldItem) {
+                return currentWorld;
+            }
+
+            const updatedAt = new Date().toISOString();
+            const currentGold = robots.reduce(
+                (total, robot) => total + robot.game.money,
+                0,
+            );
+            const goalCompleted = currentGold >= currentWorld.game.goal.target;
+            const saleId = `sale-${currentWorld.revision + 1}`;
+            const saleEvents = [
+                {
+                    id: `event-${saleId}-inventory`,
+                    timestamp: updatedAt,
+                    type: 'inventory_updated',
+                    robot_id: robotId,
+                    task_id: null,
+                    message: `${seller.name} sold ${soldItem.quantity} ${soldItem.name}.`,
+                    data: {
+                        item: itemId,
+                        quantity: -soldItem.quantity,
+                        total_quantity: 0,
+                    },
+                },
+                {
+                    id: `event-${saleId}-gold`,
+                    timestamp: updatedAt,
+                    type: 'gold_updated',
+                    robot_id: robotId,
+                    task_id: null,
+                    message: `${seller.name} earned ${earnings} gold.`,
+                    data: {
+                        earnings,
+                        balance: seller.game.money + earnings,
+                    },
+                },
+            ];
+
+            if (goalCompleted && currentWorld.game.status !== 'COMPLETED') {
+                saleEvents.push({
+                    id: `event-${saleId}-goal`,
+                    timestamp: updatedAt,
+                    type: 'game_completed',
+                    robot_id: robotId,
+                    task_id: null,
+                    message: `The crew reached ${currentGold} gold and completed the goal.`,
+                    data: {},
+                });
+            }
+
+            return {
+                ...currentWorld,
+                revision: currentWorld.revision + 1,
+                updated_at: updatedAt,
+                game: {
+                    ...currentWorld.game,
+                    status: goalCompleted ? 'COMPLETED' : currentWorld.game.status,
+                    goal: {
+                        ...currentWorld.game.goal,
+                        current: currentGold,
+                    },
+                },
+                robots,
+                events: [
+                    ...currentWorld.events,
+                    ...saleEvents,
+                ].slice(-100),
+            };
+        });
+    }
+
+    function buyMarketItem(itemId) {
+        setWorld((currentWorld) => {
+            if (currentWorld.game.status === 'COMPLETED') {
+                return currentWorld;
+            }
+
+            const buyer = getMarketRobot(currentWorld.robots);
+            const marketItem = currentWorld.market.items.find(
+                (item) => item.id === itemId,
+            );
+
+            if (
+                !buyer
+                || !buyer.physical.online
+                || buyer.physical.stopped
+                || buyer.task
+                || !marketItem
+                || !Number.isFinite(marketItem.buy_price)
+                || buyer.game.money < marketItem.buy_price
+                || marketItem.stock === 0
+            ) {
+                return currentWorld;
+            }
+
+            const existingItem = buyer.game.inventory[itemId];
+            const quantity = (existingItem?.quantity ?? 0) + 1;
+
+            const robots = currentWorld.robots.map((robot) => {
+                if (robot.id !== buyer.id) {
+                    return robot;
+                }
+
+                return {
+                    ...robot,
+                    game: {
+                        ...robot.game,
+                        money: robot.game.money - marketItem.buy_price,
+                        inventory: {
+                            ...robot.game.inventory,
+                            [itemId]: {
+                                name: existingItem?.name ?? marketItem.name,
+                                quantity,
+                                sell_price: existingItem?.sell_price ?? null,
+                            },
+                        },
+                    },
+                };
+            });
+
+            const marketItems = currentWorld.market.items.map((item) => {
+                if (item.id !== itemId || item.stock === null) {
+                    return item;
+                }
+
+                return {
+                    ...item,
+                    stock: item.stock - 1,
+                };
+            });
+
+            const updatedAt = new Date().toISOString();
+            const currentGold = robots.reduce(
+                (total, robot) => total + robot.game.money,
+                0,
+            );
+            const purchaseId = `purchase-${currentWorld.revision + 1}`;
+
+            return {
+                ...currentWorld,
+                revision: currentWorld.revision + 1,
+                updated_at: updatedAt,
+                game: {
+                    ...currentWorld.game,
+                    goal: {
+                        ...currentWorld.game.goal,
+                        current: currentGold,
+                    },
+                },
+                robots,
+                market: {
+                    ...currentWorld.market,
+                    items: marketItems,
+                },
+                events: [
+                    ...currentWorld.events,
+                    {
+                        id: `event-${purchaseId}-inventory`,
+                        timestamp: updatedAt,
+                        type: 'inventory_updated',
+                        robot_id: buyer.id,
+                        task_id: null,
+                        message: `${buyer.name} received 1 ${marketItem.name}.`,
+                        data: {
+                            item: itemId,
+                            quantity: 1,
+                            total_quantity: quantity,
+                        },
+                    },
+                    {
+                        id: `event-${purchaseId}-gold`,
+                        timestamp: updatedAt,
+                        type: 'gold_updated',
+                        robot_id: buyer.id,
+                        task_id: null,
+                        message: `${buyer.name} spent ${marketItem.buy_price} gold.`,
+                        data: {
+                            spending: marketItem.buy_price,
+                            balance: buyer.game.money - marketItem.buy_price,
+                        },
+                    },
+                ].slice(-100),
+            };
+        });
+    }
+
+    return {
+        world,
+        buyMarketItem,
+        sellInventoryItem,
+        startHarvest,
+        startRobotTravel,
+    };
 }

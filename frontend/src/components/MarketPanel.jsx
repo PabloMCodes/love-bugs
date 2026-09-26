@@ -5,7 +5,13 @@ import SellPanel from './SellPanel.jsx';
 
 const marketTabs = ['buy', 'sell'];
 
-export default function MarketPanel({ market, map, robots }) {
+export default function MarketPanel({
+    market,
+    map,
+    onBuyItem,
+    onSellItem,
+    robots,
+}) {
     const [activePanel, setActivePanel] = useState('buy');
 
     return (
@@ -47,9 +53,16 @@ export default function MarketPanel({ market, map, robots }) {
                     role="tabpanel"
                 >
                     {activePanel === 'buy' ? (
-                        <BuyPanel market={market} />
+                        <BuyPanel
+                            market={market}
+                            onBuyItem={onBuyItem}
+                            robots={robots}
+                        />
                     ) : (
-                        <SellPanel robots={robots} />
+                        <SellPanel
+                            onSellItem={onSellItem}
+                            robots={robots}
+                        />
                     )}
                 </div>
             </div>

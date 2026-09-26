@@ -4,7 +4,13 @@ import MarketPanel from './components/MarketPanel.jsx';
 import WorldMap from './components/WorldMap.jsx';
 
 export default function App() {
-    const { world, startHarvest, startRobotTravel } = useWorld();
+    const {
+        world,
+        buyMarketItem,
+        sellInventoryItem,
+        startHarvest,
+        startRobotTravel,
+    } = useWorld();
     const billy = world.robots.find((robot) => robot.id === 'robot-a');
     const billyIsAtFarm = billy?.game.location === 'farm';
     const billyIsAtMarket = billy?.game.location === 'market';
@@ -79,6 +85,8 @@ export default function App() {
                     <MarketPanel
                         market={world.market}
                         map={world.map}
+                        onBuyItem={buyMarketItem}
+                        onSellItem={sellInventoryItem}
                         robots={world.robots}
                     />
                     <WorldMap world={world} />
