@@ -2,7 +2,7 @@
 
 The React dashboard uses JavaScript, Vite, and Tailwind CSS. It renders the
 authoritative backend world, follows live WebSocket snapshots, submits movement,
-collection, and sell tasks, and retains a local simulation fallback for offline demos.
+collection, buy, and sell tasks, and retains a local simulation fallback for offline demos.
 
 ## Run locally
 
@@ -47,9 +47,8 @@ Use **Mock demo → Start chat** to test without credentials, or **Gemini agents
 to use the backend's exported `GOOGLE_API_KEY`. The browser never receives the key.
 
 Messages are based on the current world and the robots' recent conversation.
-While chat is running, new movement, harvest, fishing, and sell proposals are
-submitted to the backend automatically. Buying remains unavailable until its
-backend transaction is implemented.
+While chat is running, new movement, harvest, fishing, buy, and sell proposals
+are submitted to the backend automatically through the same validated task API.
 Start/Pause controls the discussion loop. Pausing permits the current round to
 finish. Scroll up to read history; automatic scrolling resumes when you return to
 the bottom. The panel reconnects automatically and restores the shared history.

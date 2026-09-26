@@ -750,11 +750,45 @@ export function useWorld() {
         });
     }
 
-    function buyMarketItem(itemId) {
+    async function buyMarketItem(itemId, robotId = null, requestedQuantity = 1) {
         if (backendSelectedRef.current) {
-            reportBackendError(new Error(
-                'Buying is not implemented by the backend yet.',
-            ));
+            try {
+                let currentWorld = worldRef.current;
+                const buyer = robotId
+                    ? currentWorld.robots.find((robot) => robot.id === robotId)
+                    : getMarketRobot(currentWorld.robots);
+
+                if (!buyer) {
+                    throw new Error('No robot is available to receive this item.');
+                }
+                if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
+                    throw new Error('Purchase quantity must be a positive integer.');
+                }
+
+                if (currentWorld.game.status !== 'RUNNING') {
+                    currentWorld = await startGame();
+                    applyBackendSnapshot(currentWorld);
+                }
+
+                await submitTask({
+                    request_id: createRequestId(),
+                    robot_id: buyer.id,
+                    action: taskCatalog.BUY.action,
+                    location: taskCatalog.BUY.requiredLocation,
+                    parameters: {
+                        item: itemId,
+                        quantity: requestedQuantity,
+                    },
+                    reason: `Buy ${requestedQuantity} ${itemId} at the market.`,
+                });
+                setConnection((current) => ({
+                    ...current,
+                    error: null,
+                }));
+            } catch (error) {
+                reportBackendError(error);
+            }
+
             return;
         }
 
@@ -891,6 +925,18 @@ export function useWorld() {
 
         if (proposal.action === taskCatalog.RETURN_HOME.action) {
             startRobotTravel(proposal.robot_id, taskDefinition.requiredLocation);
+            return;
+        }
+
+        if (
+            proposal.action === taskCatalog.BUY.action
+            && proposal.parameters?.item
+        ) {
+            buyMarketItem(
+                proposal.parameters.item,
+                proposal.robot_id,
+                proposal.parameters.quantity,
+            );
             return;
         }
 

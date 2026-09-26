@@ -180,6 +180,65 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertIn('task_cancelled', [event.type for event in completed.events])
         self.assertEqual(completed.events[-1].type, 'game_completed')
 
+    def test_buy_executes_once_and_updates_wallet_inventory_and_stock(self):
+        store = WorldStore()
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-buy-001',
+            robot_id='robot-b',
+            action='BUY',
+            location='market',
+            parameters={'item': 'tool_upgrade', 'quantity': 1},
+        ))
+        simulator = SimulationRunner(store)
+
+        simulator.tick()
+        completed = store.snapshot()
+        milo = completed.robots[1]
+        upgrade = milo.game.inventory['tool_upgrade']
+        market_upgrade = next(
+            item for item in completed.market.items if item.id == 'tool_upgrade'
+        )
+        self.assertIsNone(milo.task)
+        self.assertEqual(milo.game.money, 0)
+        self.assertEqual(upgrade.quantity, 1)
+        self.assertIsNone(upgrade.sell_price)
+        self.assertEqual(market_upgrade.stock, 0)
+        self.assertEqual(completed.game.goal.current, 40)
+        self.assertEqual(completed.events[-1].type, 'task_completed')
+
+        revision = completed.revision
+        simulator.tick()
+        self.assertEqual(store.snapshot().revision, revision)
+
+    def test_competing_purchase_rechecks_stock_at_execution(self):
+        store = WorldStore()
+        store.start_game()
+        for robot_id in ('robot-a', 'robot-b'):
+            store.assign_task(TaskRequest(
+                request_id=f'simulation-buy-{robot_id}',
+                robot_id=robot_id,
+                action='BUY',
+                location='market',
+                parameters={'item': 'tool_upgrade', 'quantity': 1},
+            ))
+
+        SimulationRunner(store, step_distance=100).tick()
+
+        completed = store.snapshot()
+        billy, milo = completed.robots
+        market_upgrade = next(
+            item for item in completed.market.items if item.id == 'tool_upgrade'
+        )
+        self.assertEqual(billy.game.inventory['tool_upgrade'].quantity, 1)
+        self.assertNotIn('tool_upgrade', milo.game.inventory)
+        self.assertEqual(milo.game.money, 40)
+        self.assertIsNone(billy.task)
+        self.assertIsNone(milo.task)
+        self.assertEqual(market_upgrade.stock, 0)
+        self.assertEqual(completed.events[-1].type, 'task_failed')
+        self.assertEqual(completed.events[-1].data['code'], 'OUT_OF_STOCK')
+
 
 if __name__ == '__main__':
     unittest.main()

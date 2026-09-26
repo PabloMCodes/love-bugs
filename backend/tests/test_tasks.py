@@ -3,7 +3,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from app.state import WorldStore
+from app.state import WorldStore, default_world
 
 
 class TaskRouteTests(unittest.TestCase):
@@ -135,6 +135,58 @@ class TaskRouteTests(unittest.TestCase):
         )
         self.assertEqual(malformed.status_code, 400)
         self.assertEqual(malformed.json()['error']['code'], 'INVALID_REQUEST')
+
+    def test_buy_task_validates_market_funds_and_stock(self):
+        self.client.post('/game/start')
+        request = {
+            **self.request,
+            'request_id': 'request-buy-001',
+            'robot_id': 'robot-b',
+            'action': 'BUY',
+            'location': 'market',
+            'parameters': {'item': 'tool_upgrade', 'quantity': 1},
+        }
+
+        accepted = self.client.post('/tasks', json=request)
+
+        self.assertEqual(accepted.status_code, 202)
+        self.assertEqual(accepted.json()['action'], 'BUY')
+        self.assertEqual(accepted.json()['parameters'], request['parameters'])
+
+        funds_store = WorldStore()
+        with TestClient(create_app(world_store=funds_store)) as client:
+            client.post('/game/start')
+            insufficient_funds = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-buy-expensive',
+                'parameters': {'item': 'seeds', 'quantity': 9},
+            })
+            unknown = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-buy-unknown',
+                'parameters': {'item': 'unknown', 'quantity': 1},
+            })
+
+        stocked_world = default_world()
+        stocked_world['robots'][1]['game']['money'] = 100
+        stock_store = WorldStore(stocked_world)
+        with TestClient(create_app(world_store=stock_store)) as client:
+            client.post('/game/start')
+            out_of_stock = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-buy-stock',
+                'parameters': {'item': 'tool_upgrade', 'quantity': 2},
+            })
+
+        self.assertEqual(insufficient_funds.status_code, 409)
+        self.assertEqual(
+            insufficient_funds.json()['error']['code'],
+            'INSUFFICIENT_FUNDS',
+        )
+        self.assertEqual(unknown.status_code, 404)
+        self.assertEqual(unknown.json()['error']['code'], 'NOT_FOUND')
+        self.assertEqual(out_of_stock.status_code, 409)
+        self.assertEqual(out_of_stock.json()['error']['code'], 'OUT_OF_STOCK')
 
 
 if __name__ == '__main__':

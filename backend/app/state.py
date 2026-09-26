@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 import math
 from threading import RLock
 
-from app.game.market import MarketRuleError, apply_sale, quote_sale
+from app.game.market import (
+    MarketRuleError,
+    apply_purchase,
+    apply_sale,
+    quote_purchase,
+    quote_sale,
+)
 from app.game.tasks import activity_for
 from app.schemas import NavigationStep, RobotTask, TaskRequest, WorldSnapshot
 
@@ -156,12 +162,12 @@ class WorldStore:
                 )
 
             activity = activity_for(request.action)
-            if request.action not in ('MOVE_TO', 'SELL') and activity is None:
+            if request.action not in ('MOVE_TO', 'BUY', 'SELL') and activity is None:
                 raise WorldStateError(
                     'INVALID_REQUEST',
-                    'Only MOVE_TO, HARVEST, FISH, and SELL are implemented by the backend task service.',
+                    'Only MOVE_TO, HARVEST, FISH, BUY, and SELL are implemented by the backend task service.',
                 )
-            if request.action != 'SELL' and request.parameters:
+            if request.action not in ('BUY', 'SELL') and request.parameters:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} does not accept parameters.',
@@ -175,8 +181,11 @@ class WorldStore:
                     'INVALID_REQUEST',
                     f'{request.action} must take place at {activity.location}.',
                 )
-            if request.action == 'SELL' and request.location != 'market':
-                raise WorldStateError('INVALID_REQUEST', 'SELL must take place at market.')
+            if request.action in ('BUY', 'SELL') and request.location != 'market':
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    f'{request.action} must take place at market.',
+                )
 
             robot = next(
                 (candidate for candidate in self._world.robots if candidate.id == request.robot_id),
@@ -195,9 +204,16 @@ class WorldStore:
                 or robot.physical.pose is None
             ):
                 raise WorldStateError('ROBOT_UNAVAILABLE', f'{robot.id} is unavailable for navigation.')
-            if request.action == 'SELL':
+            if request.action in ('BUY', 'SELL'):
                 try:
-                    quote_sale(robot.game.model_dump(mode='python'), request.parameters)
+                    if request.action == 'BUY':
+                        quote_purchase(
+                            robot.game.model_dump(mode='python'),
+                            self._world.market.model_dump(mode='python'),
+                            request.parameters,
+                        )
+                    else:
+                        quote_sale(robot.game.model_dump(mode='python'), request.parameters)
                 except MarketRuleError as error:
                     raise WorldStateError(error.code, error.message) from error
 
@@ -217,7 +233,7 @@ class WorldStore:
                     else (
                         f'Begin {activity.label} at {request.location}.'
                         if activity is not None
-                        else 'Sell inventory at market.'
+                        else f'{request.action.title()} an item at market.'
                     )
                 ),
                 error=None,
@@ -239,7 +255,10 @@ class WorldStore:
                     else (
                         f'{robot.name} was assigned to {activity.label} at {request.location}.'
                         if activity is not None
-                        else f'{robot.name} was assigned to sell inventory at market.'
+                        else (
+                            f'{robot.name} was assigned to '
+                            f'{request.action.lower()} an item at market.'
+                        )
                     )
                 ),
                 'data': {},
@@ -279,7 +298,7 @@ class WorldStore:
                     task is None
                     or task['id'] != step.task_id
                     or (
-                        task['action'] not in ('MOVE_TO', 'SELL')
+                        task['action'] not in ('MOVE_TO', 'BUY', 'SELL')
                         and activity_for(task['action']) is None
                     )
                     or task['status'] not in ('ASSIGNED', 'NAVIGATING')
@@ -307,7 +326,9 @@ class WorldStore:
                         'data': {},
                     })
                     activity = activity_for(task['action'])
-                    if task['action'] == 'SELL':
+                    if task['action'] == 'BUY':
+                        self._complete_purchase(world, robot, task, now)
+                    elif task['action'] == 'SELL':
                         self._complete_sale(world, robot, task, now)
                     elif activity is None:
                         robot['task'] = None
@@ -335,6 +356,81 @@ class WorldStore:
             world['events'] = world['events'][-100:]
             self._world = WorldSnapshot.model_validate(world)
             return self._world.model_copy(deep=True)
+
+    def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
+        try:
+            quote = apply_purchase(robot['game'], world['market'], task['parameters'])
+        except MarketRuleError as error:
+            robot['task'] = None
+            world['events'].append({
+                'id': f"event-{task['id']}-failed",
+                'timestamp': now,
+                'type': 'task_failed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} could not complete the purchase: {error.message}",
+                'data': {'code': error.code},
+            })
+            return
+
+        inventory_quantity = robot['game']['inventory'][quote.item_id]['quantity']
+        market_item = next(
+            item for item in world['market']['items'] if item['id'] == quote.item_id
+        )
+        robot['task'] = None
+        world['game']['goal']['current'] = sum(
+            item['game']['money'] for item in world['robots']
+        )
+        purchase_events = [
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} received {quote.quantity} {quote.item_name}.",
+                'data': {
+                    'item': quote.item_id,
+                    'quantity': quote.quantity,
+                    'total_quantity': inventory_quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-gold",
+                'timestamp': now,
+                'type': 'gold_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} spent {quote.cost} gold.",
+                'data': {
+                    'spending': quote.cost,
+                    'balance': robot['game']['money'],
+                },
+            },
+        ]
+        if market_item['stock'] is not None:
+            purchase_events.append({
+                'id': f"event-{task['id']}-market",
+                'timestamp': now,
+                'type': 'market_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f'{quote.item_name} market stock was updated.',
+                'data': {
+                    'item': quote.item_id,
+                    'stock': market_item['stock'],
+                },
+            })
+        purchase_events.append({
+            'id': f"event-{task['id']}-completed",
+            'timestamp': now,
+            'type': 'task_completed',
+            'robot_id': robot['id'],
+            'task_id': task['id'],
+            'message': f"{robot['name']} completed the purchase.",
+            'data': {},
+        })
+        world['events'].extend(purchase_events)
 
     def _complete_sale(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
         try:

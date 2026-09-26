@@ -18,7 +18,6 @@ export default function App() {
         startHarvest,
         startRobotTravel,
     } = useWorld();
-    const backendOwnsWorld = connection.source === 'backend';
     const billy = world.robots.find((robot) => robot.id === 'robot-a');
     const billyIsAtFarm = billy?.game.location === harvestTask.requiredLocation;
     const billyIsAtMarket = billy?.game.location === marketLocation;
@@ -131,8 +130,7 @@ export default function App() {
                         onSellItem={sellInventoryItem}
                         robots={world.robots}
                         buyDisabled={
-                            backendOwnsWorld
-                            || world.game.status === 'COMPLETED'
+                            world.game.status === 'COMPLETED'
                         }
                         sellDisabled={world.game.status === 'COMPLETED'}
                     />

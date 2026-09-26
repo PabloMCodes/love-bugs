@@ -1,7 +1,7 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, and `SELL` tasks, spectator agent chat, and standalone overhead vision are implemented. Buying, hardware navigation, and robot communication remain placeholders.
+`GET /world`, live `/events` snapshots, game start, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and robot communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -185,8 +185,8 @@ These are intentional public coordination messages, not private model reasoning.
 They appear over WebSocket within roughly half a second of each model response.
 
 The chat service itself is a **discussion-only preview**, but the frontend dispatches
-new proposals while chat is enabled. `MOVE_TO`, `HARVEST`, `FISH`, and `SELL`
-therefore use the authoritative backend task service; buying remains unavailable.
+new proposals while chat is enabled. `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and
+`SELL` therefore use the authoritative backend task service.
 READY and RUNNING games may discuss; stopped, completed, busy, offline, or untracked
 robots are skipped. The standalone `AgentOrchestrator` is not yet hosted by the game
 process.

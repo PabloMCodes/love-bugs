@@ -1,7 +1,7 @@
 # Game and robotics API contract
 
 Status: active MVP contract with partial backend implementation. The authoritative
-world feed and simulated `MOVE_TO`, `HARVEST`, `FISH`, and `SELL` tasks are implemented;
+world feed and simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks are implemented;
 remaining routes and hardware adapters are still planned. Update this document and
 affected consumers together when changing a contract.
 
