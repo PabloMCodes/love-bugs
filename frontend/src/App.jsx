@@ -11,12 +11,14 @@ export default function App() {
     const marketLocation = taskCatalog.BUY.requiredLocation;
     const {
         world,
+        connection,
         buyMarketItem,
         dispatchAgentTask,
         sellInventoryItem,
         startHarvest,
         startRobotTravel,
     } = useWorld();
+    const backendOwnsWorld = connection.source === 'backend';
     const billy = world.robots.find((robot) => robot.id === 'robot-a');
     const billyIsAtFarm = billy?.game.location === harvestTask.requiredLocation;
     const billyIsAtMarket = billy?.game.location === marketLocation;
@@ -41,7 +43,30 @@ export default function App() {
     return (
         <main className="h-dvh overflow-hidden bg-stone-950 px-6 py-4 text-stone-100">
             <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-4 overflow-y-auto lg:overflow-hidden">
-                <h1 className="text-3xl font-semibold">Love Bugs</h1>
+                <div className="flex items-center justify-between gap-4">
+                    <h1 className="text-3xl font-semibold">Love Bugs</h1>
+                    <div className="text-right">
+                        <p className={`text-xs font-semibold ${
+                            connection.connected
+                                ? 'text-emerald-300'
+                                : 'text-amber-300'
+                        }`}>
+                            {connection.connected
+                                ? 'Backend connected'
+                                : connection.source === 'connecting'
+                                    ? 'Connecting to backend…'
+                                    : connection.source === 'mock'
+                                        ? 'Local demo mode'
+                                        : 'Backend reconnecting…'
+                            }
+                        </p>
+                        {connection.error && (
+                            <p className="mt-1 max-w-sm text-xs text-stone-400">
+                                {connection.error}
+                            </p>
+                        )}
+                    </div>
+                </div>
 
                 <div className="flex flex-wrap gap-3">
                     <button
@@ -63,11 +88,17 @@ export default function App() {
 
                     <button
                         type="button"
-                        disabled={!billyIsAtFarm || Boolean(billy?.task)}
+                        disabled={
+                            backendOwnsWorld
+                            || !billyIsAtFarm
+                            || Boolean(billy?.task)
+                        }
                         onClick={() => startHarvest('robot-a')}
                         className="w-fit rounded-lg bg-amber-300 px-4 py-2 font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {billyIsHarvesting
+                        {backendOwnsWorld
+                            ? 'Backend harvest coming next'
+                            : billyIsHarvesting
                             ? `Harvesting Wheat: ${harvestProgress}%`
                             : 'Harvest Wheat'
                         }
@@ -102,6 +133,7 @@ export default function App() {
                         onBuyItem={buyMarketItem}
                         onSellItem={sellInventoryItem}
                         robots={world.robots}
+                        transactionsDisabled={backendOwnsWorld}
                     />
                     <WorldMap world={world} />
                     <AgentChat

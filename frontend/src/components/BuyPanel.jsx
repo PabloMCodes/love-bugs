@@ -1,13 +1,14 @@
 import { getMarketRobot } from '../utils/marketRobots.js';
 
-export default function BuyPanel({ market, onBuyItem, robots }) {
+export default function BuyPanel({ disabled = false, market, onBuyItem, robots }) {
     const recipient = getMarketRobot(robots);
 
     return (
         <div className="flex flex-col gap-3">
             {market.items.map((item) => {
                 const canBuy = Boolean(
-                    recipient
+                    !disabled
+                    && recipient
                     && recipient.physical.online
                     && !recipient.physical.stopped
                     && !recipient.task

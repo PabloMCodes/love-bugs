@@ -1,6 +1,6 @@
 import { sortRobotsByMarketAvailability } from '../utils/marketRobots.js';
 
-export default function SellPanel({ onSellItem, robots }) {
+export default function SellPanel({ disabled = false, onSellItem, robots }) {
     const robotsByAvailability = sortRobotsByMarketAvailability(robots);
 
     return (
@@ -54,7 +54,7 @@ export default function SellPanel({ onSellItem, robots }) {
                                             </p>
                                             <button
                                                 type="button"
-                                                disabled={!isAtMarket}
+                                                disabled={disabled || !isAtMarket}
                                                 onClick={() => onSellItem(robot.id, item.id)}
                                                 className="rounded-md bg-emerald-400 px-3 py-1 text-xs font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
                                             >

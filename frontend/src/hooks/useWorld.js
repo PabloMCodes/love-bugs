@@ -1,5 +1,7 @@
 // Own the current world snapshot, connection status, session changes, and revision checks across REST and WebSocket updates.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getWorld, startGame, submitTask } from '../api/client.js';
+import { worldSocketUrl } from '../api/events.js';
 import { mockWorldState } from '../data/mockWorldState.js';
 import { getTaskDefinition, taskCatalog } from '../data/taskCatalog.js';
 import { movePoseToward } from '../simulation/movement.js';
@@ -9,12 +11,198 @@ const simulationStepDistance = 5;
 const simulationTickMilliseconds = 250;
 const harvestTask = taskCatalog.HARVEST;
 
+function createRequestId() {
+    return globalThis.crypto?.randomUUID?.()
+        ?? `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isWorldSnapshot(value) {
+    return Boolean(
+        value
+        && typeof value.session_id === 'string'
+        && Number.isInteger(value.revision)
+        && value.game
+        && value.map
+        && Array.isArray(value.robots)
+        && value.market,
+    );
+}
+
 export function useWorld() {
     const [world, setWorld] = useState(mockWorldState);
+    const [connection, setConnection] = useState({
+        source: 'connecting',
+        connected: false,
+        error: null,
+    });
+    const worldRef = useRef(world);
+    const backendSelectedRef = useRef(false);
+    const backendVersionRef = useRef({ sessionId: null, revision: -1 });
+    worldRef.current = world;
+
+    function applyBackendSnapshot(snapshot) {
+        if (!isWorldSnapshot(snapshot)) {
+            setConnection((current) => ({
+                ...current,
+                error: 'The backend sent an invalid world snapshot.',
+            }));
+            return false;
+        }
+
+        const previousVersion = backendVersionRef.current;
+        const sessionChanged = (
+            previousVersion.sessionId !== null
+            && previousVersion.sessionId !== snapshot.session_id
+        );
+
+        if (
+            !sessionChanged
+            && previousVersion.sessionId === snapshot.session_id
+            && snapshot.revision <= previousVersion.revision
+        ) {
+            return false;
+        }
+
+        backendVersionRef.current = {
+            sessionId: snapshot.session_id,
+            revision: snapshot.revision,
+        };
+        backendSelectedRef.current = true;
+        setWorld(snapshot);
+        setConnection((current) => ({
+            source: 'backend',
+            connected: current.connected,
+            error: null,
+        }));
+        return true;
+    }
+
+    function reportBackendError(error) {
+        setConnection((current) => ({
+            ...current,
+            error: error?.message || 'Unable to reach the backend.',
+        }));
+    }
+
+    useEffect(() => {
+        let disposed = false;
+        let socket;
+        let reconnectTimer;
+        let reconnectAttempts = 0;
+        const controller = new AbortController();
+
+        getWorld(controller.signal)
+            .then((snapshot) => {
+                if (!disposed) {
+                    applyBackendSnapshot(snapshot);
+                }
+            })
+            .catch((error) => {
+                if (disposed || error.name === 'AbortError') {
+                    return;
+                }
+
+                setConnection((current) => ({
+                    source: backendSelectedRef.current ? 'backend' : 'mock',
+                    connected: current.connected,
+                    error: backendSelectedRef.current
+                        ? error.message
+                        : 'Backend unavailable. Running the local demo.',
+                }));
+            });
+
+        function connect() {
+            socket = new WebSocket(worldSocketUrl());
+
+            socket.onopen = () => {
+                if (disposed) {
+                    return;
+                }
+
+                reconnectAttempts = 0;
+                setConnection((current) => ({
+                    ...current,
+                    connected: true,
+                }));
+            };
+
+            socket.onmessage = (event) => {
+                if (disposed) {
+                    return;
+                }
+
+                try {
+                    const message = JSON.parse(event.data);
+
+                    if (message.type === 'world_snapshot') {
+                        applyBackendSnapshot(message.data);
+                    }
+                } catch {
+                    setConnection((current) => ({
+                        ...current,
+                        error: 'Unable to read a backend world update.',
+                    }));
+                }
+            };
+
+            socket.onclose = () => {
+                if (disposed) {
+                    return;
+                }
+
+                setConnection((current) => ({
+                    source: backendSelectedRef.current ? 'backend' : 'mock',
+                    connected: false,
+                    error: backendSelectedRef.current
+                        ? 'Backend connection lost. Reconnecting…'
+                        : current.error,
+                }));
+                reconnectTimer = window.setTimeout(
+                    connect,
+                    Math.min(5000, 1000 * (2 ** reconnectAttempts++)),
+                );
+            };
+
+            socket.onerror = () => {
+                if (!disposed) {
+                    setConnection((current) => ({
+                        ...current,
+                        connected: false,
+                    }));
+                }
+            };
+        }
+
+        connect();
+
+        return () => {
+            disposed = true;
+            controller.abort();
+            window.clearTimeout(reconnectTimer);
+
+            if (!socket) {
+                return;
+            }
+
+            socket.onmessage = null;
+            socket.onerror = null;
+            socket.onclose = null;
+
+            if (socket.readyState === WebSocket.CONNECTING) {
+                socket.onopen = () => socket.close();
+            } else if (socket.readyState === WebSocket.OPEN) {
+                socket.close();
+            }
+        };
+    }, []);
 
     useEffect(() => {
         const simulationTimer = window.setInterval(() => {
             setWorld((currentWorld) => {
+                if (backendSelectedRef.current) {
+                    return currentWorld;
+                }
+
                 const simulatedRobots = currentWorld.robots.filter(
                     (robot) => (
                         robot.task?.status === 'NAVIGATING'
@@ -188,7 +376,35 @@ export function useWorld() {
         return () => window.clearInterval(simulationTimer);
     }, []);
 
-    function startRobotTravel(robotId, destinationId) {
+    async function startRobotTravel(robotId, destinationId) {
+        if (backendSelectedRef.current) {
+            try {
+                let currentWorld = worldRef.current;
+
+                if (currentWorld.game.status !== 'RUNNING') {
+                    currentWorld = await startGame();
+                    applyBackendSnapshot(currentWorld);
+                }
+
+                await submitTask({
+                    request_id: createRequestId(),
+                    robot_id: robotId,
+                    action: taskCatalog.MOVE_TO.action,
+                    location: destinationId,
+                    parameters: {},
+                    reason: `Travel to ${destinationId}.`,
+                });
+                setConnection((current) => ({
+                    ...current,
+                    error: null,
+                }));
+            } catch (error) {
+                reportBackendError(error);
+            }
+
+            return;
+        }
+
         setWorld((currentWorld) => {
             const target = currentWorld.map.locations[destinationId];
 
@@ -266,6 +482,13 @@ export function useWorld() {
         const taskDefinition = getTaskDefinition(action);
 
         if (taskDefinition?.type !== 'activity') {
+            return;
+        }
+
+        if (backendSelectedRef.current) {
+            reportBackendError(new Error(
+                `${taskDefinition.label} is not implemented by the backend yet.`,
+            ));
             return;
         }
 
@@ -355,6 +578,13 @@ export function useWorld() {
     }
 
     function sellInventoryItem(robotId, itemId) {
+        if (backendSelectedRef.current) {
+            reportBackendError(new Error(
+                'Selling is not implemented by the backend yet.',
+            ));
+            return;
+        }
+
         setWorld((currentWorld) => {
             let seller = null;
             let soldItem = null;
@@ -466,6 +696,13 @@ export function useWorld() {
     }
 
     function buyMarketItem(itemId) {
+        if (backendSelectedRef.current) {
+            reportBackendError(new Error(
+                'Buying is not implemented by the backend yet.',
+            ));
+            return;
+        }
+
         setWorld((currentWorld) => {
             if (currentWorld.game.status === 'COMPLETED') {
                 return currentWorld;
@@ -604,6 +841,7 @@ export function useWorld() {
 
     return {
         world,
+        connection,
         buyMarketItem,
         dispatchAgentTask,
         sellInventoryItem,
