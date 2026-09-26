@@ -1,7 +1,31 @@
 # Frontend
 
 The React dashboard, using JavaScript, Vite, and Tailwind CSS.
-These files are commented placeholders; dependencies, build configuration, and implementation have not been added yet.
+React, Vite, and Tailwind are configured with a minimal starter screen. Dashboard components and API integration remain commented placeholders.
+
+## Run locally
+
+Use Node 24 (recorded in `.nvmrc`). With nvm installed:
+
+```sh
+cd frontend
+nvm install
+nvm use
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite. Without nvm, install Node 24 using your preferred Node installer. To run with a temporary Node 24 runtime instead:
+
+```sh
+cd frontend
+npm exec --yes --package=node@24 -- npm ci
+npm exec --yes --package=node@24 -- npm run dev
+```
+
+`npm run build` creates the production bundle in `dist/`. `npm run preview` serves that bundle locally. The starter screen runs without a backend.
+
+## Structure
 
 - `index.html` and `src/main.jsx`: browser entry points.
 - `src/App.jsx`: dashboard layout and shared world state.
