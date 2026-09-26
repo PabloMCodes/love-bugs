@@ -1,13 +1,13 @@
 # Backend
 
-The Python backend, using FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-Most server files are commented placeholders. Standalone overhead vision is implemented; see below.
+The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
+`GET /world`, spectator agent chat, and standalone overhead vision are implemented. Game writes, navigation, and hardware communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
-- `app/schemas.py`: shared request, response, and event models.
-- `app/state.py`: authoritative world state and consistent snapshots.
-- `app/api/`: HTTP routes, WebSocket snapshots, and error formatting.
+- `app/schemas.py`: validated canonical world snapshot models.
+- `app/state.py`: authoritative in-memory world state and immutable snapshots.
+- `app/api/`: `GET /world`, spectator agent chat, and planned game APIs.
 - `app/game/`: session controls, task lifecycle, and market transactions.
 - `app/agents/`: high-level task decisions through the same validation as manual requests.
 - `app/vision/`: overhead camera localization and coordinate calibration.

@@ -38,7 +38,7 @@ The MVP has two robots and four locations: `homebase`, `farm`, `lake`, `market`.
 | Progress | Number from 0 to 1. |
 | Money and quantities | Nonnegative integers. Requests to buy/sell require a positive integer quantity. |
 | Unknown values | Explicit `null`; never invent a position or battery reading. |
-| Inventory | Object from stable item ID to quantity; an omitted item has quantity zero. |
+| Inventory | Object from stable item ID to `{ "name", "quantity", "sell_price" }`; an omitted item has quantity zero. |
 | Location | Named zone when confirmed inside it; `null` between zones or when unknown. |
 
 Proposed gameplay defaults: each robot has its own wallet and inventory; the shared goal counts the sum of current wallet balances. Spending can therefore reduce goal progress. Prices, starting balances, activity durations, and rewards below are demo values, not final balancing decisions. The server supplies them or the resulting state; clients must not calculate authoritative rewards or balances.
@@ -84,7 +84,10 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       "game": {
         "location": "farm",
         "money": 40,
-        "inventory": { "wheat": 2, "seeds": 1 }
+        "inventory": {
+          "wheat": { "name": "Wheat", "quantity": 2, "sell_price": 10 },
+          "seeds": { "name": "Wheat Seeds", "quantity": 1, "sell_price": null }
+        }
       },
       "task": {
         "id": "task-001",
@@ -120,9 +123,8 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   ],
   "market": {
     "items": [
-      { "id": "seeds", "name": "Wheat Seeds", "buy_price": 5, "sell_price": 2, "stock": null },
-      { "id": "wheat", "name": "Wheat", "buy_price": null, "sell_price": 10, "stock": null },
-      { "id": "fish", "name": "Fish", "buy_price": null, "sell_price": 12, "stock": null }
+      { "id": "seeds", "name": "Wheat Seeds", "buy_price": 5, "sell_price": null, "stock": null },
+      { "id": "tool_upgrade", "name": "Tool Upgrade", "buy_price": 40, "sell_price": null, "stock": 1 }
     ]
   },
   "events": [
@@ -145,7 +147,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - Every endpoint returning a robot uses the canonical robot shape above. `task` is the current nonterminal task or `null`; terminal tasks remain available in task history.
 - `physical.online` describes robot communication; `tracking` independently describes localization: `TRACKED`, `STALE`, or `UNKNOWN`. Initially pose and pose timestamp are `null`, and tracking is `UNKNOWN`. A stale pose may remain for display but must not be treated as fresh control input. The hardware adapter defines and documents its freshness threshold before live driving.
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
-- A `null` price means that transaction direction is unavailable. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
+- The market list contains items available to buy. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
 - `events` contains the latest 100 semantic events, oldest first. Pose samples are not feed events. Event `robot_id` and `task_id` may be `null`. `data` contains optional details; the UI can always display `message`.
 
 ## Frontend-facing HTTP API
