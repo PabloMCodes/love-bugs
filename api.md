@@ -294,6 +294,15 @@ An ESP32-local watchdog must stop both motors after valid commands stop arriving
 
 Agents read authoritative state and propose the same task actions through backend validation. No specific agent SDK or decision endpoint is required. A decision includes robot ID, action, location, parameters, and a short spectator-facing reason; it never includes PWM values. Agent and manual task requests share busy-state and transaction checks.
 
+The initial Python agent implementation lives in `backend/app/agents`. Each robot
+has an independent Google ADK/Gemini agent. An in-process orchestrator supplies
+world snapshots and submits the same task request fields above, plus the optional
+`reason` string. Its host callback receives `session_id` separately and must apply
+shared task validation and request-ID idempotency atomically. Internal `WAIT`
+decisions defer submission; they do not add a public task action or endpoint.
+The standalone CLI uses a temporary demo task sink, not the backend or frontend
+simulation. See `backend/README.md` for environment settings and integration.
+
 Cooperation is the next integration milestone after the individual gameplay loop. Reserve `help_requested` and `help_accepted` feed events, but do not require a speculative co-op API to unblock the frontend. Before implementing cooperation, agree on a shared objective ID, participant list, invitation/acceptance flow, waiting/active/completed/cancelled states, reward split, and timeout/cancellation behavior. Both robots must have confirmed arrival before the shared activity starts, and its reward must be applied once. The exact objective and agent communication mechanism remain open.
 
 ## Working without hardware

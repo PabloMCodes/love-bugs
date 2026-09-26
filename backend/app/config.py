@@ -1,4 +1,4 @@
-"""Runtime configuration for standalone overhead vision."""
+"""Runtime configuration for overhead vision and robot agents."""
 
 import json
 from dataclasses import dataclass
@@ -40,3 +40,27 @@ def load_vision_config(path: str | Path) -> VisionConfig:
         raise ValueError('Each robot must have a unique marker')
     zones = tuple(Zone(name=name, **bounds) for name, bounds in data['zones'].items())
     return VisionConfig(mapping, zones)
+
+
+@dataclass(frozen=True)
+class AgentConfig:
+    model: str = 'gemini-2.5-flash-lite'
+    interval_seconds: float = 10
+    timeout_seconds: float = 20
+
+    @classmethod
+    def from_env(cls):
+        import os
+        import math
+
+        config = cls(
+            model=os.getenv('AGENT_MODEL', 'gemini-2.5-flash-lite'),
+            interval_seconds=float(os.getenv('AGENT_INTERVAL_SECONDS', '10')),
+            timeout_seconds=float(os.getenv('AGENT_TIMEOUT_SECONDS', '20')),
+        )
+        if not config.model.strip() or any(
+            not math.isfinite(value) or value <= 0
+            for value in (config.interval_seconds, config.timeout_seconds)
+        ):
+            raise ValueError('Agent model must be nonempty; interval and timeout must be positive finite numbers')
+        return config
