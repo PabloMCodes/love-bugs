@@ -23,6 +23,39 @@ Start with modules in one backend process; separate processes only when integrat
 
 [api.md](../api.md) remains the shared interface contract. Implement schemas and snapshots first, then tasks with simulation, hardware integration, and autonomous decisions. Choose the agent provider, camera library, and robot transport when those modules are implemented. ESP32 firmware will need its own project once its toolchain is selected; the onboard motor watchdog belongs in that firmware.
 
+## Runtime mode
+
+Simulation is the default and keeps the current browser demo working:
+
+```sh
+cd backend
+GAME_MODE=simulation .venv/bin/python -m uvicorn app.main:app \
+  --host 127.0.0.1 --port 8000
+```
+
+When the robotics stack is ready, launch the same API in hardware mode:
+
+```sh
+cd backend
+GAME_MODE=hardware .venv/bin/python -m uvicorn app.main:app \
+  --host 127.0.0.1 --port 8000
+```
+
+`GAME_MODE` is read at process startup and must be `simulation` or `hardware`.
+The selected value appears in `GET /world` as `mode`. Hardware mode does not run
+generated movement: robots begin offline with unknown pose, battery, tracking,
+and game location. Adapter teammates should read the current `session_id`, publish
+health and pose reports, then consume assigned tasks from `/world` and report
+arrival or blockage through the documented endpoints.
+
+The backend game loop remains active in hardware mode because harvesting and
+fishing durations are authoritative game rules. It advances an `ACTIVE` task only
+after navigation reports a valid arrival; it never changes hardware poses or
+invents arrivals. Invalid `GAME_MODE` values stop startup with a configuration
+error instead of silently choosing a mode. `backend/.env.example` lists the setting,
+but the server reads exported environment variables and does not load that file
+automatically.
+
 ## Localization integration
 
 Camera/localization teammates can publish normalized world coordinates without

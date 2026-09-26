@@ -71,3 +71,9 @@ class AgentConfig:
 class Settings:
     database_url: str | None = field(default_factory=lambda: os.getenv("DATABASE_URL") or None)
     sqlite_path: str = field(default_factory=lambda: os.getenv("SQLITE_PATH", "./lovebugs.sqlite3"))
+    game_mode: str = field(default_factory=lambda: os.getenv('GAME_MODE', 'simulation'))
+
+    def __post_init__(self):
+        self.game_mode = self.game_mode.strip().lower()
+        if self.game_mode not in ('simulation', 'hardware'):
+            raise ValueError('GAME_MODE must be either simulation or hardware')

@@ -33,15 +33,17 @@ class WorldStateError(Exception):
         self.message = message
 
 
-def default_world() -> dict:
+def default_world(mode: str = 'simulation') -> dict:
+    if mode not in ('simulation', 'hardware'):
+        raise ValueError('mode must be either simulation or hardware')
     now = datetime.now(timezone.utc)
 
-    return {
+    world = {
         'schema_version': 1,
         'session_id': 'demo-session-001',
         'revision': 1,
         'updated_at': now,
-        'mode': 'simulation',
+        'mode': mode,
         'game': {
             'status': 'READY',
             'goal': {'type': 'earn_gold', 'target': 500, 'current': 80},
@@ -122,6 +124,23 @@ def default_world() -> dict:
             },
         ],
     }
+
+    if mode == 'hardware':
+        for robot in world['robots']:
+            robot['physical'].update({
+                'online': False,
+                'pose': None,
+                'pose_updated_at': None,
+                'tracking': 'UNKNOWN',
+                'battery': None,
+                'blocked': False,
+            })
+            robot['game']['location'] = None
+        world['events'][0]['message'] = (
+            'Hardware mode is ready and waiting for robot telemetry.'
+        )
+
+    return world
 
 
 class WorldStore:

@@ -21,16 +21,21 @@ from uuid import uuid4
 
 
 def create_app(service=None, world_store=None, run_simulator=None, *, settings=None):
+    config = settings or Settings()
     # Explicitly injected stores stay in-memory unless persistence is requested.
     persistent = world_store is None or settings is not None
-    history = Store(settings or Settings()) if persistent else None
+    history = Store(config) if persistent else None
     if world_store is None:
-        initial = default_world()
+        initial = default_world(config.game_mode)
         initial['session_id'] = str(uuid4())
         store = WorldStore(initial)
     else:
         store = world_store
-    simulator_enabled = world_store is None if run_simulator is None else run_simulator
+    game_loop_enabled = world_store is None if run_simulator is None else run_simulator
+    simulator_enabled = (
+        game_loop_enabled
+        and store.snapshot().mode == 'simulation'
+    )
     simulator = SimulationRunner(store)
 
     @asynccontextmanager
@@ -41,17 +46,17 @@ def create_app(service=None, world_store=None, run_simulator=None, *, settings=N
                 await asyncio.to_thread(store.attach_recorder, WorldRecorder(history))
             except Exception:
                 raise RuntimeError('Persistence startup failed; check database configuration and access.') from None
-        simulation_task = (
+        game_loop_task = (
             asyncio.create_task(simulator.run())
-            if simulator_enabled
+            if game_loop_enabled
             else None
         )
         try:
             yield
         finally:
-            if simulation_task:
-                simulation_task.cancel()
-                await simulation_task
+            if game_loop_task:
+                game_loop_task.cancel()
+                await game_loop_task
 
     app = FastAPI(title='Love Bugs', lifespan=lifespan)
     install_error_handlers(app)
@@ -66,6 +71,9 @@ def create_app(service=None, world_store=None, run_simulator=None, *, settings=N
     app.state.history = history
     app.state.world_store = store
     app.state.simulator = simulator
+    app.state.simulator_enabled = simulator_enabled
+    app.state.game_loop_enabled = game_loop_enabled
+    app.state.settings = config
     return app
 
 

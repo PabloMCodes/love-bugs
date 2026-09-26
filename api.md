@@ -27,6 +27,8 @@ The MVP has two robots and four locations: `homebase`, `farm`, `lake`, `market`.
 
 - HTTP base URL: `http://localhost:8000`
 - WebSocket URL: `ws://localhost:8000/events`
+- Runtime mode: `GAME_MODE=simulation` by default; set `GAME_MODE=hardware` before
+  starting the backend to disable generated movement and wait for adapter telemetry.
 - JSON request and response bodies; requests with bodies use `Content-Type: application/json`.
 - Configure connection URLs in the chosen implementation; do not hardcode robot IP addresses in the frontend.
 - `/world` and `/events` are the canonical names, consistent with `AGENTS.md`. Earlier draft names `/state` and `/ws` are not required aliases.
@@ -146,7 +148,9 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 }
 ```
 
-- `mode`: `simulation` or `hardware`. Simulation must be visibly identifiable in the UI.
+- `mode`: `simulation` or `hardware`, selected when the backend process starts.
+  Simulation must be visibly identifiable in the UI. Hardware mode never generates
+  poses or arrivals; backend-owned activity timers still run after confirmed arrival.
 - `game.status`: `READY`, `RUNNING`, `STOPPED`, or `COMPLETED`.
 - `revision`: increases on each published state change within a session. Reset creates a new `session_id` and restarts revision numbering.
 - Every endpoint returning a robot uses the canonical robot shape above. `task` is the current nonterminal task or `null`; terminal tasks remain available in task history.

@@ -44,11 +44,14 @@ class SimulationRunner:
 
     def tick(self) -> None:
         world = self.store.snapshot()
-        if world.mode != 'simulation' or world.game.status != 'RUNNING':
+        if world.game.status != 'RUNNING':
             return
 
         self.store.advance_activities(self.interval_seconds)
         world = self.store.snapshot()
+        if world.mode != 'simulation':
+            return
+
         steps = []
         for robot in world.robots:
             task = robot.task

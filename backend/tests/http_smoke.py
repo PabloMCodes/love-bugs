@@ -19,7 +19,7 @@ def main():
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
         env = {**os.environ, 'DATABASE_URL': '', 'SQLITE_PATH': str(Path(directory) / 'smoke.sqlite3'),
-               'GOOGLE_API_KEY': ''}
+               'GOOGLE_API_KEY': '', 'GAME_MODE': 'simulation'}
         with open(Path(directory) / 'server.log', 'w+') as log:
             server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app',
                                        '--host', '127.0.0.1', '--port', str(port)], env=env,

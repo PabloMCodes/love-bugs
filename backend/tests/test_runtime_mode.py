@@ -1,0 +1,163 @@
+from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
+import time
+import unittest
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.main import create_app
+
+
+class RuntimeModeTests(unittest.TestCase):
+    def settings(self, directory, mode):
+        return Settings(
+            database_url=None,
+            sqlite_path=str(Path(directory) / 'mode.sqlite3'),
+            game_mode=mode,
+        )
+
+    def test_settings_load_and_validate_game_mode(self):
+        with patch.dict('os.environ', {'GAME_MODE': ' HARDWARE '}):
+            self.assertEqual(Settings().game_mode, 'hardware')
+
+        with self.assertRaisesRegex(ValueError, 'GAME_MODE'):
+            Settings(game_mode='unsupported')
+
+    def test_simulation_mode_is_default_and_starts_simulator(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = create_app(settings=self.settings(directory, 'simulation'))
+            with TestClient(app) as client:
+                world = client.get('/world').json()
+
+            self.assertEqual(world['mode'], 'simulation')
+            self.assertTrue(app.state.simulator_enabled)
+            self.assertTrue(all(robot['physical']['pose'] for robot in world['robots']))
+
+    def test_explicit_override_can_disable_simulator_for_tests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = create_app(
+                settings=self.settings(directory, 'simulation'),
+                run_simulator=False,
+            )
+            with TestClient(app):
+                self.assertFalse(app.state.simulator_enabled)
+                self.assertFalse(app.state.game_loop_enabled)
+
+    def test_hardware_mode_waits_for_real_telemetry_and_never_simulates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = create_app(settings=self.settings(directory, 'hardware'))
+            with TestClient(app) as client:
+                initial = client.get('/world').json()
+                billy = initial['robots'][0]
+
+                self.assertEqual(initial['mode'], 'hardware')
+                self.assertFalse(app.state.simulator_enabled)
+                self.assertTrue(app.state.game_loop_enabled)
+                self.assertFalse(billy['physical']['online'])
+                self.assertIsNone(billy['physical']['pose'])
+                self.assertIsNone(billy['physical']['pose_updated_at'])
+                self.assertEqual(billy['physical']['tracking'], 'UNKNOWN')
+                self.assertIsNone(billy['physical']['battery'])
+                self.assertIsNone(billy['game']['location'])
+
+                client.post('/game/start').raise_for_status()
+                unavailable = client.post('/tasks', json={
+                    'request_id': 'hardware-before-telemetry',
+                    'robot_id': 'robot-a',
+                    'action': 'MOVE_TO',
+                    'location': 'farm',
+                    'parameters': {},
+                })
+                self.assertEqual(unavailable.status_code, 409)
+                self.assertEqual(
+                    unavailable.json()['error']['code'],
+                    'ROBOT_UNAVAILABLE',
+                )
+
+                session_id = initial['session_id']
+                health = client.post('/robots/robot-a/health', json={
+                    'session_id': session_id,
+                    'online': True,
+                    'battery': .75,
+                    'blocked': False,
+                })
+                pose = client.post('/robots/robot-a/pose', json={
+                    'session_id': session_id,
+                    'pose': {'x': 12, 'y': 30, 'heading': 0},
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                })
+                self.assertEqual(health.json(), {'accepted': True})
+                self.assertEqual(pose.json(), {'accepted': True})
+
+                assigned = client.post('/tasks', json={
+                    'request_id': 'hardware-after-telemetry',
+                    'robot_id': 'robot-a',
+                    'action': 'MOVE_TO',
+                    'location': 'farm',
+                    'parameters': {},
+                })
+                self.assertEqual(assigned.status_code, 202)
+                time.sleep(.35)
+                unchanged = client.get('/world').json()['robots'][0]
+                self.assertEqual(unchanged['task']['status'], 'ASSIGNED')
+                self.assertEqual(
+                    unchanged['physical']['pose'],
+                    {'x': 12, 'y': 30, 'heading': 0},
+                )
+
+    def test_hardware_mode_runs_game_timers_after_real_arrival(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = create_app(
+                settings=self.settings(directory, 'hardware'),
+                run_simulator=False,
+            )
+            with TestClient(app) as client:
+                initial = client.get('/world').json()
+                session_id = initial['session_id']
+                client.post('/robots/robot-a/health', json={
+                    'session_id': session_id,
+                    'online': True,
+                    'battery': .75,
+                    'blocked': False,
+                }).raise_for_status()
+                client.post('/robots/robot-a/pose', json={
+                    'session_id': session_id,
+                    'pose': {'x': 12, 'y': 30, 'heading': 0},
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }).raise_for_status()
+                client.post('/game/start').raise_for_status()
+                task = client.post('/tasks', json={
+                    'request_id': 'hardware-fishing',
+                    'robot_id': 'robot-a',
+                    'action': 'FISH',
+                    'location': 'lake',
+                    'parameters': {},
+                }).json()
+                client.post('/robots/robot-a/arrived', json={
+                    'session_id': session_id,
+                    'task_id': task['id'],
+                    'location': 'lake',
+                }).raise_for_status()
+
+                before = client.get('/world').json()['robots'][0]
+                for _ in range(10):
+                    app.state.simulator.tick()
+                completed = client.get('/world').json()['robots'][0]
+
+                self.assertEqual(before['task']['status'], 'ACTIVE')
+                self.assertIsNone(completed['task'])
+                self.assertEqual(
+                    completed['game']['inventory']['fish']['quantity'],
+                    before['game']['inventory']['fish']['quantity'] + 1,
+                )
+                self.assertEqual(
+                    completed['physical']['pose'],
+                    before['physical']['pose'],
+                )
+
+
+if __name__ == '__main__':
+    unittest.main()
