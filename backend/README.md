@@ -263,3 +263,87 @@ For the discussion preview only, the frontend's buy-only market catalog is
 augmented with inventory sale items/prices in a copied snapshot. This lets agents
 understand the current dashboard without changing its data. This adapter is never
 used by authoritative task validation or real transaction execution.
+
+## Live demo persistence (SQLite / Tiger Data)
+
+The existing main-branch game loop remains authoritative. The frontend, Gemini
+chat transport, task rules, map, prices, robot health and pose APIs are unchanged.
+A recorder now writes every accepted world transition, its new events and changed
+poses in one transaction before publishing it in memory. `mode: simulation`
+means the online robots are simulated, not proof of connected physical hardware.
+Simulation samples have `source: simulation`; observations submitted to the pose
+endpoint have `source: pose_report` (the transport does not identify the sensor).
+
+The older scripted cooperation/order app is preserved on `feature/backend-tigerdata`
+and draft PR #1; its `/simulation/cooperation/*` controls are not mounted in this
+live app. They should not replace the team's working task loop. Chat proposals
+remain in the in-memory chat feed; accepted task transitions are persisted. This
+slice does not record every raw Gemini response or offer exact full-state replay.
+
+Run from `backend` (Python 3.11+):
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+export SQLITE_PATH=./lovebugs.sqlite3
+unset DATABASE_URL
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Use one worker. Each new application instance gets a unique session ID; old
+sessions remain in the database, but the game does not resume them on restart.
+Read the current ID from `/world` rather than hardcoding `demo-session-001`.
+World/task/pose/health/chat responses and WebSocket `/events` retain their shape.
+New historical reads (oldest first within the most recent bounded results):
+
+- `GET /events?limit=100`: persisted events for the current session.
+- `GET /robots/robot-a/history?limit=100`: `session_id`, `robot_id`, `mode`,
+  `position_samples` and robot-specific `events`.
+- Either route accepts `session_id=...` to inspect an earlier session and a limit
+  from 1 to 1000. Unknown robot/session history returns 404; an event query with no
+  matches returns an empty list. Simultaneous event timestamps preserve write
+  revision and event order for newly recorded data.
+
+Historical events/poses and the latest world snapshot live in separate tables.
+If a database write fails, the transition is not published and mutation APIs
+return 503 `PERSISTENCE_UNAVAILABLE`; the simulator retries on its next tick.
+Reads of the in-memory `/world` still work. A configured but unreachable database
+prevents startup rather than silently falling back to SQLite. Tests injecting a
+`WorldStore` keep their in-memory behavior unless `settings=Settings(...)` is given.
+
+For Tiger Data, export the service's PostgreSQL connection URL locally:
+
+```sh
+export DATABASE_URL='postgresql://USER:PASSWORD@HOST:PORT/tsdb?sslmode=require'
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Do not commit the real URL. The service must have TimescaleDB 2.13+ installed and
+the role must be able to create/alter/read/write tables. Initialization creates
+`robot_events` and `robot_positions` hypertables; their primary keys include
+`timestamp`. A regular event-ID registry enforces session-wide identity, and the
+migration supports the earlier ordinary event-table primary key. There is no
+Tiger API key requirement. `.env` files are not automatically loaded.
+
+Insert/read smoke test against the running server:
+
+```sh
+curl -fsS -X POST http://localhost:8000/game/start
+curl -fsS http://localhost:8000/events
+curl -fsS http://localhost:8000/robots/robot-a/history
+```
+
+Expect a persisted `game_started` event and an initial position sample. Automated
+verification, including an isolated-schema Tiger test when credentials are set:
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+# Optional: use a dedicated test service; requires CREATE SCHEMA permission.
+export TEST_DATABASE_URL="$DATABASE_URL"
+.venv/bin/python -m unittest discover -s tests -p test_persistence.py -v
+PYTHONPATH=. .venv/bin/python tests/http_smoke.py
+```
+
+Without `TEST_DATABASE_URL`, the live Tiger test is skipped. SQLite checks do not
+verify a real Tiger service or live Gemini access. No retention policy is set yet;
+old sessions accumulate until a separate retention policy is agreed.

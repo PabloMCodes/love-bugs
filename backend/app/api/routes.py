@@ -15,6 +15,7 @@ from app.state import WorldStateError, WorldStore
 
 
 ERROR_STATUS_CODES = {
+    'PERSISTENCE_UNAVAILABLE': 503,
     'INVALID_REQUEST': 400,
     'NOT_FOUND': 404,
     'REQUEST_ID_CONFLICT': 409,

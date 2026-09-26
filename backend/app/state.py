@@ -127,6 +127,19 @@ class WorldStore:
         self._world = WorldSnapshot.model_validate(initial_world)
         self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
         self._health_seen_at: dict[str, datetime] = {}
+        self._recorder = None
+
+    def attach_recorder(self, recorder):
+        """Attach history before serving requests; persist the initial snapshot."""
+        with self._lock:
+            recorder.record(self._world, None)
+            self._recorder = recorder
+
+    def _publish(self, world, *, position_source=None):
+        candidate = WorldSnapshot.model_validate(world)
+        if self._recorder is not None:
+            self._recorder.record(candidate, self._world, position_source=position_source)
+        self._world = candidate
 
     def snapshot(self) -> WorldSnapshot:
         with self._lock:
@@ -172,7 +185,7 @@ class WorldStore:
             robot_data['physical']['tracking'] = 'TRACKED'
             world['revision'] += 1
             world['updated_at'] = now
-            self._world = WorldSnapshot.model_validate(world)
+            self._publish(world, position_source="pose_report")
             return True
 
     def update_health(self, robot_id: str, report: HealthReport) -> bool:
@@ -239,7 +252,7 @@ class WorldStore:
             world['revision'] += 1
             world['updated_at'] = now
             world['events'] = (world['events'] + events)[-100:]
-            self._world = WorldSnapshot.model_validate(world)
+            self._publish(world)
             return True
 
     def start_game(self) -> WorldSnapshot:
@@ -264,7 +277,7 @@ class WorldStore:
                 'data': {},
             })
             world['events'] = world['events'][-100:]
-            self._world = WorldSnapshot.model_validate(world)
+            self._publish(world)
             return self._world.model_copy(deep=True)
 
     def assign_task(self, request: TaskRequest) -> RobotTask:
@@ -382,7 +395,7 @@ class WorldStore:
                 'data': {},
             })
             world['events'] = world['events'][-100:]
-            self._world = WorldSnapshot.model_validate(world)
+            self._publish(world)
             self._task_requests[request.request_id] = (
                 request.model_copy(deep=True),
                 task.model_copy(deep=True),
@@ -472,7 +485,7 @@ class WorldStore:
             world['revision'] += 1
             world['updated_at'] = now
             world['events'] = world['events'][-100:]
-            self._world = WorldSnapshot.model_validate(world)
+            self._publish(world)
             return self._world.model_copy(deep=True)
 
     def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
@@ -722,5 +735,5 @@ class WorldStore:
             world['revision'] += 1
             world['updated_at'] = now
             world['events'] = world['events'][-100:]
-            self._world = WorldSnapshot.model_validate(world)
+            self._publish(world)
             return self._world.model_copy(deep=True)

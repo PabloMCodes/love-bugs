@@ -1,7 +1,8 @@
 """Runtime configuration for overhead vision and robot agents."""
 
 import json
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -64,3 +65,9 @@ class AgentConfig:
         ):
             raise ValueError('Agent model must be nonempty; interval and timeout must be positive finite numbers')
         return config
+
+
+@dataclass
+class Settings:
+    database_url: str | None = field(default_factory=lambda: os.getenv("DATABASE_URL") or None)
+    sqlite_path: str = field(default_factory=lambda: os.getenv("SQLITE_PATH", "./lovebugs.sqlite3"))
