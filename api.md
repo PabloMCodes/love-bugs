@@ -4,9 +4,9 @@ Status: active MVP contract with partial backend implementation. The authoritati
 world feed, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, and
 pose, arrival, health, and blocked-state ingestion, and the core game and robot
 stop/reset/resume controls and read-only world, robot, market, task, event, and
-history queries are implemented. Goal configuration and hardware adapters remain
-planned. Update this document and affected consumers together when changing a
-contract.
+history queries and goal configuration are implemented. Native `RETURN_HOME`
+handling and hardware adapters remain planned. Update this document and affected
+consumers together when changing a contract.
 
 No teammate assignments, language, framework, agent provider, or hardware transport are prescribed here. Responsibilities below belong to subsystems, and teammates can decide who implements them.
 
@@ -170,7 +170,7 @@ Routes below are the proposed MVP surface. Empty request bodies are shown as “
 | `GET /robots` | none | `200`: `{ "robots": [...] }`, canonical robots |
 | `GET /robots/{id}` | none | `200`: canonical robot |
 | `GET /market` | none | `200`: canonical market object |
-| `POST /goal` | `{ "type": "earn_gold", "target": 500 }` | `200`: updated goal object; allowed only in `READY` |
+| `POST /goal` | `{ "type": "earn_gold", "target": 500 }` | `200`: updated goal object; allowed only in `READY`, with a target above current gold |
 | `POST /game/start` | none | `200`: world snapshot; starts from `READY`, resumes from `STOPPED` |
 | `POST /game/stop` | none | `200`: world snapshot after stop is latched |
 | `POST /game/reset` | none | `200`: new session snapshot in `READY` |
@@ -239,7 +239,7 @@ All HTTP failures use:
 }
 ```
 
-Use `400` for invalid JSON/fields/actions, `404` for unknown resources, `409` for conflicting state or unavailable funds/stock, and `503` for an unavailable required subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`, `INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SUBSYSTEM_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
+Use `400` for invalid JSON/fields/actions, `404` for unknown resources, `409` for conflicting state or unavailable funds/stock, and `503` for an unavailable required subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`, `GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`, `INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SUBSYSTEM_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
 
 ## Live updates: WebSocket /events
 

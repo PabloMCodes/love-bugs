@@ -7,6 +7,8 @@ from app.schemas import (
     AcceptedResponse,
     ArrivalReport,
     BlockedReport,
+    Goal,
+    GoalRequest,
     HealthReport,
     Market,
     PoseReport,
@@ -26,6 +28,7 @@ ERROR_STATUS_CODES = {
     'NOT_FOUND': 404,
     'REQUEST_ID_CONFLICT': 409,
     'GAME_NOT_RUNNING': 409,
+    'GAME_NOT_READY': 409,
     'GAME_COMPLETED': 409,
     'ROBOT_BUSY': 409,
     'ROBOT_STOPPED': 409,
@@ -76,6 +79,13 @@ def create_world_router(store: WorldStore) -> APIRouter:
     def task(task_id: str) -> RobotTask:
         try:
             return store.task(task_id)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post('/goal', response_model=Goal)
+    def configure_goal(request: GoalRequest) -> Goal:
+        try:
+            return store.configure_goal(request)
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

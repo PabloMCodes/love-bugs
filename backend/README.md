@@ -1,7 +1,11 @@
 # Backend
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
-`GET /world`, live `/events` snapshots, game lifecycle controls, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot stop/resume, pose, arrival, health, and blocked-state ingestion, spectator agent chat, and standalone overhead vision are implemented. Hardware navigation and motor communication remain placeholders.
+`GET /world`, live `/events` snapshots, goal configuration, game lifecycle
+controls, simulated `MOVE_TO`, `HARVEST`, `FISH`, `BUY`, and `SELL` tasks, robot
+stop/resume, pose, arrival, health, and blocked-state ingestion, spectator agent
+chat, and standalone overhead vision are implemented. Hardware navigation and
+motor communication remain placeholders.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -55,6 +59,20 @@ invents arrivals. Invalid `GAME_MODE` values stop startup with a configuration
 error instead of silently choosing a mode. `backend/.env.example` lists the setting,
 but the server reads exported environment variables and does not load that file
 automatically.
+
+## Configure the game goal
+
+Set the shared gold target before starting the game:
+
+```sh
+curl -X POST http://localhost:8000/goal \
+    -H 'Content-Type: application/json' \
+    -d '{"type":"earn_gold","target":500}'
+```
+
+The game must be `READY`, and the target must be greater than the robots' current
+combined gold. The response includes the authoritative current amount. Repeating
+the same configuration is safe and does not create another state revision.
 
 ## Read-only game queries
 

@@ -16,6 +16,8 @@ from app.game.tasks import activity_for
 from app.schemas import (
     ArrivalReport,
     BlockedReport,
+    Goal,
+    GoalRequest,
     HealthReport,
     Market,
     NavigationStep,
@@ -243,6 +245,51 @@ class WorldStore:
             if task is None:
                 raise WorldStateError('NOT_FOUND', f'Unknown task {task_id!r}.')
             return task.model_copy(deep=True)
+
+    def configure_goal(self, request: GoalRequest) -> Goal:
+        with self._lock:
+            if self._world.game.status != 'READY':
+                raise WorldStateError(
+                    'GAME_NOT_READY',
+                    'The goal can only be changed while the game is ready.',
+                )
+
+            current = sum(robot.game.money for robot in self._world.robots)
+            if request.target <= current:
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    f'The goal target must be greater than the current {current} gold.',
+                )
+
+            existing = self._world.game.goal
+            if existing.type == request.type and existing.target == request.target:
+                return existing.model_copy(deep=True)
+
+            now = datetime.now(timezone.utc)
+            world = self._world.model_dump(mode='python')
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['game']['goal'] = {
+                'type': request.type,
+                'target': request.target,
+                'current': current,
+            }
+            world['events'].append({
+                'id': f"event-goal-configured-{world['revision']}",
+                'timestamp': now,
+                'type': 'goal_configured',
+                'robot_id': None,
+                'task_id': None,
+                'message': f'The crew goal was set to {request.target} gold.',
+                'data': {
+                    'type': request.type,
+                    'target': request.target,
+                    'current': current,
+                },
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            return self._world.game.goal.model_copy(deep=True)
 
     def update_pose(self, robot_id: str, report: PoseReport) -> bool:
         with self._lock:

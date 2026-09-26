@@ -39,6 +39,15 @@ def main():
                     world = client.get('/world').json()
                     sid = world['session_id']
                     assert world['map']['locations']['homebase'] == {'x': 50, 'y': 30}
+                    goal = client.post('/goal', json={
+                        'type': 'earn_gold',
+                        'target': 600,
+                    })
+                    assert goal.json() == {
+                        'type': 'earn_gold',
+                        'target': 600,
+                        'current': 80,
+                    }
                     assert client.post('/game/start').status_code == 200
 
                     def task_done(robot_id):
@@ -79,7 +88,7 @@ def main():
                     path = client.get('/robots/robot-a/history').json()
                     assert len(path['position_samples']) > 2
                     assert client.get('/events', params={'session_id': sid}).json()['session_id'] == sid
-                    print('PASS world/start/tasks: movement, harvest, sell, buy, query APIs, retry without duplicate reward, persisted history')
+                    print('PASS goal/world/start/tasks: movement, harvest, sell, buy, query APIs, retry without duplicate reward, persisted history')
                     payload = {'session_id': sid, 'timestamp': (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat(),
                                'pose': {'x': 22, 'y': 50, 'heading': 90}}
                     assert client.post('/robots/robot-a/pose', json=payload).json()['accepted']

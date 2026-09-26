@@ -16,6 +16,11 @@ class Goal(StrictModel):
     current: int = Field(ge=0)
 
 
+class GoalRequest(StrictModel):
+    type: Literal['earn_gold']
+    target: int = Field(ge=1)
+
+
 class GameState(StrictModel):
     status: Literal['READY', 'RUNNING', 'STOPPED', 'COMPLETED']
     goal: Goal
