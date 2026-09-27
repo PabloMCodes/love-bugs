@@ -1,6 +1,7 @@
 """Deterministic robot movement for development without hardware."""
 
 import asyncio
+from datetime import datetime, timezone
 import math
 
 from app.schemas import NavigationStep, Point, Pose
@@ -33,21 +34,33 @@ def move_pose_toward(current: Pose, target: Point, step_distance: float) -> tupl
 
 class SimulationRunner:
     def __init__(self, store: WorldStore, *, interval_seconds: float = .25,
-                 step_distance: float = 5):
-        if not math.isfinite(interval_seconds) or interval_seconds <= 0:
-            raise ValueError('interval_seconds must be a positive finite number')
-        if not math.isfinite(step_distance) or step_distance <= 0:
-            raise ValueError('step_distance must be a positive finite number')
+                 step_distance: float = 5,
+                 economy_request_timeout_seconds: float = 30):
+        if any(
+            not math.isfinite(value) or value <= 0
+            for value in (
+                interval_seconds,
+                step_distance,
+                economy_request_timeout_seconds,
+            )
+        ):
+            raise ValueError('Simulator timing, distance, and timeout must be positive and finite')
         self.store = store
         self.interval_seconds = interval_seconds
         self.step_distance = step_distance
+        self.economy_request_timeout_seconds = economy_request_timeout_seconds
 
-    def tick(self) -> None:
+    def tick(self, observed_at: datetime | None = None) -> None:
+        now = datetime.now(timezone.utc) if observed_at is None else observed_at
         world = self.store.snapshot()
         if world.game.status != 'RUNNING':
             return
 
-        self.store.advance_crop_growth()
+        self.store.expire_economy_requests(
+            now,
+            timeout_seconds=self.economy_request_timeout_seconds,
+        )
+        self.store.advance_crop_growth(now)
         self.store.advance_activities(self.interval_seconds)
         world = self.store.snapshot()
         if world.mode != 'simulation':

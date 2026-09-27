@@ -1,4 +1,6 @@
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
 import tempfile
 import time
@@ -7,7 +9,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.config import AgentConfig, Settings
+from app.config import (
+    AgentConfig,
+    DEFAULT_GAME_PROFILE,
+    Settings,
+    default_game_profile,
+)
 from app.main import create_app
 from app.state import WorldStore, default_world
 
@@ -42,6 +49,58 @@ class RuntimeModeTests(unittest.TestCase):
                 Settings()
         with self.assertRaisesRegex(ValueError, 'Telemetry'):
             Settings(health_timeout_seconds=0)
+
+    def test_game_profile_configures_service_points_and_progression(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile = deepcopy(DEFAULT_GAME_PROFILE)
+            profile['starting_gold_per_robot'] = 25
+            profile['victory_target'] = 175
+            profile['plot_count'] = 4
+            profile['map']['width'] = 12
+            profile['map']['height'] = 8
+            profile['map']['locations'] = {
+                'homebase': {'x': 1, 'y': 1},
+                'farm': {'x': 3, 'y': 2},
+                'lake': {'x': 6, 'y': 4},
+                'market': {'x': 10, 'y': 7},
+            }
+            profile['crops'][0]['grow_seconds'] = .01
+            path = Path(directory) / 'game.json'
+            path.write_text(json.dumps(profile))
+
+            settings = Settings(
+                database_url=None,
+                sqlite_path=str(Path(directory) / 'profile.sqlite3'),
+                game_config_path=str(path),
+            )
+            app = create_app(settings=settings, run_simulator=False)
+            with TestClient(app) as client:
+                world = client.get('/world').json()
+
+            self.assertEqual(world['map'], profile['map'])
+            self.assertEqual(world['game']['goal'], {
+                'type': 'earn_gold', 'target': 175, 'current': 50,
+            })
+            self.assertEqual(len(world['farm']['plots']), 4)
+            self.assertEqual(world['farm']['crops'][0]['grow_seconds'], .01)
+            self.assertEqual(
+                [(robot['physical']['pose']['x'], robot['physical']['pose']['y'])
+                 for robot in world['robots']],
+                [(1, 1), (1, 1)],
+            )
+
+            profile['map']['locations']['market']['x'] = 13
+            path.write_text(json.dumps(profile))
+            with self.assertRaisesRegex(ValueError, 'inside the configured map'):
+                Settings(game_config_path=str(path))
+
+    def test_committed_game_profile_matches_built_in_default(self):
+        profile_path = Path(__file__).parents[1] / 'game_config.json'
+        committed = json.loads(profile_path.read_text())
+        self.assertEqual(
+            committed,
+            default_game_profile().model_dump(mode='json'),
+        )
 
     def test_simulation_mode_is_default_and_starts_simulator(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -263,6 +322,179 @@ class RuntimeModeTests(unittest.TestCase):
                 self.assertEqual(
                     completed['physical']['pose'],
                     before['physical']['pose'],
+                )
+
+    def test_hardware_input_drives_complete_crop_market_loop_exactly_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile = deepcopy(DEFAULT_GAME_PROFILE)
+            profile['crops'][0]['grow_seconds'] = .01
+            profile['starting_gold_per_robot'] = 10
+            profile['victory_target'] = 40
+            profile['market_items'][1]['unlock_at'] = 20
+            profile['market_items'][2]['unlock_at'] = 18
+            profile['stage_unlocks'][0].update({
+                'eligibility_gold': 20,
+                'cost': 2,
+            })
+            profile['stage_unlocks'][1].update({
+                'eligibility_gold': 18,
+                'cost': 2,
+            })
+            profile_path = Path(directory) / 'hardware-game.json'
+            profile_path.write_text(json.dumps(profile))
+            settings = Settings(
+                database_url=None,
+                sqlite_path=str(Path(directory) / 'hardware-loop.sqlite3'),
+                game_mode='hardware',
+                game_config_path=str(profile_path),
+            )
+            app = create_app(settings=settings, run_simulator=False)
+
+            with TestClient(app) as client:
+                initial = client.get('/world').json()
+                session_id = initial['session_id']
+                original_pose = {'x': 50, 'y': 30, 'heading': 0}
+                client.post('/robots/robot-a/health', json={
+                    'session_id': session_id,
+                    'online': True,
+                    'battery': .75,
+                    'blocked': False,
+                }).raise_for_status()
+                client.post('/robots/robot-a/pose', json={
+                    'session_id': session_id,
+                    'pose': original_pose,
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }).raise_for_status()
+                client.post('/robots/robot-b/health', json={
+                    'session_id': session_id,
+                    'online': True,
+                    'battery': .8,
+                    'blocked': False,
+                }).raise_for_status()
+                client.post('/robots/robot-b/pose', json={
+                    'session_id': session_id,
+                    'pose': {'x': 50, 'y': 30, 'heading': 180},
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }).raise_for_status()
+                client.post('/game/start').raise_for_status()
+
+                for stage in (2, 3):
+                    proposal_response = client.post(
+                        '/economy/unlock-proposals',
+                        json={
+                            'request_id': f'hardware-stage-{stage}',
+                            'proposer_id': 'robot-a',
+                            'stage': stage,
+                            'contributions': {'robot-a': 1, 'robot-b': 1},
+                        },
+                    )
+                    self.assertEqual(
+                        proposal_response.status_code,
+                        201,
+                        proposal_response.text,
+                    )
+                    proposal = proposal_response.json()
+                    accepted = client.post(
+                        f"/economy/unlock-proposals/{proposal['id']}/respond",
+                        json={
+                            'request_id': f'hardware-stage-{stage}-accept',
+                            'robot_id': 'robot-b',
+                            'accepted': True,
+                        },
+                    )
+                    self.assertEqual(accepted.status_code, 200, accepted.text)
+                    self.assertEqual(accepted.json()['status'], 'COMPLETED')
+
+                def assign_and_arrive(request_id, action, location, parameters):
+                    response = client.post('/tasks', json={
+                        'request_id': request_id,
+                        'robot_id': 'robot-a',
+                        'action': action,
+                        'location': location,
+                        'parameters': parameters,
+                    })
+                    self.assertEqual(response.status_code, 202, response.text)
+                    task = response.json()
+                    arrival = {
+                        'session_id': session_id,
+                        'task_id': task['id'],
+                        'location': location,
+                    }
+                    accepted = client.post(
+                        '/robots/robot-a/arrived', json=arrival,
+                    )
+                    self.assertEqual(accepted.status_code, 200, accepted.text)
+                    return task, arrival
+
+                _, buy_arrival = assign_and_arrive(
+                    'hardware-buy', 'BUY', 'market',
+                    {'item': 'seeds', 'quantity': 1},
+                )
+                purchased = client.get('/robots/robot-a').json()
+                self.assertEqual(purchased['game']['money'], 3)
+                self.assertEqual(
+                    purchased['game']['inventory']['seeds']['quantity'], 1,
+                )
+                client.post(
+                    '/robots/robot-a/arrived', json=buy_arrival,
+                ).raise_for_status()
+                self.assertEqual(
+                    client.get('/robots/robot-a').json()['game']['money'], 3,
+                )
+
+                assign_and_arrive(
+                    'hardware-plant', 'PLANT', 'farm',
+                    {'item': 'seeds', 'plot_id': 'plot-1'},
+                )
+                planted = client.get('/world').json()
+                self.assertEqual(planted['farm']['plots'][0]['status'], 'GROWING')
+                self.assertNotIn(
+                    'seeds', planted['robots'][0]['game']['inventory'],
+                )
+
+                time.sleep(.02)
+                app.state.simulator.tick()
+                self.assertEqual(
+                    client.get('/world').json()['farm']['plots'][0]['status'],
+                    'READY',
+                )
+
+                assign_and_arrive(
+                    'hardware-harvest', 'HARVEST', 'farm',
+                    {'plot_id': 'plot-1'},
+                )
+                self.assertEqual(
+                    client.get('/robots/robot-a').json()['task']['status'],
+                    'ACTIVE',
+                )
+                for _ in range(10):
+                    app.state.simulator.tick()
+                harvested = client.get('/robots/robot-a').json()
+                self.assertIsNone(harvested['task'])
+                self.assertEqual(
+                    harvested['game']['inventory']['wheat']['quantity'], 3,
+                )
+
+                _, sell_arrival = assign_and_arrive(
+                    'hardware-sell', 'SELL', 'market',
+                    {'item': 'wheat', 'quantity': 3},
+                )
+                sold = client.get('/robots/robot-a').json()
+                self.assertEqual(sold['game']['money'], 39)
+                self.assertNotIn('wheat', sold['game']['inventory'])
+                client.post(
+                    '/robots/robot-a/arrived', json=sell_arrival,
+                ).raise_for_status()
+                completed_world = client.get('/world').json()
+                final_robot = completed_world['robots'][0]
+                self.assertEqual(final_robot['game']['money'], 39)
+                self.assertEqual(final_robot['physical']['pose'], original_pose)
+                self.assertEqual(completed_world['game']['stage'], 3)
+                self.assertEqual(completed_world['game']['status'], 'COMPLETED')
+                self.assertEqual(completed_world['game']['goal']['current'], 47)
+                self.assertEqual(
+                    [task['status'] for task in client.get('/tasks').json()['tasks']],
+                    ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED'],
                 )
 
     def test_hardware_watchdog_expires_missing_reports_automatically(self):

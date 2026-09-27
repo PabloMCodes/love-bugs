@@ -9,12 +9,13 @@ gaps, milestone order, and end-to-end acceptance scenario.
 ## Current team milestone
 
 WALL-Y now has a separate [click-to-drive bring-up tool](backend/app/navigation/README.md)
-using the supplied BLE protocol and existing ArUco tracker. It deliberately does
-not consume backend tasks or publish poses yet. Do not run it alongside another
-motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
-The tool also supports two independent robots via `--robots-config
+using the supplied BLE protocol and existing ArUco tracker. Its guarded phase-4
+backend mode consumes tasks, publishes pose and health, and reports arrivals;
+phases 1–3 remain isolated bring-up modes. Do not run it alongside another motor
+controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
+The tool supports two independent robots via `--robots-config
 navigation_robots.json`, with per-robot calibration/targets and a shared emergency
-stop. This local mode is still separate from backend autonomy and task execution.
+stop.
 
 The autonomous simulation baseline is implemented and tested: Wall-y and Eeva can
 start at home, collect different resources, sell their own inventory, agree on
@@ -42,6 +43,9 @@ assignment and stores both in the canonical task.
   world snapshots unless the deployment owner supplies another base URL.
 - Start in `GAME_MODE=simulation` when testing application behavior. Use
   `GAME_MODE=hardware` only when telemetry and stop handling are connected.
+- Copy `backend/game_config.json`, replace its four named service points with
+  measured safe stops, and export `GAME_CONFIG_PATH` to that copy for the
+  physical arena. Invalid or inconsistent profiles fail at startup.
 - Read `GET /world` before sending any report. Copy the current `session_id`, robot
   ID, task ID, and destination from that response; do not hardcode session or task
   IDs.
@@ -144,9 +148,9 @@ backend is running. Payload meaning and lifecycle rules live in [api.md](api.md)
   `/robots/{id}/blocked`.
 - Publish health faster than `HEALTH_TIMEOUT_SECONDS` (default 5 seconds), including
   online state, battery when known, and blocked state.
-- Stop motors locally on lost commands. The required ESP32 watchdog and the final
-  backend-to-robot transport are hardware responsibilities; network stop requests
-  are not a replacement for the onboard watchdog.
+- Stop motors locally on lost commands. Flashing and verifying the required
+  ESP32 watchdog remains a hardware responsibility; network stop requests are
+  not a replacement for the onboard watchdog.
 
 There is intentionally no public motor-control endpoint in MVP v1. A navigation
 adapter may run in the backend process or consume `/events`, then use the robotics
@@ -197,6 +201,9 @@ team's chosen private transport to reach the ESP32.
   physical motion.
 - The ESP32 independently stops its motors when valid commands expire.
 - The frontend reconnects and reconstructs the current state from one snapshot.
+- The two robots complete buy → plant → grow → harvest → sell, both paid stage
+  unlocks, and victory with physical pose/arrival input. No adapter writes gold,
+  inventory, crops, stages, rewards, or persistence directly.
 
 ## Outside the frozen application contract
 

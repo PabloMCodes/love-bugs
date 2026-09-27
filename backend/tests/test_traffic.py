@@ -193,3 +193,78 @@ class BridgeTransportTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 task.cancel()
                 await asyncio.gather(task,return_exceptions=True)
+
+    async def test_bridge_arrival_executes_authoritative_task_once(self):
+        import asyncio
+        import httpx
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        store = WorldStore(default_world('hardware'))
+        app = create_app(world_store=store, run_simulator=False)
+        setup_client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url='http://test',
+        )
+        initial = (await setup_client.get('/world')).json()
+        session = initial['session_id']
+        await setup_client.post('/robots/robot-a/health', json={
+            'session_id': session,
+            'online': True,
+            'battery': .8,
+            'blocked': False,
+        })
+        await setup_client.post('/robots/robot-a/pose', json={
+            'session_id': session,
+            'pose': {'x': 50, 'y': 30, 'heading': 0},
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        })
+        await setup_client.post('/game/start')
+        response = await setup_client.post('/tasks', json={
+            'request_id': 'bridge-buy',
+            'robot_id': 'robot-a',
+            'action': 'BUY',
+            'location': 'market',
+            'parameters': {'item': 'seeds', 'quantity': 1},
+        })
+        self.assertEqual(response.status_code, 202, response.text)
+        assigned = response.json()
+        await setup_client.aclose()
+
+        bridge = BackendBridge('http://test', config())
+        bridge_client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url='http://test',
+        )
+        with patch('app.navigation.backend.httpx.AsyncClient', return_value=bridge_client):
+            bridge_task = asyncio.create_task(bridge.run())
+            try:
+                for _ in range(100):
+                    if bridge.world:
+                        break
+                    await asyncio.sleep(.01)
+                else:
+                    self.fail('Bridge did not read the authoritative world')
+
+                arrival = {
+                    'session_id': session,
+                    'task_id': assigned['id'],
+                    'robot_id': 'robot-a',
+                    'location': 'market',
+                }
+                bridge.arrivals.extend([arrival, dict(arrival)])
+                for _ in range(100):
+                    robot_state = store.robot('robot-a')
+                    if robot_state.task is None:
+                        break
+                    await asyncio.sleep(.01)
+                else:
+                    self.fail('Bridge did not deliver the task arrival')
+
+                robot_state = store.robot('robot-a')
+                self.assertEqual(robot_state.game.money, 35)
+                self.assertEqual(robot_state.game.inventory['seeds'].quantity, 1)
+                self.assertIsNone(bridge.error)
+            finally:
+                bridge_task.cancel()
+                await asyncio.gather(bridge_task, return_exceptions=True)

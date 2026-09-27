@@ -1,0 +1,108 @@
+{
+  "profile_version": 1,
+  "starting_gold_per_robot": 40,
+  "victory_target": 200,
+  "plot_count": 3,
+  "map": {
+    "width": 100,
+    "height": 100,
+    "locations": {
+      "homebase": {"x": 50, "y": 30},
+      "farm": {"x": 20, "y": 50},
+      "lake": {"x": 12, "y": 30},
+      "market": {"x": 80, "y": 25}
+    }
+  },
+  "market_items": [
+    {
+      "id": "seeds",
+      "name": "Wheat Seeds",
+      "buy_price": 5,
+      "required_stage": 1,
+      "unlock_at": null
+    },
+    {
+      "id": "carrot_seeds",
+      "name": "Carrot Seeds",
+      "buy_price": 10,
+      "required_stage": 2,
+      "unlock_at": 100
+    },
+    {
+      "id": "pumpkin_seeds",
+      "name": "Pumpkin Seeds",
+      "buy_price": 20,
+      "required_stage": 3,
+      "unlock_at": 150
+    }
+  ],
+  "crops": [
+    {
+      "id": "wheat",
+      "name": "Wheat",
+      "seed_item_id": "seeds",
+      "grow_seconds": 8,
+      "harvest_quantity": 3,
+      "sell_price": 12,
+      "required_stage": 1
+    },
+    {
+      "id": "carrot",
+      "name": "Carrots",
+      "seed_item_id": "carrot_seeds",
+      "grow_seconds": 12,
+      "harvest_quantity": 3,
+      "sell_price": 20,
+      "required_stage": 2
+    },
+    {
+      "id": "pumpkin",
+      "name": "Pumpkins",
+      "seed_item_id": "pumpkin_seeds",
+      "grow_seconds": 18,
+      "harvest_quantity": 3,
+      "sell_price": 32,
+      "required_stage": 3
+    }
+  ],
+  "stage_unlocks": [
+    {
+      "stage": 2,
+      "item_id": "carrot_seeds",
+      "item_name": "Carrot Seeds",
+      "eligibility_gold": 100,
+      "cost": 30
+    },
+    {
+      "stage": 3,
+      "item_id": "pumpkin_seeds",
+      "item_name": "Pumpkin Seeds",
+      "eligibility_gold": 150,
+      "cost": 60
+    }
+  ],
+  "fishing": {
+    "min_duration_seconds": 5,
+    "max_duration_seconds": 15,
+    "tiers": [
+      {
+        "id": "common_fish",
+        "name": "Common Fish",
+        "sell_price": 1,
+        "probability": 0.7
+      },
+      {
+        "id": "uncommon_fish",
+        "name": "Uncommon Fish",
+        "sell_price": 5,
+        "probability": 0.25
+      },
+      {
+        "id": "rare_fish",
+        "name": "Extremely Rare Fish",
+        "sell_price": 15,
+        "probability": 0.05
+      }
+    ]
+  }
+}

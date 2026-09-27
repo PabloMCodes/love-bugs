@@ -40,7 +40,7 @@ def create_app(
     persistent = world_store is None or settings is not None
     history = Store(config) if persistent else None
     if world_store is None:
-        initial = default_world(config.game_mode)
+        initial = default_world(config.game_mode, config.game_profile)
         initial['session_id'] = str(uuid4())
         fishing_seed = config.fishing_random_seed
         if fishing_seed is None and config.game_mode == 'simulation':
@@ -53,7 +53,10 @@ def create_app(
         game_loop_enabled
         and store.snapshot().mode == 'simulation'
     )
-    simulator = SimulationRunner(store)
+    simulator = SimulationRunner(
+        store,
+        economy_request_timeout_seconds=config.economy_request_timeout_seconds,
+    )
     telemetry_watchdog_enabled = (
         game_loop_enabled
         and store.snapshot().mode == 'hardware'

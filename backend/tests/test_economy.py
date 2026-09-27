@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from fastapi.testclient import TestClient
@@ -245,6 +246,92 @@ class EconomyTests(unittest.TestCase):
         self.assertEqual(rejected.status, 'REJECTED')
         self.assertEqual(second.status, 'PENDING')
         self.assertNotEqual(second.id, first.id)
+
+    def test_unanswered_cooperative_requests_expire_and_allow_recovery(self):
+        store = running_store(robot_a_gold=60, robot_b_gold=50)
+        money_request = store.create_money_request(MoneyRequestCreate(
+            request_id='expiring-money',
+            requester_id='robot-a',
+            recipient_id='robot-b',
+            amount=5,
+            purpose='Waiting too long',
+        ))
+        proposal = store.propose_stage_unlock(StageUnlockProposalRequest(
+            request_id='expiring-unlock',
+            proposer_id='robot-a',
+            stage=2,
+            contributions={'robot-a': 15, 'robot-b': 15},
+        ))
+        checked_at = max(
+            money_request.created_at,
+            proposal.created_at,
+        ) + timedelta(seconds=30)
+
+        expired = store.expire_economy_requests(
+            checked_at,
+            timeout_seconds=30,
+        )
+        revision = expired.revision
+        unchanged = store.expire_economy_requests(
+            checked_at + timedelta(seconds=1),
+            timeout_seconds=30,
+        )
+
+        self.assertEqual(unchanged.revision, revision)
+        self.assertEqual(expired.economy.money_requests[0].status, 'EXPIRED')
+        self.assertEqual(expired.economy.unlock_proposals[0].status, 'EXPIRED')
+        self.assertEqual(
+            [event.type for event in expired.events[-2:]],
+            ['money_request_expired', 'stage_unlock_expired'],
+        )
+        self.assert_world_error(
+            'REQUEST_RESOLVED',
+            lambda: store.respond_money_request(
+                money_request.id,
+                EconomyResponseRequest(
+                    request_id='late-money-answer',
+                    robot_id='robot-b',
+                    accepted=True,
+                ),
+            ),
+        )
+        self.assert_world_error(
+            'PROPOSAL_RESOLVED',
+            lambda: store.respond_stage_unlock(
+                proposal.id,
+                EconomyResponseRequest(
+                    request_id='late-unlock-answer',
+                    robot_id='robot-b',
+                    accepted=True,
+                ),
+            ),
+        )
+        replacement_request = store.create_money_request(MoneyRequestCreate(
+            request_id='replacement-money',
+            requester_id='robot-a',
+            recipient_id='robot-b',
+            amount=5,
+            purpose='Retry after timeout',
+        ))
+        replacement_proposal = store.propose_stage_unlock(StageUnlockProposalRequest(
+            request_id='replacement-unlock',
+            proposer_id='robot-b',
+            stage=2,
+            contributions={'robot-a': 15, 'robot-b': 15},
+        ))
+        self.assertEqual(replacement_request.status, 'PENDING')
+        self.assertEqual(replacement_proposal.status, 'PENDING')
+
+        with self.assertRaisesRegex(ValueError, 'timezone'):
+            store.expire_economy_requests(
+                datetime.now(),
+                timeout_seconds=30,
+            )
+        with self.assertRaisesRegex(ValueError, 'positive'):
+            store.expire_economy_requests(
+                datetime.now(timezone.utc),
+                timeout_seconds=0,
+            )
 
     def test_stage_three_cannot_be_proposed_before_stage_two(self):
         store = running_store(robot_a_gold=100, robot_b_gold=100)

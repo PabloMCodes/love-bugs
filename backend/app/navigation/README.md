@@ -200,8 +200,13 @@ Start the backend with `GAME_MODE=hardware` (simulation remains available for
 other demos). For example, in a separate terminal in `backend`:
 
 ```sh
-GAME_MODE=hardware AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+GAME_CONFIG_PATH=./game_config.json GAME_MODE=hardware AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+For the real arena, copy `game_config.json`, replace `map.locations` with measured
+safe stopping points in world coordinates, and point `GAME_CONFIG_PATH` at that
+copy. The bridge reads those points from the authoritative world and maps them
+linearly into the calibrated camera arena.
 
 Use `AUTONOMY_PROVIDER=gemini` and your existing local key/model settings for real
 Gemini planning. Point the frontend at this same backend as described in the

@@ -5,8 +5,10 @@ goal and lifecycle controls, all documented task actions, read-only queries,
 history, and robotics-ingestion routes are implemented and tested. Teammates may
 build against the HTTP paths, payloads, error meanings, world schema, and WebSocket
 envelope below. Existing fields and meanings require a coordinated contract
-change; additive endpoints and event types are allowed. Physical hardware adapters
-remain integration work and the provisional ESP32 transport is not frozen.
+change; additive endpoints and event types are allowed. The guarded camera/BLE
+adapter implements this HTTP contract; physical calibration, watchdog firmware,
+and the complete two-robot acceptance run remain integration work. The
+provisional ESP32 transport is not frozen.
 
 For the practical subsystem handoff and acceptance checks, see
 [INTEGRATION.md](INTEGRATION.md). For gameplay direction, milestone scope, and
@@ -43,6 +45,9 @@ The MVP has two robots and four locations: `homebase`, `farm`, `lake`, `market`.
 - WebSocket URL: `ws://localhost:8000/events`
 - Runtime mode: `GAME_MODE=simulation` by default; set `GAME_MODE=hardware` before
   starting the backend to disable generated movement and wait for adapter telemetry.
+- Game profile: set `GAME_CONFIG_PATH` to a validated JSON profile to configure
+  named service points and demo economy/timing values. The committed profile is
+  `backend/game_config.json`.
 - JSON request and response bodies; requests with bodies use `Content-Type: application/json`.
 - Configure connection URLs in the chosen implementation; do not hardcode robot IP addresses in the frontend.
 - `/world` and `/events` are the canonical names, consistent with `AGENTS.md`. Earlier draft names `/state` and `/ws` are not required aliases.
@@ -54,7 +59,7 @@ The MVP has two robots and four locations: `homebase`, `farm`, `lake`, `market`.
 | --- | --- |
 | IDs | Opaque strings. Robot IDs are stable; task and event IDs are unique within a game session. |
 | Time | UTC ISO 8601 strings, for example `2026-09-25T14:00:00.000Z`. |
-| Position | UI/world coordinates from 0 to 100 on each axis; origin at top left, x increases right, y increases down. Localization/navigation adapters convert physical units to and from this space. |
+| Position | UI/world coordinates from 0 to `map.width` and 0 to `map.height`; origin at top left, x increases right, y increases down. The default profile uses 100 × 100. Localization/navigation adapters convert physical units to and from this space. |
 | Heading | Degrees in `[0, 360)`: 0 points right, 90 points down, increasing clockwise. |
 | Progress | Number from 0 to 1. |
 | Money and quantities | Nonnegative integers. Requests to buy/sell require a positive integer quantity. |
@@ -203,7 +208,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - `physical.online` describes robot communication; `tracking` independently describes localization: `TRACKED`, `STALE`, or `UNKNOWN`. Initially pose and pose timestamp are `null`, and tracking is `UNKNOWN`. A stale pose may remain for display but must not be treated as fresh control input. The hardware adapter defines and documents its freshness threshold before live driving.
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
 - The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` mirrors the eligibility threshold for display and does not advance the stage by itself. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
-- `farm.crops` is the authoritative crop catalog. `farm.plots` contains three shared plots; nonempty plots reference a crop and planter by stable ID and carry backend-owned timestamps.
+- `farm.crops` is the authoritative crop catalog. `farm.plots` contains the configured shared plots; the committed demo profile uses three. Nonempty plots reference a crop and planter by stable ID and carry backend-owned timestamps.
 - `fishing` is the authoritative attempt-duration and reward catalog. Tier
   probabilities total 1; clients render these values but never choose a reward.
 - `economy.unlocks` defines the eligibility and paid cost for each later stage.
@@ -284,7 +289,9 @@ shape is used to answer a stage proposal:
 A robot may have only one pending outgoing money request. Acceptance rechecks the
 recipient wallet, debits and credits atomically, and records a linked transfer.
 Rejection changes no wallet. Direct and accepted-request transfers preserve the
-combined-gold total.
+combined-gold total. An unanswered request becomes `EXPIRED` after the configured
+timeout (30 seconds by default), changes no wallet, and permits a replacement.
+A response after expiration returns `409 REQUEST_RESOLVED`.
 
 Stage unlock proposal:
 
@@ -305,6 +312,9 @@ until every robot accepts; final acceptance rechecks each wallet, deducts every
 contribution in one state change, permanently advances `game.stage`, and publishes
 `unlock_contribution` plus `stage_unlocked` events. Any rejection closes the
 proposal without charging anyone and permits a new proposal.
+An unanswered proposal likewise becomes `EXPIRED` after the configured timeout,
+charges no robot, permits a replacement, and rejects later responses with
+`409 PROPOSAL_RESOLVED`.
 
 Game stop cancels unfinished tasks, disables autonomous dispatch, and requests a fleet-wide motor stop. Robot stop does the equivalent for one robot. Controllers must invalidate active movement commands so their next update cannot restart motion. Resume allows new tasks; cancelled tasks never automatically resume. Game start clears a game-level pause but must not clear a separately requested robot stop. A `200` stop response confirms backend acceptance, not proof of physical motor delivery; communication loss is still covered by the onboard watchdog.
 

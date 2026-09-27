@@ -7,8 +7,10 @@ controls, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, 
 cooperative stage unlocks, money requests/transfers, spectator agent chat, and
 standalone overhead vision are implemented.
 [Standalone WALL-Y click-to-drive](app/navigation/README.md) provides phased
-camera/BLE bring-up. Connecting this local controller to backend tasks, pose
-ingestion and lifecycle controls remains integration work.
+camera/BLE bring-up. Its guarded backend mode now consumes authoritative tasks,
+publishes health and pose reports, follows configured destinations, and submits
+idempotent arrival reports. Physical calibration and the two-robot acceptance
+run remain hardware work.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.
@@ -67,12 +69,49 @@ error instead of silently choosing a mode. `backend/.env.example` lists the sett
 but the server reads exported environment variables and does not load that file
 automatically.
 
+## Game profile and physical service points
+
+The default demo rules and named service points are recorded in
+[`game_config.json`](game_config.json). Set `GAME_CONFIG_PATH` to an alternate
+JSON file before starting the backend to tune an arena or demo without editing
+Python:
+
+```sh
+cd backend
+GAME_CONFIG_PATH=./game_config.json \
+GAME_MODE=hardware \
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+The profile validates before the server starts. It configures map dimensions,
+the `homebase`, `farm`, `lake`, and `market` service points, starting gold,
+victory target, plot count, market items, crop timing/rewards, stage rules, and
+fishing outcomes. All required service points must be inside the configured map;
+crop seeds and stage unlocks must reference consistent market items.
+
+The navigation bridge reads these points from `GET /world` and maps them into
+the calibrated camera arena. For a physical layout, copy the committed profile,
+replace the four service-point coordinates with measured safe stopping points,
+and export the copy through `GAME_CONFIG_PATH`. Do not put camera pixels in this
+file: coordinates use the world map dimensions returned by the API.
+
+With the committed profile, deterministic mock autonomy completes the full
+three-stage round in approximately 88 simulated seconds at the production
+simulation movement rate. A regression test enforces the intended 60–120 second
+demo window.
+
 Fishing rules are exposed in schema version 4 under `world.fishing`. A `FISH`
 request has empty parameters; assignment fixes a random 5–15 second duration and
 common (70%, 1 gold), uncommon (25%, 5 gold), or extremely rare (5%, 15 gold)
 catch in the returned task parameters. Set `FISHING_RANDOM_SEED` for a repeatable
 sequence. Simulation defaults to seed `0`; hardware uses system randomness when
 the variable is unset.
+
+Unanswered money requests and stage-unlock proposals expire after 30 seconds by
+default, publish an `*_expired` event, and allow the agents to propose a new
+request. Set `ECONOMY_REQUEST_TIMEOUT_SECONDS` to a positive finite number to
+change that recovery window. Late responses receive the same resolved-request
+conflict used for accepted or rejected requests.
 
 ## Configure the game goal
 

@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 
 def environment_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -17,6 +19,240 @@ def environment_bool(name: str, default: bool = False) -> bool:
     if normalized in ('0', 'false', 'no', 'off'):
         return False
     raise ValueError(f'{name} must be true or false')
+
+
+class GameConfigModel(BaseModel):
+    """Strict base for the startup profile that seeds a new game session."""
+
+    model_config = ConfigDict(extra='forbid')
+
+
+class GameLocationConfig(GameConfigModel):
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+
+
+class GameMapConfig(GameConfigModel):
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    locations: dict[str, GameLocationConfig]
+
+    @model_validator(mode='after')
+    def validate_service_points(self):
+        required = {'homebase', 'farm', 'lake', 'market'}
+        missing = required - set(self.locations)
+        if missing:
+            raise ValueError(
+                'map.locations is missing required service points: '
+                + ', '.join(sorted(missing))
+            )
+        for name, location in self.locations.items():
+            if location.x > self.width or location.y > self.height:
+                raise ValueError(
+                    f'map location {name!r} must be inside the configured map'
+                )
+        return self
+
+
+class MarketItemConfig(GameConfigModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    buy_price: int = Field(ge=0)
+    required_stage: int = Field(ge=1, le=3)
+    unlock_at: int | None = Field(default=None, ge=0)
+
+
+class CropConfig(GameConfigModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    seed_item_id: str = Field(min_length=1)
+    grow_seconds: float = Field(gt=0)
+    harvest_quantity: int = Field(ge=1)
+    sell_price: int = Field(ge=0)
+    required_stage: int = Field(ge=1, le=3)
+
+
+class StageUnlockConfig(GameConfigModel):
+    stage: int = Field(ge=2, le=3)
+    item_id: str = Field(min_length=1)
+    item_name: str = Field(min_length=1)
+    eligibility_gold: int = Field(ge=0)
+    cost: int = Field(ge=1)
+
+
+class FishingTierConfig(GameConfigModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    sell_price: int = Field(ge=0)
+    probability: float = Field(gt=0, le=1)
+
+
+class FishingConfig(GameConfigModel):
+    min_duration_seconds: float = Field(gt=0)
+    max_duration_seconds: float = Field(gt=0)
+    tiers: list[FishingTierConfig] = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def validate_fishing_rules(self):
+        if self.max_duration_seconds < self.min_duration_seconds:
+            raise ValueError('maximum fishing duration cannot be below the minimum')
+        if abs(sum(tier.probability for tier in self.tiers) - 1) > 1e-9:
+            raise ValueError('fishing tier probabilities must total 1')
+        if len({tier.id for tier in self.tiers}) != len(self.tiers):
+            raise ValueError('fishing tier IDs must be unique')
+        return self
+
+
+class GameProfile(GameConfigModel):
+    """Validated, replaceable rules and service points for a new session."""
+
+    profile_version: int = Field(default=1, ge=1)
+    starting_gold_per_robot: int = Field(ge=0)
+    victory_target: int = Field(ge=1)
+    plot_count: int = Field(ge=1, le=20)
+    map: GameMapConfig
+    market_items: list[MarketItemConfig] = Field(min_length=1)
+    crops: list[CropConfig] = Field(min_length=1)
+    stage_unlocks: list[StageUnlockConfig]
+    fishing: FishingConfig
+
+    @model_validator(mode='after')
+    def validate_progression(self):
+        item_ids = [item.id for item in self.market_items]
+        crop_ids = [crop.id for crop in self.crops]
+        unlock_stages = [unlock.stage for unlock in self.stage_unlocks]
+        if self.victory_target <= self.starting_gold_per_robot * 2:
+            raise ValueError(
+                'victory_target must exceed the two robots\' combined starting gold'
+            )
+        if len(set(item_ids)) != len(item_ids):
+            raise ValueError('market item IDs must be unique')
+        if len(set(crop_ids)) != len(crop_ids):
+            raise ValueError('crop IDs must be unique')
+        if len(set(unlock_stages)) != len(unlock_stages):
+            raise ValueError('stage unlock rules must have unique stages')
+        if set(unlock_stages) != {2, 3}:
+            raise ValueError('stage unlock rules must define stages 2 and 3')
+        if {item.required_stage for item in self.market_items} != {1, 2, 3}:
+            raise ValueError('market items must cover farming stages 1, 2, and 3')
+        if {crop.required_stage for crop in self.crops} != {1, 2, 3}:
+            raise ValueError('crops must cover farming stages 1, 2, and 3')
+
+        items = {item.id: item for item in self.market_items}
+        if any(
+            item.required_stage == 1 and item.unlock_at is not None
+            for item in self.market_items
+        ):
+            raise ValueError('stage 1 market items cannot require an unlock threshold')
+        for crop in self.crops:
+            seed = items.get(crop.seed_item_id)
+            if seed is None:
+                raise ValueError(
+                    f'crop {crop.id!r} references unknown seed {crop.seed_item_id!r}'
+                )
+            if seed.required_stage != crop.required_stage:
+                raise ValueError(
+                    f'crop {crop.id!r} and seed {seed.id!r} must use the same stage'
+                )
+        for unlock in self.stage_unlocks:
+            item = items.get(unlock.item_id)
+            if item is None or item.required_stage != unlock.stage:
+                raise ValueError(
+                    f'stage {unlock.stage} unlock must reference an item from that stage'
+                )
+            if item.name != unlock.item_name:
+                raise ValueError('unlock item names must match market item names')
+            if item.unlock_at != unlock.eligibility_gold:
+                raise ValueError(
+                    'market unlock_at must match the stage eligibility_gold'
+                )
+        return self
+
+
+DEFAULT_GAME_PROFILE = {
+    'profile_version': 1,
+    'starting_gold_per_robot': 40,
+    'victory_target': 200,
+    'plot_count': 3,
+    'map': {
+        'width': 100,
+        'height': 100,
+        'locations': {
+            'homebase': {'x': 50, 'y': 30},
+            'farm': {'x': 20, 'y': 50},
+            'lake': {'x': 12, 'y': 30},
+            'market': {'x': 80, 'y': 25},
+        },
+    },
+    'market_items': [
+        {
+            'id': 'seeds', 'name': 'Wheat Seeds', 'buy_price': 5,
+            'required_stage': 1, 'unlock_at': None,
+        },
+        {
+            'id': 'carrot_seeds', 'name': 'Carrot Seeds', 'buy_price': 10,
+            'required_stage': 2, 'unlock_at': 100,
+        },
+        {
+            'id': 'pumpkin_seeds', 'name': 'Pumpkin Seeds', 'buy_price': 20,
+            'required_stage': 3, 'unlock_at': 150,
+        },
+    ],
+    'crops': [
+        {
+            'id': 'wheat', 'name': 'Wheat', 'seed_item_id': 'seeds',
+            'grow_seconds': 8, 'harvest_quantity': 3, 'sell_price': 12,
+            'required_stage': 1,
+        },
+        {
+            'id': 'carrot', 'name': 'Carrots', 'seed_item_id': 'carrot_seeds',
+            'grow_seconds': 12, 'harvest_quantity': 3, 'sell_price': 20,
+            'required_stage': 2,
+        },
+        {
+            'id': 'pumpkin', 'name': 'Pumpkins', 'seed_item_id': 'pumpkin_seeds',
+            'grow_seconds': 18, 'harvest_quantity': 3, 'sell_price': 32,
+            'required_stage': 3,
+        },
+    ],
+    'stage_unlocks': [
+        {
+            'stage': 2, 'item_id': 'carrot_seeds', 'item_name': 'Carrot Seeds',
+            'eligibility_gold': 100, 'cost': 30,
+        },
+        {
+            'stage': 3, 'item_id': 'pumpkin_seeds', 'item_name': 'Pumpkin Seeds',
+            'eligibility_gold': 150, 'cost': 60,
+        },
+    ],
+    'fishing': {
+        'min_duration_seconds': 5,
+        'max_duration_seconds': 15,
+        'tiers': [
+            {
+                'id': 'common_fish', 'name': 'Common Fish',
+                'sell_price': 1, 'probability': .70,
+            },
+            {
+                'id': 'uncommon_fish', 'name': 'Uncommon Fish',
+                'sell_price': 5, 'probability': .25,
+            },
+            {
+                'id': 'rare_fish', 'name': 'Extremely Rare Fish',
+                'sell_price': 15, 'probability': .05,
+            },
+        ],
+    },
+}
+
+
+def default_game_profile() -> GameProfile:
+    return GameProfile.model_validate(DEFAULT_GAME_PROFILE)
+
+
+def load_game_profile(path: str | Path) -> GameProfile:
+    with open(path) as file:
+        return GameProfile.model_validate(json.load(file))
 
 
 @dataclass(frozen=True)
@@ -176,6 +412,9 @@ class Settings:
     telemetry_check_interval_seconds: float = field(
         default_factory=lambda: float(os.getenv('TELEMETRY_CHECK_INTERVAL_SECONDS', '.25')),
     )
+    economy_request_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv('ECONOMY_REQUEST_TIMEOUT_SECONDS', '30')),
+    )
     autonomy_enabled: bool = field(
         default_factory=lambda: environment_bool('AUTONOMY_ENABLED'),
     )
@@ -189,6 +428,10 @@ class Settings:
             else None
         ),
     )
+    game_config_path: str | None = field(
+        default_factory=lambda: os.getenv('GAME_CONFIG_PATH') or None,
+    )
+    game_profile: GameProfile = field(init=False, repr=False)
 
     def __post_init__(self):
         self.game_mode = self.game_mode.strip().lower()
@@ -205,6 +448,14 @@ class Settings:
             self.health_timeout_seconds,
             self.pose_timeout_seconds,
             self.telemetry_check_interval_seconds,
+            self.economy_request_timeout_seconds,
         )
         if any(not math.isfinite(value) or value <= 0 for value in timeout_values):
-            raise ValueError('Telemetry timeouts and check interval must be positive finite numbers')
+            raise ValueError(
+                'Telemetry and economy timeouts and check intervals must be positive finite numbers'
+            )
+        self.game_profile = (
+            load_game_profile(self.game_config_path)
+            if self.game_config_path is not None
+            else default_game_profile()
+        )

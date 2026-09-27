@@ -407,6 +407,12 @@ Set `VITE_API_BASE_URL` when the backend is not at `http://localhost:8000`.
 
 ### Terminal 3: camera, BLE, traffic, and backend bridge
 
+Before starting hardware mode, copy `backend/game_config.json`, replace the
+`homebase`, `farm`, `lake`, and `market` coordinates with measured free stopping
+points, and start the backend with `GAME_CONFIG_PATH` pointing at that copy.
+These are world coordinates bounded by the profile's map width and height, not
+camera pixels. The bridge maps them into the calibrated arena below.
+
 ```sh
 cd backend
 .venv/bin/python -m app.navigation \

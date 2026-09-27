@@ -108,12 +108,12 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Shared gold goal | Implemented | Combined wallet balance completes the `earn_gold` goal only after Stage 3 is active. |
 | Market purchases | Implemented | The purchase-only market sells all three seeds; later seeds become eligible at 100 and 150 combined gold, then require a paid cooperative unlock. Purchases and sales create transient parchment notifications. |
 | Crop lifecycle | Implemented | Wheat, Carrots, and Pumpkins share authoritative buy, plant, growth, plot-aware harvest, and sale rules. |
-| Cooperative economy | Implemented | Retry-safe transfers, money requests, proposal responses, and two-robot stage contributions are backend-authoritative. |
+| Cooperative economy | Implemented | Retry-safe transfers, money requests, proposal responses, two-robot stage contributions, and 30-second unanswered-request recovery are backend-authoritative. |
 | Fishing risk/reward | Implemented | Each attempt fixes a seeded 5–15 second duration and a 70/25/5 fish tier exactly once. |
 | Autonomous decisions | Implemented | Mock and Gemini autonomy can compare farming with fishing, coordinate tasks, request exact seed shortfalls, and manage stage proposals through one validated command contract. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
-| Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
+| Hardware boundary | Ready for physical acceptance | Pose, health, blocked, arrival, freshness, and safety contracts plus the camera/BLE backend bridge exist; calibration, watchdog flashing, and the guarded two-robot run remain. |
 | Persistence/history | Implemented | Accepted transitions and pose history persist through SQLite or Tiger Data. |
 
 ## Known gameplay gaps
@@ -125,8 +125,9 @@ These are the highest-value gaps to close before adding more content:
 2. **Economy presentation is still incomplete.** The world/event stream contains
    proposals, responses, requests, transfers, and contributions, but the dashboard
    does not yet have a dedicated cooperative-economy panel.
-3. **Balancing is still placeholder data.** The target, starting gold, yields,
-   prices, travel speed, and activity duration need one measured demo pass.
+3. **Physical pacing still needs measurement.** The committed configuration
+   completes a deterministic seed-0 simulation in about 88 seconds, inside the
+   60–120 second target; calibrated robot travel may still require profile tuning.
 
 ## Scope for the first complete demo
 
@@ -221,6 +222,7 @@ purchase contributes to a complete farming loop instead of dead inventory.
 - [x] Require both robots to accept explicit positive contributions.
 - [x] Deduct contributions and advance the stage atomically and exactly once.
 - [x] Add direct transfers and accept/reject money requests without changing total gold.
+- [x] Expire unanswered money requests and unlock proposals so autonomy can replan.
 - [x] Teach mock and Gemini autonomy the cooperative economy actions.
 - [x] Require Stage 3 as well as the final gold target for victory.
 - [ ] Render pending proposals, requests, and completed contributions in the dashboard.
@@ -238,7 +240,8 @@ purchase contributes to a complete farming loop instead of dead inventory.
 
 Goal: replace simulated motion without changing gameplay behavior.
 
-- [ ] Calibrate camera coordinates and named zones against the physical arena.
+- [ ] Calibrate camera coordinates and set safe named service points in a copied
+  `backend/game_config.json` selected through `GAME_CONFIG_PATH`.
 - [ ] Stream fresh pose and health reports for both robots.
 - [ ] Connect assigned destinations to deterministic navigation and ESP32 motor
   commands with an onboard command-expiry watchdog.
@@ -253,8 +256,10 @@ task rules, inventory, market, goal, or victory behavior.
 
 Goal: make the proven loop feel polished and demo-ready.
 
-- [ ] Tune target, starting gold, rewards, activity durations, and simulation speed
-  to produce a reliable 60–120 second round.
+- [x] Measure the committed deterministic profile at the production simulation
+  speed and enforce a 60–120 second round (currently approximately 88 seconds).
+- [ ] Recheck pacing with calibrated physical travel and tune a copied profile
+  only if the guarded round falls outside the target window.
 - [ ] Make task reasons and robot dialogue concise and nonrepetitive.
 - [ ] Add sound, celebration, and clearer transition feedback only after state
   correctness is stable.
@@ -303,14 +308,14 @@ come from the real adapters instead of `SimulationRunner`.
 | Decision | Working default | Revisit when |
 | --- | --- | --- |
 | Primary objective | Combined wallet reaches repair-fund target | A different goal is implemented end to end |
-| Demo target | 200 gold candidate | Measured round is outside 60–120 seconds |
+| Demo target | 200 gold, approximately 88-second deterministic simulation | Calibrated physical round is outside 60–120 seconds |
 | Robot roles | Wall-y farms; Eeva fishes | Recovery or balancing needs dynamic reassignment |
 | Reliable demo provider | Deterministic mock planner | Gemini behavior passes repeated rehearsals |
 | Timer/loss state | Deferred | Hardware loop is reliable with time margin |
 | Seed catalog | Wheat 5; carrot 10; pumpkin 20 | Simulation balancing produces better values |
 | Seed mechanics | All three crops share the authoritative lifecycle | Balance testing exposes a rule problem |
 | Farm model | Start with three shared plots; queue is derived from nonempty plots | Simulation makes a different capacity clearer |
-| Crop balance | Wheat 8s/36 gross; Carrot 12s/60; Pumpkin 18s/96 | Measured demo pacing favors different values |
+| Crop balance | Wheat 8s/36 gross; Carrot 12s/60; Pumpkin 18s/96 | Physical demo pacing favors different values |
 
 Any change to an endpoint, world field, event meaning, or task lifecycle must be
 coordinated through [api.md](api.md), updated in consumers and examples, and tested

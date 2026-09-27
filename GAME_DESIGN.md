@@ -340,7 +340,9 @@ The game has three progression stages. After pumpkins are unlocked, the team
 works toward a final combined-money target. Reaching that target completes the
 tycoon goal, stops new autonomous tasks, and triggers the victory presentation.
 
-The following values must be balanced later:
+The committed values are now a validated demo profile and complete the
+deterministic seed-0 simulation in approximately 88 seconds. They should change
+only if measured physical travel or rehearsal results justify it:
 
 - Carrot eligibility threshold and unlock cost.
 - Pumpkin eligibility threshold and unlock cost.
@@ -381,7 +383,8 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
   work instead of duplicating the same task.
 - Cooperative unlock costs are large enough to require planning but not so large
   that one unlucky fishing streak stalls the game.
-- A full simulated round should eventually be tuned to a reliable demo length.
+- The committed deterministic simulation must remain inside the enforced
+  60–120 second demo window.
 
 ## Acceptance scenarios
 
@@ -416,6 +419,14 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 2. Rejection changes no balances.
 3. Acceptance debits the sender and credits the receiver atomically.
 4. Insufficient funds at execution fails without a partial transfer.
+5. An unanswered request expires after 30 seconds, changes no balances, and
+   permits a replacement.
+
+### Cooperative recovery
+
+1. An unanswered stage proposal expires after 30 seconds without charging either robot.
+2. A late response is rejected as already resolved.
+3. Autonomy can submit a replacement request or proposal after expiration.
 
 ### Final stage
 
@@ -426,10 +437,9 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 
 ## Open decisions before later phases
 
-- Final tuning of seed costs, grow times, and crop sale values.
-- Stage eligibility thresholds, cooperative unlock costs, and final target.
+- Whether measured physical travel requires tuning the committed simulation profile.
 - Final farm plot count and whether playtesting justifies planter-only harvesting.
-- Proposal timeout and cancellation behavior.
+- Whether an explicit cancellation action adds value beyond automatic expiration.
 - Whether earlier seeds remain available after later stages unlock.
 - Final fishing-tier probabilities after measured playtesting.
 - Proposal and money-request history retention beyond the current game session.
@@ -442,5 +452,5 @@ team is ready, the safest order is:
 
 1. Add map stage rendering and crop-specific farm presentation.
 2. Render cooperative proposals, requests, and transfers in the dashboard.
-3. Tune the implemented fishing distribution against full-round simulation data.
-4. Tune the complete autonomous loop in simulation before connecting physical motion.
+3. Calibrate physical service points in a copied game profile.
+4. Recheck the validated simulation balance against guarded physical travel.

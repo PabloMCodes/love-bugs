@@ -1,4 +1,6 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
+from random import Random
 import unittest
 
 from app.agents.orchestrator import AgentOrchestrator
@@ -64,6 +66,41 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         }
         self.assertIn('accepted', message_statuses)
         self.assertLessEqual(message_statuses, {'accepted', 'waiting'})
+
+    async def test_default_profile_completes_inside_demo_time_window(self):
+        store = WorldStore(default_world(), fishing_rng=Random(0))
+        store.start_game()
+        runner = AutonomyRunner(
+            store,
+            AgentOrchestrator(
+                MockPlanner(),
+                interval=1e-9,
+                timeout=1,
+            ),
+            poll_interval_seconds=.001,
+        )
+        # One-second virtual ticks preserve the production movement rate of
+        # 5 world units per .25 seconds while avoiding a real-time wait.
+        simulator = SimulationRunner(
+            store,
+            interval_seconds=1,
+            step_distance=20,
+        )
+        started_at = datetime.now(timezone.utc)
+
+        elapsed_seconds = None
+        for second in range(1, 121):
+            await runner.tick()
+            simulator.tick(started_at + timedelta(seconds=second))
+            if store.snapshot().game.status == 'COMPLETED':
+                elapsed_seconds = second
+                break
+
+        self.assertIsNotNone(elapsed_seconds, 'Default demo exceeded 120 seconds')
+        self.assertGreaterEqual(elapsed_seconds, 60)
+        completed = store.snapshot()
+        self.assertEqual(completed.game.stage, 3)
+        self.assertGreaterEqual(completed.game.goal.current, completed.game.goal.target)
 
     async def test_runner_rejects_old_session_without_assigning_task(self):
         store = WorldStore()

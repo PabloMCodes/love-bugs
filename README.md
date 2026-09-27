@@ -21,7 +21,7 @@ The project is designed so the same game rules run in two modes:
 - [CAMERA_SETUP_GUIDE.md](CAMERA_SETUP_GUIDE.md): camera, calibration, traffic,
   hardware setup, and troubleshooting runbook.
 - [GAME_DESIGN.md](GAME_DESIGN.md): staged farming tycoon, fishing risk/reward,
-  cooperative unlocks, money transfers, map progression, and open balance decisions.
+  cooperative unlocks, money transfers, map progression, and design decisions.
 - [GAME_PLAN.md](GAME_PLAN.md): product direction, core loop, current gaps,
   milestones, acceptance criteria, and teammate workstreams.
 - [INTEGRATION.md](INTEGRATION.md): practical handoff checklist for each subsystem.
@@ -42,4 +42,10 @@ the selected plot once, and sell the crop. Fishing now fixes a seeded 5–15 sec
 duration and one of three reward tiers exactly once per task; planners compare its
 expected return with farming and can request exact seed shortfalls. The Crop Queue
 displays every crop with live progress from backend timestamps. See `GAME_PLAN.md`
-for the remaining hardware, balancing, economy UI, and presentation work.
+for the remaining physical acceptance, economy UI, and presentation work.
+
+[`backend/game_config.json`](backend/game_config.json) is the validated demo
+profile for service-point coordinates, starting economy, crops, unlocks, and
+fishing. The deterministic seed-0 mock round currently completes in about 88
+simulated seconds, and unanswered cooperative requests expire so the agents can
+recover instead of waiting indefinitely.

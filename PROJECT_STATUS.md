@@ -52,6 +52,12 @@ robots and without keeping a browser open**. The complete simulated loop include
 seed purchasing, planting, timed growth, plot-aware harvesting, tiered fishing,
 selling, money requests, cooperative stage unlocks, and victory.
 
+The demo rules and physical service points are now startup configuration rather
+than source edits. `backend/game_config.json` defines the committed profile, and
+`GAME_CONFIG_PATH` selects a validated replacement. The deterministic seed-0
+mock round measures approximately 88 simulated seconds at the production
+movement rate; an automated 60–120 second regression test protects that window.
+
 The physical stack is substantially implemented: overhead ArUco localization,
 two independent BLE robot profiles, calibrated boundaries and building
 obstacles, traffic reservation, detour planning, backend task consumption,
@@ -74,10 +80,10 @@ Status meanings:
 | Canonical backend world | Implemented | Thread-safe schema-version-4 snapshots with revisions, sessions, semantic events, robots, farm, fishing, market, and economy state. |
 | Game lifecycle | Implemented | Start, stop, reset, configurable goal, robot stop/resume, completion, and cancellation rules. |
 | Simulation | Implemented | Movement, arrival, telemetry, activities, trading, farming, autonomy, and a full no-browser round. |
-| Farming | Implemented | Three crops, three shared plots, seed consumption, growth timers, readiness, plot-aware harvest, and exact-once rewards. |
+| Farming | Implemented | Three crops, three default shared plots, configurable plot capacity, seed consumption, growth timers, readiness, plot-aware harvest, and exact-once rewards. |
 | Fishing | Implemented | Seedable 5–15 second attempts and three weighted reward tiers fixed once per task. |
 | Market | Implemented | Stage-locked seed purchases and inventory-based sales with execution-time validation. |
-| Cooperative economy | Implemented | Paid stage proposals, two-robot approval, contributions, direct transfers, money requests, and retry safety. |
+| Cooperative economy | Implemented | Paid stage proposals, two-robot approval, contributions, direct transfers, money requests, retry safety, and timeout recovery. |
 | Agent autonomy | Implemented | Deterministic mock planner and Gemini planner share the same bounded decision/validation contract. |
 | Spectator conversation | Implemented | Accepted/waiting decisions, coordination messages, occasional banter, traffic messages, WebSocket updates, and auto-scrolling UI. |
 | Frontend dashboard | Implemented | Robot tracker, game status, market, crop queue, world map, transaction notices, and conversation layout. |
@@ -88,7 +94,7 @@ Status meanings:
 | Vision/localization | Implemented in software | ArUco detection, coordinate calibration, zones, timestamps, and pose ingestion exist; final arena calibration remains physical work. |
 | Navigation and traffic | Implemented in software | Two-robot BLE control, safety latches, boundaries, static obstacles, detours, backend bridge, and arrival reporting exist. |
 | Physical robot demo | Pending verification | Requires calibration, watchdog flashing, live telemetry, and the complete hardware acceptance run. |
-| Balance and pacing | Partial | Working values exist; a measured 60–120 second demo pass is still required. |
+| Balance and pacing | Implemented for deterministic simulation | The committed seed-0 profile completes in about 88 simulated seconds; real-robot travel pacing still requires measurement. |
 
 ## Product goal and intended player experience
 
@@ -242,6 +248,9 @@ Subsystem boundaries:
   robot's active task field.
 - Advanced the canonical world from the original mock model through farm and
   economy additions to schema version 4 with authoritative fishing rules.
+- Added a strict external game profile for service points, starting economy,
+  goal, plots, crops, market items, unlocks, and fishing. Invalid or inconsistent
+  profiles fail before the server starts.
 
 ### 3. Task lifecycle, simulation, and safety
 
@@ -256,6 +265,11 @@ Subsystem boundaries:
 - Added health and pose freshness watchdogs. Offline, blocked, stopped, stale,
   untracked, or unknown-pose robots cannot continue unsafe work.
 - Made goal completion cancel remaining work and stop later dispatch.
+- Added a hardware-mode contract test that drives two robot telemetry, both
+  cooperative unlocks, buy, plant, timed growth, harvest, sale, and victory only
+  through authoritative API inputs, including duplicate-arrival protection.
+- Added a bridge transport test proving a queued physical arrival reaches the
+  real backend route and executes its game effect exactly once.
 
 ### 4. Market and per-robot ownership
 
@@ -297,6 +311,9 @@ Subsystem boundaries:
   work.
 - Added exact-shortfall money requests for a profitable seed purchase that the
   requesting robot cannot afford alone.
+- Added configurable expiration for unanswered money requests and stage
+  proposals. Expiration charges nothing, emits a semantic event, rejects late
+  responses, and lets autonomy submit a replacement instead of waiting forever.
 
 ### 7. Strategic tiered fishing
 
@@ -563,8 +580,8 @@ precedence.
 
 ### Hardware mode
 
-Start the backend with `GAME_MODE=hardware`, then run the calibrated fleet bridge
-on the camera/BLE laptop:
+Start the backend with `GAME_MODE=hardware` and the calibrated game profile, then
+run the fleet bridge on the camera/BLE laptop:
 
 ```sh
 .venv/bin/python -m app.navigation --camera 1 --phase 4 \
@@ -585,7 +602,7 @@ telemetry, robotics safety, vision, navigation, traffic, and HTTP integration.
 
 Verification performed against the merged `gameLogic` branch for this handoff:
 
-- **218 backend tests passed**.
+- **224 backend tests passed**.
 - **1 live Tiger credential-dependent test skipped** because
   `TEST_DATABASE_URL` was not configured.
 - **Frontend production build passed** with Vite and Node 24.
@@ -619,6 +636,8 @@ demo.
   offset, and left/right turn direction.
 - Fix the overhead camera, measure arena/building bounds, measure both robot
   radii, and review traffic calibration.
+- Copy `backend/game_config.json`, replace the four named service points with
+  measured safe stops, and launch with `GAME_CONFIG_PATH` pointing at that copy.
 - Measure conservative maximum speed, localization delay, BLE stop latency, and
   coasting distance before marking traffic calibration reviewed.
 - Run phases 1–3 for both robots before allowing phase-4 motion.
@@ -643,18 +662,15 @@ source but not game rules, frontend behavior, inventory, economy, or victory.
 Exit condition: a first-time viewer can explain the current goal, current stage,
 pending cooperation, robot roles, and victory without reading logs.
 
-### Priority 3 — Balance a repeatable 60–120 second demo
+### Priority 3 — Verify balance against physical pacing
 
-- Measure complete mock-autonomy rounds rather than tuning from isolated values.
-- Revisit starting gold, final target, stage thresholds, unlock costs, crop
-  prices/yields/growth, fishing probabilities, activity timing, and movement
-  speed together.
-- Test multiple seeded fishing sequences so one unlucky streak cannot stall the
-  demo.
-- Confirm that more than one strategy remains viable and that later crops are
-  meaningfully attractive.
-- Keep deterministic seed `0` as the reliable demonstration baseline unless
-  measured data supports another seed.
+- Keep deterministic seed `0` and the measured approximately 88-second
+  simulation round as the reliable demonstration baseline.
+- Measure actual travel, turn, and stop times after physical calibration.
+- Use a copied game profile to adjust service points or economy/timing values if
+  the guarded physical round falls outside 60–120 seconds.
+- Test additional fishing seeds as rehearsal coverage, without changing the
+  deterministic fallback unless the measured evidence supports it.
 
 ### Priority 4 — Rehearse Gemini behavior
 
@@ -669,7 +685,6 @@ pending cooperation, robot roles, and victory without reading logs.
 ### Priority 5 — Production hardening after the demo works
 
 - Decide database retention/history policy.
-- Decide proposal/request timeout and cancellation behavior.
 - Add deployment authentication only when leaving the trusted local network.
 - Decide whether cumulative availability of earlier seeds is permanent.
 - Revisit inventory transfer only if playtesting proves money transfer is not
@@ -679,13 +694,14 @@ pending cooperation, robot roles, and victory without reading logs.
 
 ## Open design decisions
 
-- Final balance values for crop and fishing economies.
-- Final 60–120 second target and movement speed.
+- Whether physical travel measurements require changes to the validated
+  approximately 88-second simulation profile.
 - Whether earlier seeds stay purchasable after later stages unlock. The current
   implementation is cumulative.
 - Whether only the planter should be allowed to harvest. The current shared-plot
   design allows either robot to harvest a ready unclaimed plot.
-- Proposal and money-request timeout/cancellation rules.
+- Whether an explicit user cancellation endpoint is useful in addition to the
+  implemented 30-second automatic expiration.
 - Long-term proposal/request/event retention.
 - Whether the Crop Queue needs completed-history cards.
 - Whether a countdown loss condition adds value after hardware reliability is

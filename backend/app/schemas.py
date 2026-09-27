@@ -45,7 +45,7 @@ class StageUnlockProposal(StrictModel):
     proposer_id: str
     contributions: dict[str, ContributionAmount]
     accepted_by: list[str]
-    status: Literal['PENDING', 'COMPLETED', 'REJECTED']
+    status: Literal['PENDING', 'COMPLETED', 'REJECTED', 'EXPIRED']
     created_at: AwareDatetime
     resolved_at: AwareDatetime | None = None
 
@@ -56,7 +56,7 @@ class MoneyRequestState(StrictModel):
     recipient_id: str
     amount: int = Field(ge=1)
     purpose: str
-    status: Literal['PENDING', 'ACCEPTED', 'REJECTED']
+    status: Literal['PENDING', 'ACCEPTED', 'REJECTED', 'EXPIRED']
     created_at: AwareDatetime
     resolved_at: AwareDatetime | None = None
     transfer_id: str | None = None

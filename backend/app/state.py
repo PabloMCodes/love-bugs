@@ -6,6 +6,7 @@ from random import Random
 from threading import RLock
 from uuid import uuid4
 
+from app.config import GameProfile, default_game_profile
 from app.game.crops import (
     CropRuleError,
     apply_harvest,
@@ -20,7 +21,7 @@ from app.game.market import (
     quote_purchase,
     quote_sale,
 )
-from app.game.fishing import default_fishing, resolve_fishing_attempt
+from app.game.fishing import resolve_fishing_attempt
 from app.game.tasks import activity_for
 from app.schemas import (
     ArrivalReport,
@@ -54,9 +55,15 @@ class WorldStateError(Exception):
         self.message = message
 
 
-def default_world(mode: str = 'simulation') -> dict:
+def default_world(
+    mode: str = 'simulation',
+    game_profile: GameProfile | None = None,
+) -> dict:
     if mode not in ('simulation', 'hardware'):
         raise ValueError('mode must be either simulation or hardware')
+    profile = game_profile or default_game_profile()
+    profile_map = profile.map.model_dump(mode='python')
+    home = profile_map['locations']['homebase']
     now = datetime.now(timezone.utc)
 
     world = {
@@ -67,26 +74,21 @@ def default_world(mode: str = 'simulation') -> dict:
         'mode': mode,
         'game': {
             'status': 'READY',
-            'goal': {'type': 'earn_gold', 'target': 200, 'current': 80},
+            'goal': {
+                'type': 'earn_gold',
+                'target': profile.victory_target,
+                'current': profile.starting_gold_per_robot * 2,
+            },
             'stage': 1,
         },
-        'map': {
-            'width': 100,
-            'height': 100,
-            'locations': {
-                'homebase': {'x': 50, 'y': 30},
-                'farm': {'x': 20, 'y': 50},
-                'lake': {'x': 12, 'y': 30},
-                'market': {'x': 80, 'y': 25},
-            },
-        },
+        'map': profile_map,
         'robots': [
             {
                 'id': 'robot-a',
                 'name': 'Wall-y',
                 'physical': {
                     'online': True,
-                    'pose': {'x': 50, 'y': 30, 'heading': 0},
+                    'pose': {'x': home['x'], 'y': home['y'], 'heading': 0},
                     'pose_updated_at': now,
                     'tracking': 'TRACKED',
                     'battery': .82,
@@ -95,7 +97,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 },
                 'game': {
                     'location': 'homebase',
-                    'money': 40,
+                    'money': profile.starting_gold_per_robot,
                     'inventory': {},
                 },
                 'task': None,
@@ -105,7 +107,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 'name': 'Eeva',
                 'physical': {
                     'online': True,
-                    'pose': {'x': 50, 'y': 30, 'heading': 180},
+                    'pose': {'x': home['x'], 'y': home['y'], 'heading': 180},
                     'pose_updated_at': now,
                     'tracking': 'TRACKED',
                     'battery': .94,
@@ -114,7 +116,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 },
                 'game': {
                     'location': 'homebase',
-                    'money': 40,
+                    'money': profile.starting_gold_per_robot,
                     'inventory': {},
                 },
                 'task': None,
@@ -122,49 +124,13 @@ def default_world(mode: str = 'simulation') -> dict:
         ],
         'market': {
             'items': [
-                {
-                    'id': 'seeds', 'name': 'Wheat Seeds', 'buy_price': 5,
-                    'stock': None, 'required_stage': 1, 'unlock_at': None,
-                },
-                {
-                    'id': 'carrot_seeds', 'name': 'Carrot Seeds', 'buy_price': 10,
-                    'stock': None, 'required_stage': 2, 'unlock_at': 100,
-                },
-                {
-                    'id': 'pumpkin_seeds', 'name': 'Pumpkin Seeds', 'buy_price': 20,
-                    'stock': None, 'required_stage': 3, 'unlock_at': 150,
-                },
+                {**item.model_dump(mode='python'), 'stock': None}
+                for item in profile.market_items
             ],
         },
         'farm': {
             'crops': [
-                {
-                    'id': 'wheat',
-                    'name': 'Wheat',
-                    'seed_item_id': 'seeds',
-                    'grow_seconds': 8,
-                    'harvest_quantity': 3,
-                    'sell_price': 12,
-                    'required_stage': 1,
-                },
-                {
-                    'id': 'carrot',
-                    'name': 'Carrots',
-                    'seed_item_id': 'carrot_seeds',
-                    'grow_seconds': 12,
-                    'harvest_quantity': 3,
-                    'sell_price': 20,
-                    'required_stage': 2,
-                },
-                {
-                    'id': 'pumpkin',
-                    'name': 'Pumpkins',
-                    'seed_item_id': 'pumpkin_seeds',
-                    'grow_seconds': 18,
-                    'harvest_quantity': 3,
-                    'sell_price': 32,
-                    'required_stage': 3,
-                },
+                crop.model_dump(mode='python') for crop in profile.crops
             ],
             'plots': [
                 {
@@ -175,28 +141,14 @@ def default_world(mode: str = 'simulation') -> dict:
                     'planted_at': None,
                     'ready_at': None,
                 }
-                for plot_number in range(1, 4)
+                for plot_number in range(1, profile.plot_count + 1)
             ],
         },
-        'fishing': default_fishing(),
+        'fishing': profile.fishing.model_dump(mode='python'),
         'economy': {
             'unlocks': [
-                {
-                    'stage': 2,
-                    'item_id': 'carrot_seeds',
-                    'item_name': 'Carrot Seeds',
-                    'eligibility_gold': 100,
-                    'cost': 30,
-                    'unlocked': False,
-                },
-                {
-                    'stage': 3,
-                    'item_id': 'pumpkin_seeds',
-                    'item_name': 'Pumpkin Seeds',
-                    'eligibility_gold': 150,
-                    'cost': 60,
-                    'unlocked': False,
-                },
+                {**unlock.model_dump(mode='python'), 'unlocked': False}
+                for unlock in profile.stage_unlocks
             ],
             'unlock_proposals': [],
             'money_requests': [],
@@ -331,6 +283,75 @@ class WorldStore:
     def economy(self) -> EconomyState:
         with self._lock:
             return self._world.economy.model_copy(deep=True)
+
+    def expire_economy_requests(
+        self,
+        checked_at: datetime,
+        *,
+        timeout_seconds: float,
+    ) -> WorldSnapshot:
+        """Resolve abandoned cooperative requests so autonomy cannot wait forever."""
+        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+            raise ValueError('checked_at must include a timezone')
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError('timeout_seconds must be positive and finite')
+
+        with self._lock:
+            if self._world.game.status != 'RUNNING':
+                return self._world.model_copy(deep=True)
+
+            world = self._world.model_dump(mode='python')
+            events = []
+            for request in world['economy']['money_requests']:
+                if (
+                    request['status'] != 'PENDING'
+                    or (checked_at - request['created_at']).total_seconds()
+                    < timeout_seconds
+                ):
+                    continue
+                request['status'] = 'EXPIRED'
+                request['resolved_at'] = checked_at
+                events.append({
+                    'id': f"event-{request['id']}-expired",
+                    'timestamp': checked_at,
+                    'type': 'money_request_expired',
+                    'robot_id': request['requester_id'],
+                    'task_id': None,
+                    'message': 'The unanswered money request expired.',
+                    'data': {'money_request_id': request['id']},
+                })
+
+            for proposal in world['economy']['unlock_proposals']:
+                if (
+                    proposal['status'] != 'PENDING'
+                    or (checked_at - proposal['created_at']).total_seconds()
+                    < timeout_seconds
+                ):
+                    continue
+                proposal['status'] = 'EXPIRED'
+                proposal['resolved_at'] = checked_at
+                events.append({
+                    'id': f"event-{proposal['id']}-expired",
+                    'timestamp': checked_at,
+                    'type': 'stage_unlock_expired',
+                    'robot_id': proposal['proposer_id'],
+                    'task_id': None,
+                    'message': (
+                        f"The unanswered Stage {proposal['stage']} unlock proposal expired."
+                    ),
+                    'data': {
+                        'proposal_id': proposal['id'],
+                        'stage': proposal['stage'],
+                    },
+                })
+
+            if not events:
+                return self._world.model_copy(deep=True)
+            world['revision'] += 1
+            world['updated_at'] = checked_at
+            world['events'] = (world['events'] + events)[-100:]
+            self._publish(world)
+            return self._world.model_copy(deep=True)
 
     def apply_economy_for_session(
         self,
