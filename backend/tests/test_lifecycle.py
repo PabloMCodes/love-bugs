@@ -130,6 +130,7 @@ class LifecycleRouteTests(unittest.TestCase):
         self.assertEqual(world['game']['status'], 'READY')
         self.assertEqual(len(world['events']), 1)
         self.assertEqual(world['events'][0]['type'], 'game_ready')
+        self.assertTrue(all(plot['status'] == 'EMPTY' for plot in world['farm']['plots']))
         for robot in world['robots']:
             self.assertTrue(robot['physical']['stopped'])
             self.assertIsNone(robot['task'])

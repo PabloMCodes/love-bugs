@@ -8,12 +8,12 @@ export const taskCatalog = Object.freeze({
     },
     HARVEST: {
         action: 'HARVEST',
-        label: 'Harvest Wheat',
+        label: 'Harvest Crop',
         type: 'activity',
         requiredLocation: 'farm',
         durationMilliseconds: 2500,
         reward: {
-            itemId: 'crop',
+            itemId: 'wheat',
             name: 'Wheat',
             quantity: 3,
             sellPrice: 12,
@@ -24,12 +24,12 @@ export const taskCatalog = Object.freeze({
         label: 'Catch Fish',
         type: 'activity',
         requiredLocation: 'lake',
-        durationMilliseconds: 2500,
+        durationMilliseconds: 10000,
         reward: {
-            itemId: 'fish',
-            name: 'Salmon',
+            itemId: 'common_fish',
+            name: 'Common Fish',
             quantity: 1,
-            sellPrice: 18,
+            sellPrice: 1,
         },
     },
     BUY: {

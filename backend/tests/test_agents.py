@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.agents.__main__ import demo_world
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.planner import Decision, MockPlanner, validate_decision
+from app.state import default_world
 
 
 class DecisionTests(unittest.TestCase):
@@ -20,14 +21,72 @@ class DecisionTests(unittest.TestCase):
             {'action': 'SELL', 'location': 'market', 'item': 'crop', 'quantity': 0},
             {'action': 'WAIT', 'location': 'farm'},
             {'action': 'HARVEST', 'location': 'farm', 'robot_id': 'robot-b'},
+            {'action': 'PLANT', 'location': 'farm', 'item': 'seeds'},
+            {
+                'action': 'PLANT',
+                'location': 'farm',
+                'item': 'seeds',
+                'plot_id': 'plot-1',
+                'quantity': 1,
+            },
         ):
             with self.subTest(values=values), self.assertRaises(ValidationError):
                 Decision(reason='test', **values)
         with self.assertRaises(ValueError):
-            validate_decision(demo_world(), 'robot-a', Decision(action='HARVEST', location='lake', reason='test'))
+            validate_decision(
+                demo_world(),
+                'robot-a',
+                Decision(
+                    action='HARVEST',
+                    location='lake',
+                    plot_id='plot-1',
+                    reason='test',
+                ),
+            )
+
+    def test_plant_validation_uses_owned_seed_and_empty_plot(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        decision = Decision(
+            action='PLANT',
+            location='farm',
+            item='seeds',
+            plot_id='plot-1',
+            reason='Start the crop queue',
+        )
+
+        with self.assertRaisesRegex(ValueError, 'not in this robot inventory'):
+            validate_decision(world, 'robot-a', decision)
+
+        world['robots'][0]['game']['inventory']['seeds'] = {
+            'name': 'Wheat Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        validate_decision(world, 'robot-a', decision)
+
+        world['farm']['plots'][0]['status'] = 'GROWING'
+        with self.assertRaisesRegex(ValueError, 'not empty'):
+            validate_decision(world, 'robot-a', decision)
+
+        world['farm']['plots'][0]['status'] = 'EMPTY'
+        world['robots'][1]['task'] = {
+            'action': 'PLANT',
+            'parameters': {'item': 'seeds', 'plot_id': 'plot-1'},
+        }
+        with self.assertRaisesRegex(ValueError, 'already claimed'):
+            validate_decision(world, 'robot-a', decision)
 
     def test_inventory_formats_and_trade_validation(self):
         world = demo_world()
+        world['market']['items'] = [{
+            'id': 'crop',
+            'name': 'Wheat',
+            'buy_price': 10,
+            'sell_price': 12,
+            'stock': 1,
+            'required_stage': 1,
+        }]
         decision = Decision(action='SELL', location='market', item='crop', quantity=2, reason='Earn gold')
         for inventory in (
             {'crop': 2},
@@ -91,6 +150,23 @@ class DecisionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Insufficient inventory'):
             validate_decision(world, 'robot-a', decision)
 
+    def test_economy_decisions_require_their_own_parameters(self):
+        for values in (
+            {'action': 'PROPOSE_UNLOCK', 'stage': 2},
+            {'action': 'RESPOND_UNLOCK', 'proposal_id': 'proposal-1'},
+            {'action': 'TRANSFER_MONEY', 'recipient_id': 'robot-b'},
+            {'action': 'REQUEST_MONEY', 'amount': 5},
+            {'action': 'RESPOND_MONEY', 'money_request_id': 'request-1'},
+            {
+                'action': 'TRANSFER_MONEY',
+                'recipient_id': 'robot-b',
+                'amount': 5,
+                'location': 'market',
+            },
+        ):
+            with self.subTest(values=values), self.assertRaises(ValidationError):
+                Decision(reason='Coordinate the economy', **values)
+
 
 class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -112,7 +188,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
                 return await super().decide(world, robot_id)
         orchestrator = AgentOrchestrator(Planner())
         outcomes = await orchestrator.tick(lambda: self.world, self.submit)
-        self.assertEqual([r['action'] for r in self.requests], ['HARVEST', 'FISH'])
+        self.assertEqual([r['action'] for r in self.requests], ['BUY', 'BUY'])
         self.assertEqual([o.status for o in outcomes], ['accepted', 'accepted'])
         self.assertIsNotNone(seen[1]['robots'][0]['task'])
         self.assertEqual(await orchestrator.tick(lambda: self.world, self.submit), [])
@@ -137,12 +213,178 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             self.submit,
         )
 
-        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'FISH'])
+        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'BUY'])
         self.assertEqual(
             self.requests[0]['parameters'],
             {'item': 'crop', 'quantity': 3},
         )
         self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
+
+    async def test_mock_planner_claims_ready_plot(self):
+        self.world['farm']['plots'] = [{
+            'id': 'plot-1',
+            'status': 'READY',
+            'crop_id': 'wheat',
+            'planted_by': 'robot-a',
+            'planted_at': '2026-09-27T12:00:00Z',
+            'ready_at': '2026-09-27T12:00:08Z',
+        }]
+
+        outcomes = await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(self.requests[0]['action'], 'HARVEST')
+        self.assertEqual(self.requests[0]['parameters'], {'plot_id': 'plot-1'})
+        self.assertEqual(outcomes[0].status, 'accepted')
+
+    async def test_mock_planner_buys_seeds_for_empty_capacity(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+
+        outcomes = await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(
+            [request['action'] for request in self.requests],
+            ['BUY', 'BUY'],
+        )
+        self.assertTrue(
+            all(
+                request['parameters'] == {'item': 'seeds', 'quantity': 1}
+                for request in self.requests
+            )
+        )
+        self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
+
+    async def test_mock_planner_prefers_best_unlocked_crop_return(self):
+        for stage, expected_seed in (
+            (1, 'seeds'),
+            (2, 'carrot_seeds'),
+            (3, 'pumpkin_seeds'),
+        ):
+            with self.subTest(stage=stage):
+                world = default_world()
+                world['game']['status'] = 'RUNNING'
+                world['game']['stage'] = stage
+
+                decision = await MockPlanner().decide(world, 'robot-a')
+
+                self.assertEqual(decision.action, 'BUY')
+                self.assertEqual(decision.item, expected_seed)
+                self.assertEqual(decision.quantity, 1)
+
+    async def test_mock_planner_proposes_and_accepts_stage_unlock(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+        self.world['robots'][0]['game']['money'] = 60
+        self.world['robots'][1]['game']['money'] = 50
+        self.world['game']['goal']['current'] = 110
+
+        proposed = await MockPlanner().decide(self.world, 'robot-a')
+
+        self.assertEqual(proposed.action, 'PROPOSE_UNLOCK')
+        self.assertEqual(proposed.stage, 2)
+        self.assertEqual(sum(proposed.contributions.values()), 30)
+        self.world['economy']['unlock_proposals'].append({
+            'id': 'proposal-1',
+            'stage': 2,
+            'proposer_id': 'robot-a',
+            'contributions': proposed.contributions,
+            'accepted_by': ['robot-a'],
+            'status': 'PENDING',
+            'created_at': '2026-09-27T12:00:00Z',
+            'resolved_at': None,
+        })
+
+        response = await MockPlanner().decide(self.world, 'robot-b')
+
+        self.assertEqual(response.action, 'RESPOND_UNLOCK')
+        self.assertEqual(response.proposal_id, 'proposal-1')
+        self.assertTrue(response.accepted)
+
+    async def test_mock_planner_claims_distinct_empty_plots(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+        for robot in self.world['robots']:
+            robot['game']['inventory']['seeds'] = {
+                'name': 'Wheat Seeds',
+                'quantity': 1,
+                'sell_price': None,
+            }
+
+        await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(
+            [request['action'] for request in self.requests],
+            ['PLANT', 'PLANT'],
+        )
+        self.assertEqual(
+            [request['parameters']['plot_id'] for request in self.requests],
+            ['plot-1', 'plot-2'],
+        )
+        self.assertTrue(
+            all(request['parameters']['item'] == 'seeds' for request in self.requests)
+        )
+
+    async def test_pending_seed_purchase_prevents_excess_buying(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+        self.world['farm']['plots'] = [self.world['farm']['plots'][0]]
+
+        await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(
+            [request['action'] for request in self.requests],
+            ['BUY', 'FISH'],
+        )
+
+    async def test_mock_planner_requests_exact_seed_shortfall(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        world['robots'][0]['game']['money'] = 2
+        world['robots'][1]['game']['money'] = 40
+        world['game']['goal']['current'] = 42
+
+        decision = await MockPlanner().decide(world, 'robot-a')
+
+        self.assertEqual(decision.action, 'REQUEST_MONEY')
+        self.assertEqual(decision.recipient_id, 'robot-b')
+        self.assertEqual(decision.amount, 3)
+        self.assertIn('Wheat Seeds', decision.reason)
+
+    async def test_mock_planner_fishes_when_crop_return_is_worse(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        world['farm']['crops'][0]['harvest_quantity'] = 1
+        world['farm']['crops'][0]['sell_price'] = 1
+
+        decision = await MockPlanner().decide(world, 'robot-a')
+
+        self.assertEqual(decision.action, 'FISH')
+        self.assertIn('expected', decision.reason)
+
+    async def test_mock_planner_uses_affordable_crop_when_best_crop_cannot_be_funded(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        world['game']['stage'] = 3
+        world['robots'][0]['game']['money'] = 5
+        world['robots'][1]['game']['money'] = 0
+        world['game']['goal']['current'] = 5
+
+        decision = await MockPlanner().decide(world, 'robot-a')
+
+        self.assertEqual(decision.action, 'BUY')
+        self.assertEqual(decision.item, 'seeds')
 
     async def test_unavailable_robots_and_stopped_game_skip_model(self):
         class FailPlanner:
@@ -245,7 +487,8 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('additional_properties', wire_schema)
         with self.assertRaises(ValidationError):
             Decision.model_validate_json(json.dumps({
-                'action': 'HARVEST', 'location': 'farm', 'reason': 'Earn gold',
+                'action': 'HARVEST', 'location': 'farm', 'plot_id': 'plot-1',
+                'reason': 'Earn gold',
                 'motor_speed': 1,
             }))
 
@@ -267,7 +510,12 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
                 async def generate_content_async(inner, llm_request, stream=False):
                     captured.append(llm_request)
                     yield LlmResponse(content=types.Content(role='model', parts=[types.Part(
-                        text=json.dumps({'action': 'HARVEST', 'location': 'farm', 'reason': 'Earn gold'})
+                        text=json.dumps({
+                            'action': 'HARVEST',
+                            'location': 'farm',
+                            'plot_id': 'plot-1',
+                            'reason': 'Earn gold',
+                        })
                     )]))
             first.agent.model = FakeModel(model='test-model')
             world = demo_world()

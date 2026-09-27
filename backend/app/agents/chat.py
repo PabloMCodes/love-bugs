@@ -30,6 +30,27 @@ def normalized_message(text):
     return ' '.join(re.findall(r'\w+', text.casefold()))
 
 
+def decision_parameters(decision):
+    if decision.action in ('BUY', 'SELL'):
+        return {'item': decision.item, 'quantity': decision.quantity}
+    if decision.action == 'HARVEST':
+        return {'plot_id': decision.plot_id}
+    if decision.action == 'PLANT':
+        return {'item': decision.item, 'plot_id': decision.plot_id}
+    if decision.action == 'PROPOSE_UNLOCK':
+        return {'stage': decision.stage, 'contributions': decision.contributions}
+    if decision.action == 'RESPOND_UNLOCK':
+        return {'proposal_id': decision.proposal_id, 'accepted': decision.accepted}
+    if decision.action in ('TRANSFER_MONEY', 'REQUEST_MONEY'):
+        return {'recipient_id': decision.recipient_id, 'amount': decision.amount}
+    if decision.action == 'RESPOND_MONEY':
+        return {
+            'money_request_id': decision.money_request_id,
+            'accepted': decision.accepted,
+        }
+    return {}
+
+
 class AgentChat:
     def __init__(self):
         self.session_id = None
@@ -52,8 +73,7 @@ class AgentChat:
         self.reset(world['session_id'])
         if not decision.message:
             return
-        parameters = ({'item': decision.item, 'quantity': decision.quantity}
-                      if decision.action in ('BUY', 'SELL') else {})
+        parameters = decision_parameters(decision)
         text = normalized_message(decision.message)
         own = [m for m in self.messages if m['robot_id'] == robot_id][-6:]
         for previous in ([] if kind == 'traffic' else own):

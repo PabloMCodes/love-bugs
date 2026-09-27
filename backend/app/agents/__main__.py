@@ -10,23 +10,15 @@ from pathlib import Path
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.planner import Decision, MockPlanner, validate_decision
 from app.config import AgentConfig
+from app.schemas import WorldSnapshot
+from app.state import default_world
 
 
 def demo_world():
-    return {
-        'session_id': 'agent-demo', 'revision': 1, 'mode': 'simulation',
-        'game': {'status': 'RUNNING', 'goal': {'type': 'earn_gold', 'current': 80, 'target': 200}},
-        'map': {'width': 100, 'height': 100, 'locations': {
-            'homebase': {'x': 50, 'y': 50}, 'farm': {'x': 20, 'y': 30},
-            'lake': {'x': 70, 'y': 80}, 'market': {'x': 80, 'y': 40}}},
-        'robots': [{'id': robot_id, 'name': name,
-                    'physical': {'online': True, 'stopped': False, 'blocked': False,
-                                 'tracking': 'TRACKED', 'pose': {'x': 50, 'y': 50, 'heading': 0}},
-                    'game': {'location': 'homebase', 'money': 40, 'inventory': {}}, 'task': None}
-                   for robot_id, name in [('robot-a', 'Wall-y'), ('robot-b', 'Eeva')]],
-        'market': {'items': [{'id': 'crop', 'name': 'Wheat', 'buy_price': None, 'sell_price': 12, 'stock': None},
-                             {'id': 'fish', 'name': 'Fish', 'buy_price': None, 'sell_price': 18, 'stock': None}]},
-    }
+    world = default_world()
+    world['session_id'] = 'agent-demo'
+    world['game']['status'] = 'RUNNING'
+    return WorldSnapshot.model_validate(world).model_dump(mode='json')
 
 
 async def run(args):

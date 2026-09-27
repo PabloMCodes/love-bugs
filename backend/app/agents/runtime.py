@@ -6,7 +6,13 @@ import math
 
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.banter import BanterCoordinator
-from app.schemas import TaskRequest
+from app.schemas import (
+    EconomyResponseRequest,
+    MoneyRequestCreate,
+    MoneyTransferRequest,
+    StageUnlockProposalRequest,
+    TaskRequest,
+)
 from app.state import WorldStateError, WorldStore
 
 
@@ -38,12 +44,70 @@ class AutonomyRunner:
 
     async def submit_task(self, session_id: str, request: dict) -> bool:
         try:
-            task_request = TaskRequest.model_validate(request)
-            await asyncio.to_thread(
-                self.store.assign_task_for_session,
-                session_id,
-                task_request,
-            )
+            action = request.get('action')
+            parameters = request.get('parameters', {})
+            if action in {
+                'PROPOSE_UNLOCK',
+                'RESPOND_UNLOCK',
+                'TRANSFER_MONEY',
+                'REQUEST_MONEY',
+                'RESPOND_MONEY',
+            }:
+                common = {
+                    'request_id': request.get('request_id'),
+                }
+                resource_id = None
+                if action == 'PROPOSE_UNLOCK':
+                    command = StageUnlockProposalRequest(
+                        **common,
+                        proposer_id=request.get('robot_id'),
+                        stage=parameters.get('stage'),
+                        contributions=parameters.get('contributions'),
+                    )
+                elif action == 'RESPOND_UNLOCK':
+                    command = EconomyResponseRequest(
+                        **common,
+                        robot_id=request.get('robot_id'),
+                        accepted=parameters.get('accepted'),
+                    )
+                    resource_id = parameters.get('proposal_id')
+                elif action == 'TRANSFER_MONEY':
+                    command = MoneyTransferRequest(
+                        **common,
+                        sender_id=request.get('robot_id'),
+                        recipient_id=parameters.get('recipient_id'),
+                        amount=parameters.get('amount'),
+                        purpose=request.get('reason'),
+                    )
+                elif action == 'REQUEST_MONEY':
+                    command = MoneyRequestCreate(
+                        **common,
+                        requester_id=request.get('robot_id'),
+                        recipient_id=parameters.get('recipient_id'),
+                        amount=parameters.get('amount'),
+                        purpose=request.get('reason'),
+                    )
+                else:
+                    command = EconomyResponseRequest(
+                        **common,
+                        robot_id=request.get('robot_id'),
+                        accepted=parameters.get('accepted'),
+                    )
+                    resource_id = parameters.get('money_request_id')
+                await asyncio.to_thread(
+                    self.store.apply_economy_for_session,
+                    session_id,
+                    action,
+                    command,
+                    resource_id=resource_id,
+                )
+            else:
+                task_request = TaskRequest.model_validate(request)
+                await asyncio.to_thread(
+                    self.store.assign_task_for_session,
+                    session_id,
+                    task_request,
+                )
             return True
         except WorldStateError as error:
             logger.info(

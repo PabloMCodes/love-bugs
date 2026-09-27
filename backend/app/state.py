@@ -2,9 +2,17 @@
 
 from datetime import datetime, timezone
 import math
+from random import Random
 from threading import RLock
 from uuid import uuid4
 
+from app.game.crops import (
+    CropRuleError,
+    apply_harvest,
+    apply_planting,
+    quote_harvest,
+    quote_planting,
+)
 from app.game.market import (
     MarketRuleError,
     apply_purchase,
@@ -12,27 +20,30 @@ from app.game.market import (
     quote_purchase,
     quote_sale,
 )
+from app.game.fishing import default_fishing, resolve_fishing_attempt
 from app.game.tasks import activity_for
 from app.schemas import (
     ArrivalReport,
     BlockedReport,
+    EconomyResponseRequest,
+    EconomyState,
     Goal,
     GoalRequest,
     HealthReport,
     Market,
+    MoneyRequestCreate,
+    MoneyRequestState,
+    MoneyTransfer,
+    MoneyTransferRequest,
     NavigationStep,
     PoseReport,
     Robot,
     RobotTask,
+    StageUnlockProposal,
+    StageUnlockProposalRequest,
     TaskError,
     TaskRequest,
     WorldSnapshot,
-)
-
-
-STAGE_UNLOCKS = (
-    (2, 100, 'carrot_seeds', 'Carrot Seeds'),
-    (3, 150, 'pumpkin_seeds', 'Pumpkin Seeds'),
 )
 
 
@@ -49,7 +60,7 @@ def default_world(mode: str = 'simulation') -> dict:
     now = datetime.now(timezone.utc)
 
     world = {
-        'schema_version': 1,
+        'schema_version': 4,
         'session_id': 'demo-session-001',
         'revision': 1,
         'updated_at': now,
@@ -125,6 +136,72 @@ def default_world(mode: str = 'simulation') -> dict:
                 },
             ],
         },
+        'farm': {
+            'crops': [
+                {
+                    'id': 'wheat',
+                    'name': 'Wheat',
+                    'seed_item_id': 'seeds',
+                    'grow_seconds': 8,
+                    'harvest_quantity': 3,
+                    'sell_price': 12,
+                    'required_stage': 1,
+                },
+                {
+                    'id': 'carrot',
+                    'name': 'Carrots',
+                    'seed_item_id': 'carrot_seeds',
+                    'grow_seconds': 12,
+                    'harvest_quantity': 3,
+                    'sell_price': 20,
+                    'required_stage': 2,
+                },
+                {
+                    'id': 'pumpkin',
+                    'name': 'Pumpkins',
+                    'seed_item_id': 'pumpkin_seeds',
+                    'grow_seconds': 18,
+                    'harvest_quantity': 3,
+                    'sell_price': 32,
+                    'required_stage': 3,
+                },
+            ],
+            'plots': [
+                {
+                    'id': f'plot-{plot_number}',
+                    'status': 'EMPTY',
+                    'crop_id': None,
+                    'planted_by': None,
+                    'planted_at': None,
+                    'ready_at': None,
+                }
+                for plot_number in range(1, 4)
+            ],
+        },
+        'fishing': default_fishing(),
+        'economy': {
+            'unlocks': [
+                {
+                    'stage': 2,
+                    'item_id': 'carrot_seeds',
+                    'item_name': 'Carrot Seeds',
+                    'eligibility_gold': 100,
+                    'cost': 30,
+                    'unlocked': False,
+                },
+                {
+                    'stage': 3,
+                    'item_id': 'pumpkin_seeds',
+                    'item_name': 'Pumpkin Seeds',
+                    'eligibility_gold': 150,
+                    'cost': 60,
+                    'unlocked': False,
+                },
+            ],
+            'unlock_proposals': [],
+            'money_requests': [],
+            'transfers': [],
+        },
         'events': [
             {
                 'id': 'event-001',
@@ -157,10 +234,16 @@ def default_world(mode: str = 'simulation') -> dict:
 
 
 class WorldStore:
-    def __init__(self, world: dict | WorldSnapshot | None = None):
+    def __init__(
+        self,
+        world: dict | WorldSnapshot | None = None,
+        *,
+        fishing_rng=None,
+    ):
         self._lock = RLock()
         initial_world = default_world() if world is None else world
         self._world = WorldSnapshot.model_validate(initial_world)
+        self._fishing_rng = fishing_rng if fishing_rng is not None else Random()
         self._initial_world = self._world.model_copy(deep=True)
         self._tasks: dict[str, RobotTask] = {
             robot.task.id: robot.task.model_copy(deep=True)
@@ -168,6 +251,7 @@ class WorldStore:
             if robot.task is not None
         }
         self._task_requests: dict[str, tuple[TaskRequest, RobotTask]] = {}
+        self._economy_requests: dict[str, tuple[str, dict, str]] = {}
         self._accepted_arrivals: dict[tuple[str, str, str], str] = {}
         self._health_seen_at: dict[str, datetime] = {}
         self._pose_seen_at: dict[str, datetime] = {}
@@ -244,6 +328,37 @@ class WorldStore:
         with self._lock:
             return self._world.market.model_copy(deep=True)
 
+    def economy(self) -> EconomyState:
+        with self._lock:
+            return self._world.economy.model_copy(deep=True)
+
+    def apply_economy_for_session(
+        self,
+        session_id: str,
+        action: str,
+        request,
+        *,
+        resource_id: str | None = None,
+    ):
+        """Atomically reject stale autonomous commands before changing economy state."""
+        with self._lock:
+            if session_id != self._world.session_id:
+                raise WorldStateError(
+                    'SESSION_MISMATCH',
+                    'The economy command belongs to a different game session.',
+                )
+            if action == 'TRANSFER_MONEY':
+                return self.transfer_money(request)
+            if action == 'REQUEST_MONEY':
+                return self.create_money_request(request)
+            if action == 'RESPOND_MONEY':
+                return self.respond_money_request(resource_id, request)
+            if action == 'PROPOSE_UNLOCK':
+                return self.propose_stage_unlock(request)
+            if action == 'RESPOND_UNLOCK':
+                return self.respond_stage_unlock(resource_id, request)
+            raise WorldStateError('INVALID_REQUEST', f'Unknown economy action {action!r}.')
+
     def tasks(self) -> list[RobotTask]:
         with self._lock:
             return [task.model_copy(deep=True) for task in self._tasks.values()]
@@ -299,6 +414,570 @@ class WorldStore:
             world['events'] = world['events'][-100:]
             self._publish(world)
             return self._world.game.goal.model_copy(deep=True)
+
+    def _economy_replay(self, operation: str, request) -> object | None:
+        previous = self._economy_requests.get(request.request_id)
+        if previous is None:
+            return None
+        previous_operation, previous_payload, result_id = previous
+        payload = request.model_dump(mode='python')
+        if previous_operation != operation or previous_payload != payload:
+            raise WorldStateError(
+                'REQUEST_ID_CONFLICT',
+                f'Request ID {request.request_id!r} was already used for different economy data.',
+            )
+        if operation == 'transfer':
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.transfers
+                if item.id == result_id
+            )
+        if operation == 'money_request' or operation.startswith('money_response:'):
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.money_requests
+                if item.id == result_id
+            )
+        return next(
+            item.model_copy(deep=True)
+            for item in self._world.economy.unlock_proposals
+            if item.id == result_id
+        )
+
+    def _remember_economy_request(
+        self,
+        operation: str,
+        request,
+        result_id: str,
+    ) -> None:
+        self._economy_requests[request.request_id] = (
+            operation,
+            request.model_dump(mode='python'),
+            result_id,
+        )
+
+    def _require_economy_running(self) -> None:
+        if self._world.game.status != 'RUNNING':
+            raise WorldStateError(
+                'GAME_NOT_RUNNING',
+                'Start the game before changing the cooperative economy.',
+            )
+
+    @staticmethod
+    def _robot_data(world: dict, robot_id: str) -> dict:
+        robot = next(
+            (candidate for candidate in world['robots'] if candidate['id'] == robot_id),
+            None,
+        )
+        if robot is None:
+            raise WorldStateError('NOT_FOUND', f'Unknown robot {robot_id!r}.')
+        return robot
+
+    @staticmethod
+    def _validate_participants(first_id: str, second_id: str) -> None:
+        if first_id == second_id:
+            raise WorldStateError(
+                'INVALID_REQUEST',
+                'Economy participants must be different robots.',
+            )
+
+    def transfer_money(self, request: MoneyTransferRequest) -> MoneyTransfer:
+        with self._lock:
+            replay = self._economy_replay('transfer', request)
+            if replay is not None:
+                return replay
+            self._require_economy_running()
+            self._validate_participants(request.sender_id, request.recipient_id)
+            if not request.purpose.strip():
+                raise WorldStateError('INVALID_REQUEST', 'Transfer purpose cannot be blank.')
+
+            world = self._world.model_dump(mode='python')
+            sender = self._robot_data(world, request.sender_id)
+            recipient = self._robot_data(world, request.recipient_id)
+            if sender['game']['money'] < request.amount:
+                raise WorldStateError(
+                    'INSUFFICIENT_FUNDS',
+                    f"{sender['name']} does not have enough gold for this transfer.",
+                )
+
+            now = datetime.now(timezone.utc)
+            transfer_id = f'transfer-{uuid4().hex}'
+            sender['game']['money'] -= request.amount
+            recipient['game']['money'] += request.amount
+            world['game']['goal']['current'] = sum(
+                robot['game']['money'] for robot in world['robots']
+            )
+            world['economy']['transfers'].append({
+                'id': transfer_id,
+                'sender_id': request.sender_id,
+                'recipient_id': request.recipient_id,
+                'amount': request.amount,
+                'purpose': request.purpose.strip(),
+                'created_at': now,
+                'money_request_id': None,
+            })
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f'event-{transfer_id}',
+                'timestamp': now,
+                'type': 'money_transferred',
+                'robot_id': request.sender_id,
+                'task_id': None,
+                'message': (
+                    f"{sender['name']} transferred {request.amount} gold "
+                    f"to {recipient['name']}."
+                ),
+                'data': {
+                    'transfer_id': transfer_id,
+                    'sender_id': request.sender_id,
+                    'recipient_id': request.recipient_id,
+                    'amount': request.amount,
+                    'purpose': request.purpose.strip(),
+                },
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._remember_economy_request('transfer', request, transfer_id)
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.transfers
+                if item.id == transfer_id
+            )
+
+    def create_money_request(self, request: MoneyRequestCreate) -> MoneyRequestState:
+        with self._lock:
+            replay = self._economy_replay('money_request', request)
+            if replay is not None:
+                return replay
+            self._require_economy_running()
+            self._validate_participants(request.requester_id, request.recipient_id)
+            if not request.purpose.strip():
+                raise WorldStateError('INVALID_REQUEST', 'Money request purpose cannot be blank.')
+            world = self._world.model_dump(mode='python')
+            requester = self._robot_data(world, request.requester_id)
+            recipient = self._robot_data(world, request.recipient_id)
+            if any(
+                item['requester_id'] == request.requester_id
+                and item['status'] == 'PENDING'
+                for item in world['economy']['money_requests']
+            ):
+                raise WorldStateError(
+                    'REQUEST_PENDING',
+                    f"{requester['name']} already has a pending money request.",
+                )
+
+            now = datetime.now(timezone.utc)
+            money_request_id = f'money-request-{uuid4().hex}'
+            world['economy']['money_requests'].append({
+                'id': money_request_id,
+                'requester_id': request.requester_id,
+                'recipient_id': request.recipient_id,
+                'amount': request.amount,
+                'purpose': request.purpose.strip(),
+                'status': 'PENDING',
+                'created_at': now,
+                'resolved_at': None,
+                'transfer_id': None,
+            })
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f'event-{money_request_id}-created',
+                'timestamp': now,
+                'type': 'money_requested',
+                'robot_id': request.requester_id,
+                'task_id': None,
+                'message': (
+                    f"{requester['name']} requested {request.amount} gold "
+                    f"from {recipient['name']} for {request.purpose.strip()}."
+                ),
+                'data': {
+                    'money_request_id': money_request_id,
+                    'recipient_id': request.recipient_id,
+                    'amount': request.amount,
+                    'purpose': request.purpose.strip(),
+                },
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._remember_economy_request(
+                'money_request',
+                request,
+                money_request_id,
+            )
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.money_requests
+                if item.id == money_request_id
+            )
+
+    def respond_money_request(
+        self,
+        money_request_id: str,
+        request: EconomyResponseRequest,
+    ) -> MoneyRequestState:
+        with self._lock:
+            operation = f'money_response:{money_request_id}'
+            replay = self._economy_replay(operation, request)
+            if replay is not None:
+                return replay
+            self._require_economy_running()
+            world = self._world.model_dump(mode='python')
+            money_request = next(
+                (
+                    item for item in world['economy']['money_requests']
+                    if item['id'] == money_request_id
+                ),
+                None,
+            )
+            if money_request is None:
+                raise WorldStateError(
+                    'NOT_FOUND',
+                    f'Unknown money request {money_request_id!r}.',
+                )
+            if money_request['status'] != 'PENDING':
+                raise WorldStateError('REQUEST_RESOLVED', 'The money request is already resolved.')
+            if request.robot_id != money_request['recipient_id']:
+                raise WorldStateError(
+                    'NOT_AUTHORIZED',
+                    'Only the requested robot can respond to this money request.',
+                )
+
+            now = datetime.now(timezone.utc)
+            requester = self._robot_data(world, money_request['requester_id'])
+            recipient = self._robot_data(world, money_request['recipient_id'])
+            money_request['resolved_at'] = now
+            events = []
+            if not request.accepted:
+                money_request['status'] = 'REJECTED'
+                events.append({
+                    'id': f'event-{money_request_id}-rejected',
+                    'timestamp': now,
+                    'type': 'money_request_rejected',
+                    'robot_id': request.robot_id,
+                    'task_id': None,
+                    'message': f"{recipient['name']} declined {requester['name']}'s money request.",
+                    'data': {'money_request_id': money_request_id},
+                })
+            else:
+                if recipient['game']['money'] < money_request['amount']:
+                    raise WorldStateError(
+                        'INSUFFICIENT_FUNDS',
+                        f"{recipient['name']} does not have enough gold for this request.",
+                    )
+                transfer_id = f'transfer-{uuid4().hex}'
+                recipient['game']['money'] -= money_request['amount']
+                requester['game']['money'] += money_request['amount']
+                money_request['status'] = 'ACCEPTED'
+                money_request['transfer_id'] = transfer_id
+                world['economy']['transfers'].append({
+                    'id': transfer_id,
+                    'sender_id': recipient['id'],
+                    'recipient_id': requester['id'],
+                    'amount': money_request['amount'],
+                    'purpose': money_request['purpose'],
+                    'created_at': now,
+                    'money_request_id': money_request_id,
+                })
+                events.extend([
+                    {
+                        'id': f'event-{money_request_id}-accepted',
+                        'timestamp': now,
+                        'type': 'money_request_accepted',
+                        'robot_id': request.robot_id,
+                        'task_id': None,
+                        'message': f"{recipient['name']} accepted {requester['name']}'s money request.",
+                        'data': {'money_request_id': money_request_id},
+                    },
+                    {
+                        'id': f'event-{transfer_id}',
+                        'timestamp': now,
+                        'type': 'money_transferred',
+                        'robot_id': recipient['id'],
+                        'task_id': None,
+                        'message': (
+                            f"{recipient['name']} transferred {money_request['amount']} "
+                            f"gold to {requester['name']}."
+                        ),
+                        'data': {
+                            'transfer_id': transfer_id,
+                            'money_request_id': money_request_id,
+                            'sender_id': recipient['id'],
+                            'recipient_id': requester['id'],
+                            'amount': money_request['amount'],
+                            'purpose': money_request['purpose'],
+                        },
+                    },
+                ])
+
+            world['game']['goal']['current'] = sum(
+                robot['game']['money'] for robot in world['robots']
+            )
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'] = (world['events'] + events)[-100:]
+            self._publish(world)
+            self._remember_economy_request(
+                operation,
+                request,
+                money_request_id,
+            )
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.money_requests
+                if item.id == money_request_id
+            )
+
+    def propose_stage_unlock(
+        self,
+        request: StageUnlockProposalRequest,
+    ) -> StageUnlockProposal:
+        with self._lock:
+            replay = self._economy_replay('unlock_proposal', request)
+            if replay is not None:
+                return replay
+            self._require_economy_running()
+            world = self._world.model_dump(mode='python')
+            proposer = self._robot_data(world, request.proposer_id)
+            if request.stage != world['game']['stage'] + 1:
+                raise WorldStateError(
+                    'INVALID_STAGE',
+                    'Only the next farming stage can be proposed.',
+                )
+            rule = next(
+                (
+                    item for item in world['economy']['unlocks']
+                    if item['stage'] == request.stage
+                ),
+                None,
+            )
+            if rule is None:
+                raise WorldStateError('NOT_FOUND', f'No unlock rule exists for Stage {request.stage}.')
+            if rule['unlocked']:
+                raise WorldStateError('STAGE_UNLOCKED', f'Stage {request.stage} is already unlocked.')
+            if any(
+                item['status'] == 'PENDING'
+                for item in world['economy']['unlock_proposals']
+            ):
+                raise WorldStateError(
+                    'PROPOSAL_PENDING',
+                    'Resolve the current stage unlock proposal first.',
+                )
+            current_gold = sum(robot['game']['money'] for robot in world['robots'])
+            if current_gold < rule['eligibility_gold']:
+                raise WorldStateError(
+                    'STAGE_NOT_ELIGIBLE',
+                    f"Stage {request.stage} requires {rule['eligibility_gold']} combined gold.",
+                )
+
+            robot_ids = {robot['id'] for robot in world['robots']}
+            if set(request.contributions) != robot_ids:
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'Unlock contributions must include every robot exactly once.',
+                )
+            if any(
+                isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0
+                for amount in request.contributions.values()
+            ):
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'Every robot must contribute a positive whole amount of gold.',
+                )
+            if sum(request.contributions.values()) != rule['cost']:
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    f"Stage {request.stage} contributions must total {rule['cost']} gold.",
+                )
+            for robot in world['robots']:
+                if robot['game']['money'] < request.contributions[robot['id']]:
+                    raise WorldStateError(
+                        'INSUFFICIENT_FUNDS',
+                        f"{robot['name']} cannot fund the proposed contribution.",
+                    )
+
+            now = datetime.now(timezone.utc)
+            proposal_id = f'unlock-proposal-{uuid4().hex}'
+            world['economy']['unlock_proposals'].append({
+                'id': proposal_id,
+                'stage': request.stage,
+                'proposer_id': request.proposer_id,
+                'contributions': dict(request.contributions),
+                'accepted_by': [request.proposer_id],
+                'status': 'PENDING',
+                'created_at': now,
+                'resolved_at': None,
+            })
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].append({
+                'id': f'event-{proposal_id}-created',
+                'timestamp': now,
+                'type': 'stage_unlock_proposed',
+                'robot_id': request.proposer_id,
+                'task_id': None,
+                'message': (
+                    f"{proposer['name']} proposed unlocking Stage {request.stage}: "
+                    f"{rule['item_name']}."
+                ),
+                'data': {
+                    'proposal_id': proposal_id,
+                    'stage': request.stage,
+                    'cost': rule['cost'],
+                    'contributions': dict(request.contributions),
+                },
+            })
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._remember_economy_request(
+                'unlock_proposal',
+                request,
+                proposal_id,
+            )
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.unlock_proposals
+                if item.id == proposal_id
+            )
+
+    def respond_stage_unlock(
+        self,
+        proposal_id: str,
+        request: EconomyResponseRequest,
+    ) -> StageUnlockProposal:
+        with self._lock:
+            operation = f'unlock_response:{proposal_id}'
+            replay = self._economy_replay(operation, request)
+            if replay is not None:
+                return replay
+            self._require_economy_running()
+            world = self._world.model_dump(mode='python')
+            proposal = next(
+                (
+                    item for item in world['economy']['unlock_proposals']
+                    if item['id'] == proposal_id
+                ),
+                None,
+            )
+            if proposal is None:
+                raise WorldStateError('NOT_FOUND', f'Unknown unlock proposal {proposal_id!r}.')
+            if proposal['status'] != 'PENDING':
+                raise WorldStateError('PROPOSAL_RESOLVED', 'The unlock proposal is already resolved.')
+            robot_ids = {robot['id'] for robot in world['robots']}
+            if request.robot_id not in robot_ids:
+                raise WorldStateError('NOT_AUTHORIZED', 'Only a participating robot can respond.')
+
+            now = datetime.now(timezone.utc)
+            responder = self._robot_data(world, request.robot_id)
+            events = []
+            if not request.accepted:
+                proposal['status'] = 'REJECTED'
+                proposal['resolved_at'] = now
+                events.append({
+                    'id': f'event-{proposal_id}-rejected',
+                    'timestamp': now,
+                    'type': 'stage_unlock_rejected',
+                    'robot_id': request.robot_id,
+                    'task_id': None,
+                    'message': f"{responder['name']} rejected the Stage {proposal['stage']} unlock.",
+                    'data': {'proposal_id': proposal_id, 'stage': proposal['stage']},
+                })
+            elif request.robot_id in proposal['accepted_by']:
+                self._remember_economy_request(
+                    operation,
+                    request,
+                    proposal_id,
+                )
+                return StageUnlockProposal.model_validate(proposal)
+            else:
+                proposal['accepted_by'].append(request.robot_id)
+                events.append({
+                    'id': f'event-{proposal_id}-accepted-{request.robot_id}',
+                    'timestamp': now,
+                    'type': 'stage_unlock_accepted',
+                    'robot_id': request.robot_id,
+                    'task_id': None,
+                    'message': f"{responder['name']} accepted the Stage {proposal['stage']} unlock.",
+                    'data': {'proposal_id': proposal_id, 'stage': proposal['stage']},
+                })
+                if robot_ids.issubset(set(proposal['accepted_by'])):
+                    if proposal['stage'] != world['game']['stage'] + 1:
+                        raise WorldStateError('INVALID_STAGE', 'The proposed stage is no longer next.')
+                    for robot in world['robots']:
+                        contribution = proposal['contributions'][robot['id']]
+                        if robot['game']['money'] < contribution:
+                            raise WorldStateError(
+                                'INSUFFICIENT_FUNDS',
+                                f"{robot['name']} can no longer fund the unlock.",
+                            )
+                    for robot in world['robots']:
+                        contribution = proposal['contributions'][robot['id']]
+                        robot['game']['money'] -= contribution
+                        events.append({
+                            'id': f"event-{proposal_id}-contribution-{robot['id']}",
+                            'timestamp': now,
+                            'type': 'unlock_contribution',
+                            'robot_id': robot['id'],
+                            'task_id': None,
+                            'message': f"{robot['name']} contributed {contribution} gold.",
+                            'data': {
+                                'proposal_id': proposal_id,
+                                'stage': proposal['stage'],
+                                'amount': contribution,
+                                'balance': robot['game']['money'],
+                            },
+                        })
+                    rule = next(
+                        item for item in world['economy']['unlocks']
+                        if item['stage'] == proposal['stage']
+                    )
+                    rule['unlocked'] = True
+                    world['game']['stage'] = proposal['stage']
+                    world['game']['goal']['current'] = sum(
+                        robot['game']['money'] for robot in world['robots']
+                    )
+                    proposal['status'] = 'COMPLETED'
+                    proposal['resolved_at'] = now
+                    events.append({
+                        'id': f'event-{proposal_id}-completed',
+                        'timestamp': now,
+                        'type': 'stage_unlocked',
+                        'robot_id': request.robot_id,
+                        'task_id': None,
+                        'message': (
+                            f"The team unlocked Stage {proposal['stage']}: "
+                            f"{rule['item_name']}."
+                        ),
+                        'data': {
+                            'proposal_id': proposal_id,
+                            'stage': proposal['stage'],
+                            'item': rule['item_id'],
+                            'cost': rule['cost'],
+                        },
+                    })
+
+            world['revision'] += 1
+            world['updated_at'] = now
+            world['events'].extend(events)
+            self._complete_game_if_ready(
+                world,
+                now,
+                robot_id=request.robot_id,
+                event_prefix=proposal_id,
+            )
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            self._remember_economy_request(
+                operation,
+                request,
+                proposal_id,
+            )
+            return next(
+                item.model_copy(deep=True)
+                for item in self._world.economy.unlock_proposals
+                if item.id == proposal_id
+            )
 
     def update_pose(self, robot_id: str, report: PoseReport) -> bool:
         with self._lock:
@@ -602,6 +1281,7 @@ class WorldStore:
             self._publish(world, position_source='reset')
             self._tasks.clear()
             self._task_requests.clear()
+            self._economy_requests.clear()
             self._accepted_arrivals.clear()
             self._health_seen_at.clear()
             self._pose_seen_at.clear()
@@ -744,12 +1424,12 @@ class WorldStore:
                 )
 
             activity = activity_for(request.action)
-            if request.action not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL') and activity is None:
+            if request.action not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL', 'PLANT') and activity is None:
                 raise WorldStateError(
                     'INVALID_REQUEST',
-                    'Only MOVE_TO, RETURN_HOME, HARVEST, FISH, BUY, and SELL are implemented by the backend task service.',
+                    'Only MOVE_TO, RETURN_HOME, HARVEST, FISH, BUY, SELL, and PLANT are implemented by the backend task service.',
                 )
-            if request.action not in ('BUY', 'SELL') and request.parameters:
+            if request.action not in ('BUY', 'SELL', 'PLANT', 'HARVEST') and request.parameters:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} does not accept parameters.',
@@ -772,6 +1452,11 @@ class WorldStore:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} must take place at market.',
+                )
+            if request.action == 'PLANT' and request.location != 'farm':
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'PLANT must take place at farm.',
                 )
 
             robot = next(
@@ -804,9 +1489,33 @@ class WorldStore:
                         quote_sale(robot.game.model_dump(mode='python'), request.parameters)
                 except MarketRuleError as error:
                     raise WorldStateError(error.code, error.message) from error
+            if request.action == 'PLANT':
+                try:
+                    quote_planting(
+                        robot.game.model_dump(mode='python'),
+                        self._world.farm.model_dump(mode='python'),
+                        request.parameters,
+                        current_stage=self._world.game.stage,
+                    )
+                except CropRuleError as error:
+                    raise WorldStateError(error.code, error.message) from error
+            if request.action == 'HARVEST':
+                try:
+                    quote_harvest(
+                        self._world.farm.model_dump(mode='python'),
+                        request.parameters,
+                    )
+                except CropRuleError as error:
+                    raise WorldStateError(error.code, error.message) from error
 
             now = datetime.now(timezone.utc)
             next_revision = self._world.revision + 1
+            task_parameters = dict(request.parameters)
+            if request.action == 'FISH':
+                task_parameters = resolve_fishing_attempt(
+                    self._world.fishing.model_dump(mode='python'),
+                    self._fishing_rng,
+                ).task_parameters()
             task = RobotTask(
                 id=f'task-{next_revision}',
                 robot_id=robot.id,
@@ -814,7 +1523,7 @@ class WorldStore:
                 location=request.location,
                 status='ASSIGNED',
                 progress=0,
-                parameters=request.parameters,
+                parameters=task_parameters,
                 reason=request.reason or (
                     'Return to homebase.'
                     if request.action == 'RETURN_HOME'
@@ -824,7 +1533,11 @@ class WorldStore:
                         else (
                             f'Begin {activity.label} at {request.location}.'
                             if activity is not None
-                            else f'{request.action.title()} an item at market.'
+                            else (
+                                'Plant a crop at the farm.'
+                                if request.action == 'PLANT'
+                                else f'{request.action.title()} an item at market.'
+                            )
                         )
                     )
                 ),
@@ -866,13 +1579,21 @@ class WorldStore:
                             f'{robot.name} was assigned to {activity.label} at {request.location}.'
                             if activity is not None
                             else (
-                                f'{robot.name} was assigned to '
-                                f'{request.action.lower()} an item at market.'
+                                f'{robot.name} was assigned to plant at the farm.'
+                                if request.action == 'PLANT'
+                                else (
+                                    f'{robot.name} was assigned to '
+                                    f'{request.action.lower()} an item at market.'
+                                )
                             )
                         )
                     )
                 ),
-                'data': {},
+                'data': (
+                    {'duration_seconds': task.parameters['duration_seconds']}
+                    if request.action == 'FISH'
+                    else {}
+                ),
             })
             world['events'] = world['events'][-100:]
             self._publish(world)
@@ -1021,7 +1742,7 @@ class WorldStore:
                     task is None
                     or task['id'] != step.task_id
                     or (
-                        task['action'] not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL')
+                        task['action'] not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL', 'PLANT')
                         and activity_for(task['action']) is None
                     )
                     or task['status'] not in ('ASSIGNED', 'NAVIGATING')
@@ -1079,6 +1800,8 @@ class WorldStore:
             self._complete_purchase(world, robot, task, now)
         elif task['action'] == 'SELL':
             self._complete_sale(world, robot, task, now)
+        elif task['action'] == 'PLANT':
+            self._complete_planting(world, robot, task, now)
         elif activity is None:
             robot['task'] = None
             world['events'].append({
@@ -1104,8 +1827,217 @@ class WorldStore:
                 'robot_id': robot['id'],
                 'task_id': task['id'],
                 'message': f"{robot['name']} started {activity.label}.",
-                'data': {},
+                'data': (
+                    {'duration_seconds': task['parameters']['duration_seconds']}
+                    if task['action'] == 'FISH'
+                    else {}
+                ),
             })
+
+    def _complete_planting(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        now: datetime,
+    ) -> None:
+        try:
+            quote = apply_planting(
+                robot['game'],
+                world['farm'],
+                task['parameters'],
+                current_stage=world['game']['stage'],
+                planted_by=robot['id'],
+                planted_at=now,
+            )
+        except CropRuleError as error:
+            robot['task'] = None
+            world['events'].append({
+                'id': f"event-{task['id']}-failed",
+                'timestamp': now,
+                'type': 'task_failed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} could not plant the crop: {error.message}",
+                'data': {'code': error.code},
+            })
+            return
+
+        plot = next(
+            item for item in world['farm']['plots'] if item['id'] == quote.plot_id
+        )
+        remaining = robot['game']['inventory'].get(
+            quote.seed_item_id,
+            {},
+        ).get('quantity', 0)
+        robot['task'] = None
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} used 1 {quote.seed_name}.",
+                'data': {
+                    'item': quote.seed_item_id,
+                    'quantity': -1,
+                    'total_quantity': remaining,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-planted",
+                'timestamp': now,
+                'type': 'crop_planted',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} planted {quote.crop_name} in {quote.plot_id}.",
+                'data': {
+                    'plot_id': quote.plot_id,
+                    'crop_id': quote.crop_id,
+                    'ready_at': plot['ready_at'],
+                },
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed planting {quote.crop_name}.",
+                'data': {},
+            },
+        ])
+
+    def _complete_harvest(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        now: datetime,
+    ) -> None:
+        try:
+            quote = apply_harvest(
+                robot['game'],
+                world['farm'],
+                task['parameters'],
+            )
+        except CropRuleError as error:
+            robot['task'] = None
+            world['events'].append({
+                'id': f"event-{task['id']}-failed",
+                'timestamp': now,
+                'type': 'task_failed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} could not harvest the crop: {error.message}",
+                'data': {'code': error.code},
+            })
+            return
+
+        total_quantity = robot['game']['inventory'][quote.crop_id]['quantity']
+        robot['task'] = None
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': (
+                    f"{robot['name']} collected {quote.quantity} "
+                    f'{quote.crop_name}.'
+                ),
+                'data': {
+                    'item': quote.crop_id,
+                    'quantity': quote.quantity,
+                    'total_quantity': total_quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-harvested",
+                'timestamp': now,
+                'type': 'crop_harvested',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} harvested {quote.crop_name} from {quote.plot_id}.",
+                'data': {
+                    'plot_id': quote.plot_id,
+                    'crop_id': quote.crop_id,
+                    'quantity': quote.quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed harvesting {quote.crop_name}.",
+                'data': {},
+            },
+        ])
+
+    def _complete_fishing(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        now: datetime,
+    ) -> None:
+        catch = task['parameters']['catch']
+        inventory = robot['game']['inventory']
+        current_item = inventory.get(catch['item_id'])
+        total_quantity = (
+            current_item['quantity'] if current_item is not None else 0
+        ) + 1
+        inventory[catch['item_id']] = {
+            'name': catch['item_name'],
+            'quantity': total_quantity,
+            'sell_price': catch['sell_price'],
+        }
+        robot['task'] = None
+        outcome = {
+            'item': catch['item_id'],
+            'tier': catch['tier'],
+            'quantity': 1,
+            'sell_price': catch['sell_price'],
+        }
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} caught 1 {catch['item_name']}.",
+                'data': {
+                    **outcome,
+                    'total_quantity': total_quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-caught",
+                'timestamp': now,
+                'type': 'fish_caught',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': (
+                    f"{robot['name']} landed a {catch['item_name']} "
+                    f"worth {catch['sell_price']} gold."
+                ),
+                'data': outcome,
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed fishing.",
+                'data': outcome,
+            },
+        ])
 
     def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
         try:
@@ -1244,10 +2176,31 @@ class WorldStore:
             },
         ])
 
-        self._unlock_stages(world, current_gold, task, robot, now)
+        self._complete_game_if_ready(
+            world,
+            now,
+            robot_id=robot['id'],
+            event_prefix=task['id'],
+            task_id=task['id'],
+        )
 
-        if current_gold < world['game']['goal']['target']:
-            return
+    def _complete_game_if_ready(
+        self,
+        world: dict,
+        now: datetime,
+        *,
+        robot_id: str,
+        event_prefix: str,
+        task_id: str | None = None,
+    ) -> bool:
+        current_gold = sum(robot['game']['money'] for robot in world['robots'])
+        world['game']['goal']['current'] = current_gold
+        if (
+            world['game']['status'] == 'COMPLETED'
+            or current_gold < world['game']['goal']['target']
+            or world['game']['stage'] < 3
+        ):
+            return False
 
         world['game']['status'] = 'COMPLETED'
         for other_robot in world['robots']:
@@ -1265,42 +2218,15 @@ class WorldStore:
                 'data': {},
             })
         world['events'].append({
-            'id': f"event-{task['id']}-goal",
+            'id': f'event-{event_prefix}-goal',
             'timestamp': now,
             'type': 'game_completed',
-            'robot_id': robot['id'],
-            'task_id': task['id'],
+            'robot_id': robot_id,
+            'task_id': task_id,
             'message': f'The crew reached {current_gold} gold and completed the goal.',
             'data': {},
         })
-
-    @staticmethod
-    def _unlock_stages(
-        world: dict,
-        current_gold: int,
-        task: dict,
-        robot: dict,
-        now: datetime,
-    ) -> None:
-        current_stage = world['game'].get('stage', 1)
-        for stage, threshold, item_id, item_name in STAGE_UNLOCKS:
-            if stage <= current_stage or current_gold < threshold:
-                continue
-            world['game']['stage'] = stage
-            current_stage = stage
-            world['events'].append({
-                'id': f"event-{task['id']}-stage-{stage}",
-                'timestamp': now,
-                'type': 'stage_unlocked',
-                'robot_id': robot['id'],
-                'task_id': task['id'],
-                'message': f'The team unlocked Stage {stage}: {item_name}.',
-                'data': {
-                    'stage': stage,
-                    'item': item_id,
-                    'threshold': threshold,
-                },
-            })
+        return True
 
     def advance_activities(self, elapsed_seconds: float) -> WorldSnapshot:
         if not math.isfinite(elapsed_seconds) or elapsed_seconds <= 0:
@@ -1332,14 +2258,27 @@ class WorldStore:
                 if activity is None or robot['game']['location'] != activity.location:
                     continue
 
+                duration_seconds = (
+                    task['parameters']['duration_seconds']
+                    if task['action'] == 'FISH'
+                    else activity.duration_seconds
+                )
                 progress = min(
                     1,
-                    task['progress'] + elapsed_seconds / activity.duration_seconds,
+                    task['progress'] + elapsed_seconds / duration_seconds,
                 )
                 task['progress'] = progress
                 changed = True
 
                 if progress < 1 - 1e-9:
+                    continue
+
+                if task['action'] == 'HARVEST':
+                    self._complete_harvest(world, robot, task, now)
+                    continue
+
+                if task['action'] == 'FISH':
+                    self._complete_fishing(world, robot, task, now)
                     continue
 
                 inventory = robot['game']['inventory']
@@ -1390,6 +2329,55 @@ class WorldStore:
 
             world['revision'] += 1
             world['updated_at'] = now
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            return self._world.model_copy(deep=True)
+
+    def advance_crop_growth(
+        self,
+        now: datetime | None = None,
+    ) -> WorldSnapshot:
+        observed_at = datetime.now(timezone.utc) if now is None else now
+        if observed_at.utcoffset() is None:
+            raise ValueError('now must include timezone information')
+
+        with self._lock:
+            if self._world.game.status != 'RUNNING':
+                return self._world.model_copy(deep=True)
+
+            world = self._world.model_dump(mode='python')
+            growing_plots = [
+                plot
+                for plot in world['farm']['plots']
+                if plot['status'] == 'GROWING' and plot['ready_at'] <= observed_at
+            ]
+            if not growing_plots:
+                return self._world.model_copy(deep=True)
+
+            crop_names = {
+                crop['id']: crop['name']
+                for crop in world['farm']['crops']
+            }
+            next_revision = world['revision'] + 1
+            for plot in growing_plots:
+                plot['status'] = 'READY'
+                crop_name = crop_names.get(plot['crop_id'], plot['crop_id'])
+                world['events'].append({
+                    'id': f"event-{plot['id']}-ready-{next_revision}",
+                    'timestamp': observed_at,
+                    'type': 'crop_ready',
+                    'robot_id': plot['planted_by'],
+                    'task_id': None,
+                    'message': f"{crop_name} in {plot['id']} is ready to harvest.",
+                    'data': {
+                        'plot_id': plot['id'],
+                        'crop_id': plot['crop_id'],
+                        'ready_at': plot['ready_at'],
+                    },
+                })
+
+            world['revision'] = next_revision
+            world['updated_at'] = observed_at
             world['events'] = world['events'][-100:]
             self._publish(world)
             return self._world.model_copy(deep=True)

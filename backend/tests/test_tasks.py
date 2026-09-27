@@ -1,9 +1,23 @@
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.state import WorldStore, default_world
+
+
+def ready_wheat_plot(world: dict, plot_index: int = 0) -> str:
+    planted_at = datetime.now(timezone.utc) - timedelta(seconds=9)
+    plot = world['farm']['plots'][plot_index]
+    plot.update({
+        'status': 'READY',
+        'crop_id': 'wheat',
+        'planted_by': 'robot-a',
+        'planted_at': planted_at,
+        'ready_at': planted_at + timedelta(seconds=8),
+    })
+    return plot['id']
 
 
 class TaskRouteTests(unittest.TestCase):
@@ -60,15 +74,19 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(response.json()['error']['code'], 'REQUEST_ID_CONFLICT')
 
     def test_collection_task_is_accepted_for_its_required_location(self):
-        self.client.post('/game/start')
+        world = default_world()
+        plot_id = ready_wheat_plot(world)
         request = {
             **self.request,
             'request_id': 'request-harvest-001',
             'action': 'HARVEST',
             'location': 'farm',
+            'parameters': {'plot_id': plot_id},
         }
 
-        response = self.client.post('/tasks', json=request)
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            response = client.post('/tasks', json=request)
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()['action'], 'HARVEST')
@@ -113,20 +131,115 @@ class TaskRouteTests(unittest.TestCase):
             'action': 'FISH',
             'location': 'farm',
         }
-        parameters = {
+        malformed_parameters = {
             **self.request,
             'request_id': 'request-harvest-parameters',
             'action': 'HARVEST',
             'parameters': {'item': 'crop'},
         }
+        not_ready = {
+            **self.request,
+            'request_id': 'request-harvest-not-ready',
+            'action': 'HARVEST',
+            'parameters': {'plot_id': 'plot-1'},
+        }
 
         location_response = self.client.post('/tasks', json=wrong_location)
-        parameters_response = self.client.post('/tasks', json=parameters)
+        parameters_response = self.client.post('/tasks', json=malformed_parameters)
+        not_ready_response = self.client.post('/tasks', json=not_ready)
 
         self.assertEqual(location_response.status_code, 400)
         self.assertEqual(location_response.json()['error']['code'], 'INVALID_REQUEST')
         self.assertEqual(parameters_response.status_code, 400)
         self.assertEqual(parameters_response.json()['error']['code'], 'INVALID_REQUEST')
+        self.assertEqual(not_ready_response.status_code, 409)
+        self.assertEqual(not_ready_response.json()['error']['code'], 'PLOT_NOT_READY')
+
+    def test_plant_task_requires_owned_seed_empty_plot_and_exact_parameters(self):
+        self.client.post('/game/start')
+        base_request = {
+            **self.request,
+            'action': 'PLANT',
+            'location': 'farm',
+            'parameters': {'item': 'seeds', 'plot_id': 'plot-1'},
+        }
+
+        no_seed = self.client.post('/tasks', json={
+            **base_request,
+            'request_id': 'request-plant-no-seed',
+        })
+        malformed = self.client.post('/tasks', json={
+            **base_request,
+            'request_id': 'request-plant-malformed',
+            'parameters': {'item': 'seeds'},
+        })
+        self.assertEqual(no_seed.status_code, 409)
+        self.assertEqual(no_seed.json()['error']['code'], 'INSUFFICIENT_INVENTORY')
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(malformed.json()['error']['code'], 'INVALID_REQUEST')
+
+        world = default_world()
+        world['robots'][0]['game']['inventory']['seeds'] = {
+            'name': 'Wheat Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            wrong_location = client.post('/tasks', json={
+                **base_request,
+                'request_id': 'request-plant-wrong-location',
+                'location': 'market',
+            })
+            unknown_plot = client.post('/tasks', json={
+                **base_request,
+                'request_id': 'request-plant-unknown-plot',
+                'parameters': {'item': 'seeds', 'plot_id': 'plot-99'},
+            })
+            accepted = client.post('/tasks', json={
+                **base_request,
+                'request_id': 'request-plant-accepted',
+            })
+
+        self.assertEqual(wrong_location.status_code, 400)
+        self.assertEqual(wrong_location.json()['error']['code'], 'INVALID_REQUEST')
+        self.assertEqual(unknown_plot.status_code, 404)
+        self.assertEqual(unknown_plot.json()['error']['code'], 'NOT_FOUND')
+        self.assertEqual(accepted.status_code, 202)
+        self.assertEqual(accepted.json()['action'], 'PLANT')
+        self.assertEqual(accepted.json()['parameters'], base_request['parameters'])
+
+    def test_later_crop_planting_requires_its_farm_stage(self):
+        world = default_world()
+        world['robots'][0]['game']['inventory']['carrot_seeds'] = {
+            'name': 'Carrot Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        request = {
+            **self.request,
+            'request_id': 'request-plant-carrot-locked',
+            'action': 'PLANT',
+            'location': 'farm',
+            'parameters': {'item': 'carrot_seeds', 'plot_id': 'plot-1'},
+        }
+
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            locked = client.post('/tasks', json=request)
+
+        self.assertEqual(locked.status_code, 409)
+        self.assertEqual(locked.json()['error']['code'], 'SEED_LOCKED')
+
+        world['game']['stage'] = 2
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            accepted = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-plant-carrot-unlocked',
+            })
+
+        self.assertEqual(accepted.status_code, 202)
 
     def test_sell_task_validates_inventory_and_parameters(self):
         world = default_world()

@@ -16,11 +16,19 @@ The tool also supports two independent robots via `--robots-config
 navigation_robots.json`, with per-robot calibration/targets and a shared emergency
 stop. This local mode is still separate from backend autonomy and task execution.
 
-The immediate milestone is Phase 1 of the game plan: a complete autonomous
-simulation round in which Wall-y and Eeva start at home, collect different
-resources, sell their own inventory, advance the shared repair fund, and trigger
-one clear victory state. Teammate integrations should preserve that scenario in
-hardware mode instead of introducing a second game loop.
+The autonomous simulation baseline is implemented and tested: Wall-y and Eeva can
+start at home, collect different resources, sell their own inventory, agree on
+paid permanent farming stages, and complete the shared gold goal without a browser.
+
+Phase 3's seed → plant → grow → harvest → sell slice is complete for Wheat,
+Carrots, and Pumpkins against the schema-version-4 shared farm, fishing, and economy state. Mock autonomy
+compares unlocked crop returns and avoids duplicate plot claims or excess seed
+purchases. The Crop Queue derives its display and live countdown from `world.farm`
+and is never authoritative itself. Hardware
+work should preserve the task and safety contracts: `PLANT` mutates a plot on
+arrival, and `HARVEST` clears a ready plot only after its activity completes.
+`FISH` accepts no client parameters; the backend fixes its duration and catch at
+assignment and stores both in the canonical task.
 
 ## Shared setup
 
@@ -86,7 +94,7 @@ credential-dependent TimescaleDB test is expected to skip when
 | Localization | `POST /robots/{id}/pose` |
 | Navigation | World snapshots containing active tasks, `POST /robots/{id}/arrived`, and `POST /robots/{id}/blocked` |
 | Robot adapter | World snapshots containing stop state and `POST /robots/{id}/health` |
-| Agents | `POST /tasks` using the same validation as manual actions; agent-chat routes are a spectator preview |
+| Agents | `POST /tasks` for physical work plus the `/economy` transaction routes; agent-chat routes are a spectator preview |
 | Database/history | Backend-owned persistence plus `GET /events` and `GET /robots/{id}/history` |
 
 FastAPI's interactive route documentation is available at `/docs` while the
@@ -100,6 +108,11 @@ backend is running. Payload meaning and lifecycle rules live in [api.md](api.md)
 - Send commands over HTTP; the world WebSocket is server-to-client only.
 - Render the returned robot list and market data instead of assuming fixed names,
   counts, balances, stock, or prices.
+- Render the Crop Queue from `world.farm.plots`; omit `EMPTY` plots, show `READY`
+  plots first, then order `GROWING` plots by `ready_at`. Never run an authoritative
+  browser-only growth timer.
+- The Market UI is purchase-only. Robot sales still execute through validated
+  tasks and appear as transient parchment notifications from world events.
 - Show connection loss and reconnect with bounded backoff. Fetch `GET /world` at
   startup, but do not let an older REST response overwrite a newer socket state.
 - Set `VITE_API_BASE_URL` when the backend is not at `http://localhost:8000`, and
@@ -141,10 +154,21 @@ team's chosen private transport to reach the ESP32.
 
 ## Agent checklist
 
-- Submit only `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, or `SELL` through
-  `POST /tasks`. `WAIT` means do not submit a task.
+- Submit `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, or `PLANT`
+  through `POST /tasks`. Economy decisions use the dedicated proposal, response,
+  request, and transfer routes. `WAIT` means do not submit a command.
+- Submit `PLANT` at `farm` with exactly `item` and `plot_id`. It completes on
+  confirmed arrival and may still fail if the seed or empty plot is no longer
+  available.
+- Submit `HARVEST` at `farm` with exactly `plot_id`. The plot must be `READY` at
+  assignment and completion; a competing winner causes `PLOT_NOT_READY` without a
+  duplicate reward.
+- Submit `FISH` at `lake` with empty parameters. Observe the returned task's
+  resolved `duration_seconds` and `catch`; never generate or reroll them in an
+  adapter.
 - Generate one stable `request_id` per intended task and reuse it only when retrying
-  that identical request. A retry returns the same task in its latest state.
+  that identical request. Apply the same rule to economy commands. A retry returns
+  the same canonical result without charging or transferring twice.
 - Respect the required locations and trade parameters documented in `api.md`.
 - Treat an accepted task as assigned, not completed. Observe the task or world
   feed until it becomes `COMPLETED`, `FAILED`, or `CANCELLED`.

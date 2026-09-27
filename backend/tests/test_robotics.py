@@ -200,14 +200,15 @@ class ArrivalRouteTests(unittest.TestCase):
 
     def test_arrival_starts_activity_without_granting_reward(self):
         task = self.assign_task(
-            request_id='arrival-harvest-001',
-            action='HARVEST',
+            request_id='arrival-fish-001',
+            action='FISH',
+            location='lake',
         )
-        before_quantity = self.store.snapshot().robots[0].game.inventory.get('crop')
+        before_quantity = self.store.snapshot().robots[0].game.inventory.get('fish')
         report = {
             'session_id': self.store.snapshot().session_id,
             'task_id': task['id'],
-            'location': 'farm',
+            'location': 'lake',
         }
 
         response = self.client.post('/robots/robot-a/arrived', json=report)
@@ -216,7 +217,7 @@ class ArrivalRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(arrived.robots[0].task.status, 'ACTIVE')
         self.assertEqual(arrived.robots[0].task.progress, 0)
-        self.assertEqual(arrived.robots[0].game.inventory.get('crop'), before_quantity)
+        self.assertEqual(arrived.robots[0].game.inventory.get('fish'), before_quantity)
         self.assertEqual(arrived.events[-2].type, 'robot_arrived')
         self.assertEqual(arrived.events[-1].type, 'task_started')
 

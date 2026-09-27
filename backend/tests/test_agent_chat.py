@@ -28,6 +28,25 @@ class ChatTests(unittest.TestCase):
         world['session_id'] = 'new-game'
         self.assertEqual(chat.context(world)['agent_messages'], [])
 
+    def test_plant_message_keeps_seed_and_plot_parameters(self):
+        chat = AgentChat()
+        world = demo_world()
+        decision = Decision(
+            action='PLANT',
+            location='farm',
+            item='seeds',
+            plot_id='plot-2',
+            reason='Fill an empty plot',
+            message='I will plant the next wheat crop.',
+        )
+
+        chat.publish(world, 'robot-a', decision, status='accepted')
+
+        self.assertEqual(
+            chat.snapshot()['messages'][0]['parameters'],
+            {'item': 'seeds', 'plot_id': 'plot-2'},
+        )
+
     def test_repeated_speech_is_silent_but_new_trade_details_are_not(self):
         chat = AgentChat()
         world = demo_world()

@@ -70,14 +70,14 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 4,
   "session_id": "session-001",
   "revision": 12,
   "updated_at": "2026-09-25T14:00:00.000Z",
   "mode": "simulation",
   "game": {
     "status": "RUNNING",
-    "goal": { "type": "earn_gold", "target": 500, "current": 80 },
+    "goal": { "type": "earn_gold", "target": 200, "current": 80 },
     "stage": 1
   },
   "map": {
@@ -107,7 +107,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
         "location": "farm",
         "money": 40,
         "inventory": {
-          "wheat": { "name": "Wheat", "quantity": 2, "sell_price": 10 },
+          "wheat": { "name": "Wheat", "quantity": 2, "sell_price": 12 },
           "seeds": { "name": "Wheat Seeds", "quantity": 1, "sell_price": null }
         }
       },
@@ -118,7 +118,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
         "location": "farm",
         "status": "ACTIVE",
         "progress": 0.67,
-        "parameters": {},
+        "parameters": { "plot_id": "plot-1" },
         "reason": "Harvest wheat to sell at the market.",
         "error": null
       }
@@ -150,6 +150,36 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       { "id": "pumpkin_seeds", "name": "Pumpkin Seeds", "buy_price": 20, "sell_price": null, "stock": null, "required_stage": 3, "unlock_at": 150 }
     ]
   },
+  "farm": {
+    "crops": [
+      { "id": "wheat", "name": "Wheat", "seed_item_id": "seeds", "grow_seconds": 8, "harvest_quantity": 3, "sell_price": 12, "required_stage": 1 },
+      { "id": "carrot", "name": "Carrots", "seed_item_id": "carrot_seeds", "grow_seconds": 12, "harvest_quantity": 3, "sell_price": 20, "required_stage": 2 },
+      { "id": "pumpkin", "name": "Pumpkins", "seed_item_id": "pumpkin_seeds", "grow_seconds": 18, "harvest_quantity": 3, "sell_price": 32, "required_stage": 3 }
+    ],
+    "plots": [
+      { "id": "plot-1", "status": "READY", "crop_id": "wheat", "planted_by": "robot-a", "planted_at": "2026-09-25T13:59:45.000Z", "ready_at": "2026-09-25T13:59:53.000Z" },
+      { "id": "plot-2", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null },
+      { "id": "plot-3", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null }
+    ]
+  },
+  "fishing": {
+    "min_duration_seconds": 5,
+    "max_duration_seconds": 15,
+    "tiers": [
+      { "id": "common_fish", "name": "Common Fish", "sell_price": 1, "probability": 0.70 },
+      { "id": "uncommon_fish", "name": "Uncommon Fish", "sell_price": 5, "probability": 0.25 },
+      { "id": "rare_fish", "name": "Extremely Rare Fish", "sell_price": 15, "probability": 0.05 }
+    ]
+  },
+  "economy": {
+    "unlocks": [
+      { "stage": 2, "item_id": "carrot_seeds", "item_name": "Carrot Seeds", "eligibility_gold": 100, "cost": 30, "unlocked": false },
+      { "stage": 3, "item_id": "pumpkin_seeds", "item_name": "Pumpkin Seeds", "eligibility_gold": 150, "cost": 60, "unlocked": false }
+    ],
+    "unlock_proposals": [],
+    "money_requests": [],
+    "transfers": []
+  },
   "events": [
     {
       "id": "event-001",
@@ -172,7 +202,13 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - Every endpoint returning a robot uses the canonical robot shape above. `task` is the current nonterminal task or `null`; terminal tasks remain available in task history.
 - `physical.online` describes robot communication; `tracking` independently describes localization: `TRACKED`, `STALE`, or `UNKNOWN`. Initially pose and pose timestamp are `null`, and tracking is `UNKNOWN`. A stale pose may remain for display but must not be treated as fresh control input. The hardware adapter defines and documents its freshness threshold before live driving.
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
-- The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` is the combined-gold threshold that permanently advances to that stage, or `null` for initially unlocked items. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
+- The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` mirrors the eligibility threshold for display and does not advance the stage by itself. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
+- `farm.crops` is the authoritative crop catalog. `farm.plots` contains three shared plots; nonempty plots reference a crop and planter by stable ID and carry backend-owned timestamps.
+- `fishing` is the authoritative attempt-duration and reward catalog. Tier
+  probabilities total 1; clients render these values but never choose a reward.
+- `economy.unlocks` defines the eligibility and paid cost for each later stage.
+  Proposal, money-request, and transfer arrays retain the current session's
+  canonical transaction history. Clients must not infer an unlock from gold alone.
 - `events` contains the latest 100 semantic events, oldest first. Pose samples are not feed events. Event `robot_id` and `task_id` may be `null`. `data` contains optional details; the UI can always display `message`.
 
 ## Frontend-facing HTTP API
@@ -185,6 +221,12 @@ Routes below are the proposed MVP surface. Empty request bodies are shown as “
 | `GET /robots` | none | `200`: `{ "robots": [...] }`, canonical robots |
 | `GET /robots/{id}` | none | `200`: canonical robot |
 | `GET /market` | none | `200`: canonical market object |
+| `GET /economy` | none | `200`: canonical economy object |
+| `POST /economy/transfers` | direct transfer request below | `201`: canonical transfer |
+| `POST /economy/money-requests` | money request below | `201`: canonical pending money request |
+| `POST /economy/money-requests/{id}/respond` | economy response below | `200`: accepted or rejected money request |
+| `POST /economy/unlock-proposals` | stage proposal below | `201`: canonical pending unlock proposal |
+| `POST /economy/unlock-proposals/{id}/respond` | economy response below | `200`: pending, completed, or rejected proposal |
 | `POST /goal` | `{ "type": "earn_gold", "target": 500 }` | `200`: updated goal object; allowed only in `READY`, with a target above current gold |
 | `POST /game/start` | none | `200`: world snapshot; starts from `READY`, resumes from `STOPPED` |
 | `POST /game/stop` | none | `200`: world snapshot after stop is latched |
@@ -196,6 +238,73 @@ Routes below are the proposed MVP surface. Empty request bodies are shown as “
 | `GET /tasks/{id}` | none | `200`: canonical task, including terminal results |
 
 Repeated start while running and repeated stops succeed without repeating side effects. Starting a completed game returns `409`; reset first. Reset cancels work and stops the fleet before clearing game state. In hardware mode it does not teleport robots or assert that they are at home; preserve actual telemetry and await fresh localization. In simulation, reset may place them at home.
+
+### Cooperative economy
+
+Economy commands are separate from physical tasks because they do not require a
+destination or occupy a robot. Every body carries a stable `request_id`. Retrying
+the identical command returns its existing result; reusing the ID for different
+data returns `409 REQUEST_ID_CONFLICT`.
+
+Direct transfer:
+
+```json
+{
+  "request_id": "transfer-001",
+  "sender_id": "robot-a",
+  "recipient_id": "robot-b",
+  "amount": 10,
+  "purpose": "Help buy carrot seeds"
+}
+```
+
+Money request:
+
+```json
+{
+  "request_id": "money-request-command-001",
+  "requester_id": "robot-a",
+  "recipient_id": "robot-b",
+  "amount": 10,
+  "purpose": "Fund my proposed contribution"
+}
+```
+
+Only the named recipient may answer a pending money request. The same response
+shape is used to answer a stage proposal:
+
+```json
+{
+  "request_id": "response-001",
+  "robot_id": "robot-b",
+  "accepted": true
+}
+```
+
+A robot may have only one pending outgoing money request. Acceptance rechecks the
+recipient wallet, debits and credits atomically, and records a linked transfer.
+Rejection changes no wallet. Direct and accepted-request transfers preserve the
+combined-gold total.
+
+Stage unlock proposal:
+
+```json
+{
+  "request_id": "unlock-command-001",
+  "proposer_id": "robot-a",
+  "stage": 2,
+  "contributions": { "robot-a": 20, "robot-b": 10 }
+}
+```
+
+Only the next stage can be proposed, its combined-gold eligibility must be met,
+and there may be only one pending unlock proposal. Contributions must include
+every robot exactly once, each contribution must be a positive integer, and the
+sum must equal the rule's cost. The proposer accepts automatically. No gold moves
+until every robot accepts; final acceptance rechecks each wallet, deducts every
+contribution in one state change, permanently advances `game.stage`, and publishes
+`unlock_contribution` plus `stage_unlocked` events. Any rejection closes the
+proposal without charging anyone and permits a new proposal.
 
 Game stop cancels unfinished tasks, disables autonomous dispatch, and requests a fleet-wide motor stop. Robot stop does the equivalent for one robot. Controllers must invalidate active movement commands so their next update cannot restart motion. Resume allows new tasks; cancelled tasks never automatically resume. Game start clears a game-level pause but must not clear a separately requested robot stop. A `200` stop response confirms backend acceptance, not proof of physical motor delivery; communication loss is still covered by the onboard watchdog.
 
@@ -221,15 +330,63 @@ checks replay before checking whether the robot is busy.
 | MVP action | Location | Parameters | Completion |
 | --- | --- | --- | --- |
 | `MOVE_TO` | Any configured location | `{}` | Confirmed arrival |
-| `HARVEST` | `farm` | `{}` | Arrival plus backend activity timer; adds crop |
-| `FISH` | `lake` | `{}` | Arrival plus backend activity timer; adds fish |
+| `HARVEST` | `farm` | `plot_id` | Arrival plus backend activity timer; empties one ready plot and grants its crop |
+| `FISH` | `lake` | `{}` | Arrival plus one resolved 5–15 second timer; grants one resolved fish tier |
 | `BUY` | `market` | `item`, `quantity` | Arrival plus validated transaction |
 | `SELL` | `market` | `item`, `quantity` | Arrival plus validated transaction |
+| `PLANT` | `farm` | `item`, `plot_id` | Arrival plus validated seed consumption; creates a `GROWING` plot |
 | `RETURN_HOME` | `homebase` | `{}` | Confirmed arrival |
 
 `location` is required and validated against the action. One nonterminal task per robot; competing requests receive `409`. The game must be running and the robot available. A robot already confirmed in the required zone can skip navigation.
 
-Shop buttons submit `BUY`/`SELL` tasks for the selected robot. They do not immediately alter its wallet from anywhere on the map. Check stage access, stock, prices, funds, and inventory again when the transaction executes; apply inventory and currency changes atomically and only once. Use execution-time prices for the MVP and explain this in the shop UI. A locked item returns `SEED_LOCKED`; a failed execution fails the task without a partial transaction.
+The shipped Market UI submits `BUY` tasks only. Autonomous agents can submit
+`BUY`, `PLANT`, `HARVEST`, and `SELL` to maintain the crop loop. The mock planner
+compares unlocked crops by net return per growth second and accounts for owned
+seeds, pending purchases, and claimed plots before buying or planting. Successful
+purchases and sales appear as transient frontend
+notifications derived from authoritative world events. A task does not immediately
+alter a wallet from anywhere on the map.
+Check stage access, stock, prices, funds, and inventory again when the transaction
+executes; apply inventory and currency changes atomically and only once. Use
+execution-time prices for the MVP. A locked item returns `SEED_LOCKED`; a failed
+execution fails the task without a partial transaction.
+
+`PLANT` always consumes exactly one seed and accepts exactly `item` and `plot_id`,
+for example `{ "item": "carrot_seeds", "plot_id": "plot-1" }`. The item must map
+to an authoritative crop definition unlocked for the current stage. Assignment
+checks that the acting robot owns the seed and the plot is empty. Arrival repeats
+those checks atomically before removing the seed and setting `crop_id`,
+`planted_by`, `planted_at`, `ready_at`, and status `GROWING`. If another robot
+claims the plot first, execution fails with `PLOT_OCCUPIED` and keeps the seed.
+Cancellation before arrival also keeps the seed.
+
+`HARVEST` accepts exactly `{ "plot_id": "plot-1" }`. Assignment requires that the
+plot exists and is `READY`. Completion repeats that check before granting the crop
+and atomically returning the plot to `EMPTY`. If another robot harvests it first,
+the losing task fails with `PLOT_NOT_READY` and receives no inventory. Cancellation
+keeps the plot ready, and retrying the same completed request cannot grant it twice.
+
+`FISH` accepts no parameters from clients. When the task is first assigned, the
+backend resolves one duration and one catch from `world.fishing` and stores them
+in the canonical task parameters:
+
+```json
+{
+  "duration_seconds": 7.314,
+  "catch": {
+    "item_id": "uncommon_fish",
+    "item_name": "Uncommon Fish",
+    "sell_price": 5,
+    "tier": "uncommon_fish"
+  }
+}
+```
+
+That result is fixed before travel begins. Reconnects and identical `request_id`
+retries return the same task and cannot reroll or duplicate its catch. Completion
+adds one tier-specific inventory item and publishes `fish_caught`. Set
+`FISHING_RANDOM_SEED` to an integer for a repeatable sequence; simulation defaults
+to seed `0`, while hardware uses system randomness when the setting is absent.
 
 Task lifecycle:
 
@@ -237,9 +394,34 @@ Task lifecycle:
 ASSIGNED → NAVIGATING → ACTIVE → COMPLETED
 ```
 
-Navigation may be skipped when already at the destination. Movement-only tasks complete on arrival without an activity timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measures activity completion, not distance traveled: it stays zero during navigation, advances during an activity, and is one on completion. Terminal failure includes `error: { "code": "...", "message": "..." }`; otherwise error is `null`. Cancellation or failure never grants the completion reward. Goal completion sets the game to `COMPLETED`, cancels remaining work, and stops dispatch and movement.
+Navigation may be skipped when already at the destination. Movement-only tasks and
+arrival-time transactions (`BUY`, `SELL`, and `PLANT`) complete without an activity
+timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measures
+activity completion, not distance traveled: it stays zero during navigation,
+advances during an activity, and is one on completion. Terminal failure includes
+`error: { "code": "...", "message": "..." }`; otherwise error is `null`.
+Cancellation or failure never grants the completion reward. Goal completion
+requires both the target combined gold and Stage 3, then sets the game to
+`COMPLETED`, cancels remaining work, and stops dispatch and movement.
 
-Planting, growth cycles, upgrades, and `WAIT` need not be implemented to support this contract. Initially `HARVEST` can mean a simple timed collection without seed consumption. Any agent waiting behavior can simply defer task submission.
+Contract version 4 adds the authoritative `fishing` catalog and resolved fishing
+task parameters to version 3's `economy`, `farm.crops`, and three shared
+`farm.plots`. Empty plots
+contain null crop metadata. A nonempty plot has status `GROWING` or `READY` and
+must include `crop_id`, `planted_by`, `planted_at`, and `ready_at`. Clients derive
+the visible queue from these records: omit empty plots, show ready plots first,
+then sort growing plots by `ready_at`.
+
+The `PLANT` action populates version 2 plots with backend timestamps. While the game
+is running, the backend game loop changes each due `GROWING` plot to `READY` once
+and publishes a `crop_ready` event containing `plot_id`, `crop_id`, and `ready_at`.
+This continues without a connected browser and uses the same rule in simulation
+and hardware modes. If the game is stopped when a timer elapses, the absolute
+timestamp is preserved and the crop becomes ready on the first tick after resume.
+`HARVEST` then consumes one ready plot through a backend activity timer, grants the
+crop definition's `harvest_quantity` and `sell_price`, publishes `crop_harvested`,
+and clears all plot crop metadata. Internal `WAIT` behavior still defers task
+submission.
 
 ### Errors
 
@@ -259,8 +441,9 @@ for conflicting state or unavailable funds/stock, `422` for malformed or
 schema-invalid payloads handled by FastAPI, and `503` for an unavailable required
 subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`,
 `GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`,
-`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SEED_LOCKED`, and
-`PERSISTENCE_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
+`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SEED_LOCKED`,
+`PLOT_OCCUPIED`, `PLOT_NOT_READY`, and `PERSISTENCE_UNAVAILABLE`. Do not expose
+secrets or stack traces in errors.
 
 ## Live updates: WebSocket /events
 
@@ -270,7 +453,7 @@ For the MVP, use complete snapshots rather than requiring clients to assemble st
 {
   "type": "world_snapshot",
   "data": {
-    "schema_version": 1,
+    "schema_version": 4,
     "session_id": "session-001",
     "revision": 12
   }
@@ -281,7 +464,7 @@ The abbreviated `data` above must contain the **entire canonical world object** 
 
 The frontend replaces its state with each newer snapshot, deduplicates feed events by `(session_id, event.id)`, and discards lower/equal revisions within a session. Only the current socket connection may apply updates. A different session clears old tasks, events, and revision tracking. On reconnect, the server sends current state; replay of every missed event is not required. Display disconnection and retry with bounded backoff, for example 1, 2, 4, then 5 seconds. A REST snapshot used at startup follows the same revision checks and must not overwrite newer socket state.
 
-Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `gold_updated`, `market_updated`, `help_requested`, `help_accepted`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
+Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `fish_caught`, `gold_updated`, `market_updated`, `money_requested`, `money_request_accepted`, `money_request_rejected`, `money_transferred`, `stage_unlock_proposed`, `stage_unlock_accepted`, `stage_unlock_rejected`, `unlock_contribution`, `stage_unlocked`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
 
 ## Robotics integration boundary
 
@@ -350,7 +533,10 @@ decisions defer submission; they do not add a public task action or endpoint.
 The standalone CLI uses a temporary demo task sink, not the backend or frontend
 simulation. See `backend/README.md` for environment settings and integration.
 
-Cooperation is the next integration milestone after the individual gameplay loop. Reserve `help_requested` and `help_accepted` feed events, but do not require a speculative co-op API to unblock the frontend. Before implementing cooperation, agree on a shared objective ID, participant list, invitation/acceptance flow, waiting/active/completed/cancelled states, reward split, and timeout/cancellation behavior. Both robots must have confirmed arrival before the shared activity starts, and its reward must be applied once. The exact objective and agent communication mechanism remain open.
+Cooperative stage and money actions use the dedicated economy routes above and do
+not create movement tasks. Mock and Gemini planners submit those commands through
+the same session-checked host boundary used for task assignment. Additional
+physical co-op activities that require both robots at one location remain future work.
 
 ## Working without hardware
 
@@ -359,15 +545,18 @@ Build a simulator behind the same backend interface. It supplies pose, arrival, 
 Suggested first demo scenario:
 
 1. Seed two robots at home with a small wallet; game starts in `READY`.
-2. Start the game and assign robot A to harvest and robot B to fish.
-3. Simulate changing positions and confirmed arrivals.
-4. Advance backend activity progress, complete tasks, and grant resources once.
-5. Assign a sell task; travel to market, remove inventory, and increase gold.
-6. Verify that the map, task view, shop, wallets, and event feed agree.
-7. Disconnect/reconnect the browser and confirm that the next snapshot restores current state.
-8. Stop during navigation and confirm that no activity or reward occurs for the cancelled task.
+2. Buy an unlocked seed, plant an empty plot, and wait for backend-owned readiness.
+3. Harvest that ready plot while the second robot fishes.
+4. Simulate changing positions and confirmed arrivals.
+5. Advance backend activity progress and grant each resource once.
+6. Assign sell tasks; remove inventory and increase gold.
+7. Verify that the map, Crop Queue, task view, shop, wallets, and event feed agree.
+8. Disconnect/reconnect the browser and confirm that the next snapshot restores current state.
+9. Stop during navigation or activity and confirm that no cancelled task grants a reward.
 
-Initially scripted task requests can exercise this scenario; autonomous agent decisions replace those requests later. Simulation is a development tool, while the final physical demo still requires genuine navigation and arrival.
+Scripted task requests and autonomous agent decisions both exercise this scenario.
+Simulation is a development tool, while the final physical demo still requires
+genuine navigation and arrival.
 
 ## Implementation order and open choices
 
@@ -403,7 +592,7 @@ A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussio
   "text": "I propose harvesting at the farm. Eeva, can you cover the lake?",
   "action": "HARVEST",
   "location": "farm",
-  "parameters": {},
+  "parameters": { "plot_id": "plot-1" },
   "status": "proposed"
 }
 ```

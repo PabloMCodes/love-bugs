@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import os
+from random import Random
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,7 +42,10 @@ def create_app(
     if world_store is None:
         initial = default_world(config.game_mode)
         initial['session_id'] = str(uuid4())
-        store = WorldStore(initial)
+        fishing_seed = config.fishing_random_seed
+        if fishing_seed is None and config.game_mode == 'simulation':
+            fishing_seed = 0
+        store = WorldStore(initial, fishing_rng=Random(fishing_seed))
     else:
         store = world_store
     game_loop_enabled = world_store is None if run_simulator is None else run_simulator

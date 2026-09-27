@@ -1,5 +1,11 @@
 # Love Bugs: project and Codex handoff
 
+> **Historical snapshot:** This handoff was prepared before `gameLogic` was merged
+> into `main`. Its physical-test evidence and operational runbooks remain useful,
+> but its statements about unmerged crop/economy/fishing work are no longer
+> current. Use [PROJECT_STATUS.md](PROJECT_STATUS.md) for the consolidated merged
+> implementation status, current goals, and verification result.
+
 Prepared 2026-09-27. Implementation baseline: **main at `2da2936`**, before this
 handoff-only commit. Teammate camera runbook `4a218a1` was incorporated during
 final synchronization; it changes documentation only. Remote branch comparison: **origin/gameLogic at `6eb14fc`**.

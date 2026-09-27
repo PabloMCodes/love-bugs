@@ -9,7 +9,13 @@ export default function AgentChat({ world }) {
     const lastMessage = messages.at(-1)?.id;
 
     useEffect(() => {
-        if (follow.current && list.current) list.current.scrollTop = list.current.scrollHeight;
+        if (!follow.current || !list.current) return;
+
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        list.current.scrollTo({
+            top: list.current.scrollHeight,
+            behavior: reducedMotion ? 'auto' : 'smooth',
+        });
     }, [lastMessage]);
 
     return (
@@ -49,7 +55,7 @@ export default function AgentChat({ world }) {
                         const element = list.current;
                         follow.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
                     }}
-                    className="market-scrollbar mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
+                    className="chat-message-feed market-scrollbar mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
                 >
                     {messages.length === 0 && (
                         <p className="chat-message-bubble px-5 pb-7 pt-4 text-sm text-[#46677c]">
@@ -61,7 +67,7 @@ export default function AgentChat({ world }) {
                             key={message.id}
                             className={`chat-message-bubble px-5 pb-7 pt-4 text-[#15364a] ${
                                 message.robot_id === 'robot-b' ? 'chat-message-bubble-reversed' : ''
-                            }`}
+                            } ${message.id === lastMessage ? 'chat-message-enter' : ''}`}
                         >
                             <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                                 <span className="font-bold text-[#287aa2]">{message.name}</span>

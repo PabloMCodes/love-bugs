@@ -47,6 +47,7 @@ class SimulationRunner:
         if world.game.status != 'RUNNING':
             return
 
+        self.store.advance_crop_growth()
         self.store.advance_activities(self.interval_seconds)
         world = self.store.snapshot()
         if world.mode != 'simulation':
@@ -64,6 +65,7 @@ class SimulationRunner:
                     'FISH',
                     'BUY',
                     'SELL',
+                    'PLANT',
                 )
                 or task.status not in ('ASSIGNED', 'NAVIGATING')
                 or robot.physical.pose is None

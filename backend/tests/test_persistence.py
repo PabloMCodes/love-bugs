@@ -22,31 +22,32 @@ class PersistenceTests(unittest.TestCase):
             sid = first['session_id']
             self.assertEqual(first['map']['locations']['homebase'], {'x': 50.0, 'y': 30.0})
             client.post('/game/start').raise_for_status()
-            request = {'request_id': 'harvest', 'robot_id': 'robot-a', 'action': 'HARVEST',
-                       'location': 'farm', 'reason': 'Collect wheat together.'}
+            request = {'request_id': 'fish', 'robot_id': 'robot-a', 'action': 'FISH',
+                       'location': 'lake', 'reason': 'Collect fish together.'}
             task = client.post('/tasks', json=request)
             self.assertEqual(task.status_code, 202)
+            catch_id = task.json()['parameters']['catch']['item_id']
             revision = client.get('/world').json()['revision']
             self.assertEqual(client.post('/tasks', json=request).json(), task.json())
             self.assertEqual(client.get('/world').json()['revision'], revision)
-            for _ in range(40):
+            for _ in range(80):
                 app.state.simulator.tick()
             final = client.get('/world').json()
             self.assertIsNone(final['robots'][0]['task'])
-            self.assertEqual(final['robots'][0]['game']['inventory']['crop']['quantity'], 3)
+            self.assertEqual(final['robots'][0]['game']['inventory'][catch_id]['quantity'], 1)
             # Actual economy effects must be durable, not only movement/events.
             before_money = final['robots'][0]['game']['money']
-            price = final['robots'][0]['game']['inventory']['crop']['sell_price']
-            sale = {'request_id': 'sell-crops', 'robot_id': 'robot-a', 'action': 'SELL',
-                    'location': 'market', 'parameters': {'item': 'crop', 'quantity': 2}}
+            price = final['robots'][0]['game']['inventory'][catch_id]['sell_price']
+            sale = {'request_id': 'sell-fish', 'robot_id': 'robot-a', 'action': 'SELL',
+                    'location': 'market', 'parameters': {'item': catch_id, 'quantity': 1}}
             accepted = client.post('/tasks', json=sale)
             self.assertEqual(accepted.status_code, 202)
             self.assertEqual(client.post('/tasks', json=sale).json(), accepted.json())
             for _ in range(40):
                 app.state.simulator.tick()
             final = client.get('/world').json()
-            self.assertEqual(final['robots'][0]['game']['money'], before_money + 2*price)
-            self.assertEqual(final['robots'][0]['game']['inventory']['crop']['quantity'], 1)
+            self.assertEqual(final['robots'][0]['game']['money'], before_money + price)
+            self.assertNotIn(catch_id, final['robots'][0]['game']['inventory'])
             self.assertEqual(Store(self.settings).world(sid), final)
             events = client.get('/events').json()['events']
             self.assertEqual(events, final['events'])
