@@ -25,14 +25,7 @@ export default function BuyPanel({ disabled = false, market, onBuyItem, robots, 
                     >
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <div className="flex items-center gap-2">
-                                    <h3 className="font-semibold">{item.name}</h3>
-                                    {locked && (
-                                        <span className="rounded-full bg-stone-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100">
-                                            Stage {item.required_stage}
-                                        </span>
-                                    )}
-                                </div>
+                                <h3 className="font-semibold">{item.name}</h3>
                                 <p className="mt-1 text-xs text-[#805431]">
                                     {locked
                                         ? `Locked until the team reaches ${item.unlock_at} combined gold`
@@ -43,9 +36,15 @@ export default function BuyPanel({ disabled = false, market, onBuyItem, robots, 
                                 </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
-                                <p className="text-sm font-bold text-[#7e351f]">
-                                    {item.buy_price} gold
-                                </p>
+                                {locked ? (
+                                    <span className="rounded-full bg-stone-700 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-100">
+                                        Stage {item.required_stage}
+                                    </span>
+                                ) : (
+                                    <p className="text-sm font-bold text-[#7e351f]">
+                                        {item.buy_price} gold
+                                    </p>
+                                )}
                                 <button
                                     type="button"
                                     disabled={!canBuy}
