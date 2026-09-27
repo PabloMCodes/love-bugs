@@ -13,7 +13,7 @@ schema, endpoints, tests, examples, and consumers are updated together.
 
 ## Game fantasy
 
-Wall-y and Eve run an autonomous farming and fishing business. They decide how to
+Wall-y and Eeve run an autonomous farming and fishing business. They decide how to
 spend their own money, which activities are worth their time, when to take a safe
 farming return, and when to gamble on fishing. Their long-term objective is to
 grow the business through three crop stages and reach the final money goal.
@@ -150,7 +150,7 @@ the entire unlock after both consent, remains an open balancing decision.
 
 ## Individual economy
 
-Wall-y and Eve always retain separate:
+Wall-y and Eeve always retain separate:
 
 - Wallet balances.
 - Seed inventories.
@@ -343,10 +343,10 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 
 ### Fishing
 
-1. Eve starts fishing at the lake.
+1. Eeve starts fishing at the lake.
 2. One duration from 5–15 seconds is fixed for that attempt.
 3. Completion resolves one fish tier exactly once.
-4. The fish remains in Eve's inventory until sold.
+4. The fish remains in Eeve's inventory until sold.
 5. Seeded tests can reproduce duration and tier outcomes.
 
 ### Cooperative unlock
