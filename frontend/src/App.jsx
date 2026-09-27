@@ -5,6 +5,7 @@ import RobotPanel from './components/RobotPanel.jsx';
 import WorldMap from './components/WorldMap.jsx';
 import AgentChat from './components/AgentChat.jsx';
 import GameControls from './components/GameControls.jsx';
+import CropPanel from './components/CropPanel.jsx';
 
 export default function App() {
     const {
@@ -19,7 +20,7 @@ export default function App() {
 
     return (
         <main className="app-background h-dvh overflow-hidden px-6 py-4 text-stone-100">
-            <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-4 overflow-y-auto lg:overflow-hidden">
+            <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 overflow-y-auto lg:overflow-hidden">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
                     <h1 className="section-title col-start-2 text-center text-5xl font-black leading-none sm:text-6xl">
                         Love Bugs
@@ -57,7 +58,8 @@ export default function App() {
                     onStop={stopSession}
                 />
 
-                <div className="grid min-h-80 w-full auto-rows-[20rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-3 lg:grid-rows-1 lg:auto-rows-auto">
+                <div className="grid min-h-80 w-full auto-rows-[20rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-4 lg:grid-rows-1 lg:auto-rows-auto">
+                    <CropPanel />
                     <MarketPanel
                         market={world.market}
                         game={world.game}
