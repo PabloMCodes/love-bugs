@@ -34,10 +34,23 @@ class PersistenceTests(unittest.TestCase):
             final = client.get('/world').json()
             self.assertIsNone(final['robots'][0]['task'])
             self.assertEqual(final['robots'][0]['game']['inventory']['crop']['quantity'], 3)
+            # Actual economy effects must be durable, not only movement/events.
+            before_money = final['robots'][0]['game']['money']
+            price = final['robots'][0]['game']['inventory']['crop']['sell_price']
+            sale = {'request_id': 'sell-crops', 'robot_id': 'robot-a', 'action': 'SELL',
+                    'location': 'market', 'parameters': {'item': 'crop', 'quantity': 2}}
+            accepted = client.post('/tasks', json=sale)
+            self.assertEqual(accepted.status_code, 202)
+            self.assertEqual(client.post('/tasks', json=sale).json(), accepted.json())
+            for _ in range(40):
+                app.state.simulator.tick()
+            final = client.get('/world').json()
+            self.assertEqual(final['robots'][0]['game']['money'], before_money + 2*price)
+            self.assertEqual(final['robots'][0]['game']['inventory']['crop']['quantity'], 1)
             self.assertEqual(Store(self.settings).world(sid), final)
             events = client.get('/events').json()['events']
             self.assertEqual(events, final['events'])
-            self.assertEqual(sum(e['type'] == 'task_completed' for e in events), 1)
+            self.assertEqual(sum(e['type'] == 'task_completed' for e in events), 2)
             history = client.get('/robots/robot-a/history').json()
             self.assertGreater(len(history['position_samples']), 2)
             self.assertTrue(all(p['source'] == 'simulation' for p in history['position_samples']))
@@ -164,6 +177,12 @@ class PersistenceTests(unittest.TestCase):
                 with app.state.history.connection() as conn:
                     tables = conn.execute('SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_schema = %s', (schema,)).fetchall()
                     self.assertEqual({r[0] for r in tables}, {'robot_events', 'robot_positions'})
+                self.assertTrue(app.state.history.check()['ready'])
+            # Exercise real transactions, economy writes, history and restart
+            # semantics against the same isolated Tiger schema.
+            self.settings = settings
+            self.test_live_flow_and_restart_history()
+            self.test_failed_write_rolls_back_world_events_and_retry_key()
         finally:
             with psycopg.connect(url) as conn:
                 conn.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))

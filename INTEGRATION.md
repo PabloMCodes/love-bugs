@@ -154,6 +154,9 @@ team's chosen private transport to reach the ESP32.
 
 - SQLite at `SQLITE_PATH` is the local default. Set `DATABASE_URL` for PostgreSQL
   with TimescaleDB 2.13 or newer; the backend initializes its own tables.
+- Run `python -m app.persistence init` then `python -m app.persistence check`
+  from `backend`; add `--env-file .env` when using an ignored local dotenv file.
+  `check` is read-only and prints no credentials.
 - Start only after the database is reachable. A required persistence failure
   prevents startup or returns `503` without publishing an unrecorded state.
 - Query supported history endpoints instead of changing tables directly. Older
