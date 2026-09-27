@@ -306,7 +306,7 @@ Install the updated `requirements.txt`, then run one offline planning round:
 python -m app.agents --provider mock
 ```
 
-This explicit mock policy proposes harvesting for Billy and fishing for Milo.
+This explicit mock policy proposes harvesting for Wall-y and fishing for Eve.
 It accepts tasks into a temporary in-memory demo snapshot only; it does not run
 movement, harvest timers, or the frontend simulation. Output is labeled `dry_run`.
 No API key or network access is used in mock mode.

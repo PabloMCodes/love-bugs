@@ -89,7 +89,7 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(billy.game.location, 'homebase')
         self.assertEqual((billy.physical.pose.x, billy.physical.pose.y), (50, 30))
         self.assertEqual(world.events[-1].type, 'task_completed')
-        self.assertEqual(world.events[-1].message, 'Billy returned home.')
+        self.assertEqual(world.events[-1].message, 'Wall-y returned home.')
         completed = store.task(task.id)
         self.assertEqual(completed.action, 'RETURN_HOME')
         self.assertEqual(completed.status, 'COMPLETED')

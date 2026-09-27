@@ -65,7 +65,7 @@ def default_world(mode: str = 'simulation') -> dict:
         'robots': [
             {
                 'id': 'robot-a',
-                'name': 'Billy',
+                'name': 'Wall-y',
                 'physical': {
                     'online': True,
                     'pose': {'x': 12, 'y': 30, 'heading': 0},
@@ -87,7 +87,7 @@ def default_world(mode: str = 'simulation') -> dict:
             },
             {
                 'id': 'robot-b',
-                'name': 'Milo',
+                'name': 'Eve',
                 'physical': {
                     'online': True,
                     'pose': {'x': 80, 'y': 25, 'heading': 180},
@@ -123,7 +123,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 'type': 'game_ready',
                 'robot_id': None,
                 'task_id': None,
-                'message': 'Billy is at the lake and Milo is at the market.',
+                'message': 'Wall-y is at the lake and Eve is at the market.',
                 'data': {},
             },
         ],

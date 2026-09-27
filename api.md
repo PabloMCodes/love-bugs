@@ -88,7 +88,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   "robots": [
     {
       "id": "robot-a",
-      "name": "Billy",
+      "name": "Wall-y",
       "physical": {
         "online": true,
         "pose": { "x": 20, "y": 30, "heading": 90 },
@@ -120,7 +120,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
     },
     {
       "id": "robot-b",
-      "name": "Milo",
+      "name": "Eve",
       "physical": {
         "online": true,
         "pose": { "x": 50, "y": 50, "heading": 0 },
@@ -151,7 +151,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       "type": "task_started",
       "robot_id": "robot-a",
       "task_id": "task-001",
-      "message": "Billy started harvesting wheat.",
+      "message": "Wall-y started harvesting wheat.",
       "data": {}
     }
   ]
@@ -390,8 +390,8 @@ A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussio
   "id": "unique-message-id",
   "timestamp": "2026-09-26T18:00:00+00:00",
   "robot_id": "robot-a",
-  "name": "Billy",
-  "text": "I propose harvesting at the farm. Milo, can you cover the lake?",
+  "name": "Wall-y",
+  "text": "I propose harvesting at the farm. Eve, can you cover the lake?",
   "action": "HARVEST",
   "location": "farm",
   "parameters": {},

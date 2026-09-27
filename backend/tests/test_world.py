@@ -23,7 +23,7 @@ class WorldRouteTests(unittest.TestCase):
         snapshot = store.snapshot()
         snapshot.robots[0].name = 'Changed'
 
-        self.assertEqual(store.snapshot().robots[0].name, 'Billy')
+        self.assertEqual(store.snapshot().robots[0].name, 'Wall-y')
 
 
 if __name__ == '__main__':
