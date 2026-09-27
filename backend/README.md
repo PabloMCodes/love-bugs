@@ -2,8 +2,8 @@
 
 The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and API models.
 `GET /world`, live `/events` snapshots, goal configuration, game lifecycle
-controls, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, and `SELL`
-tasks, robot stop/resume, pose, arrival, health, and blocked-state ingestion,
+controls, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, and
+`PLANT` tasks, robot stop/resume, pose, arrival, health, and blocked-state ingestion,
 spectator agent chat, and standalone overhead vision are implemented.
 [Standalone WALL-Y click-to-drive](app/navigation/README.md) provides phased
 camera/BLE bring-up. Connecting this local controller to backend tasks, pose
@@ -367,12 +367,12 @@ shared task service. The frontend conversation panel is a read-only spectator fe
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
 
-Canonical schema version 2 now exposes `farm.crops` and three shared `farm.plots`.
-The visible Crop Queue derives its entries from those records. There is still no
-`PLANT` action or crop-growth transition, so every plot starts empty and the
-current `HARVEST` activity grants wheat directly. The next backend milestone is
-the coordinated wheat lifecycle with timestamped readiness, plot-aware harvesting,
-events, and exactly-once tests.
+Canonical schema version 2 exposes `farm.crops` and three shared `farm.plots`.
+`PLANT` atomically consumes one owned Wheat Seed on arrival and creates a
+timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
+duplicate the crop or consume the losing seed. The backend does not yet transition
+elapsed crops to `READY`, and current `HARVEST` still grants wheat directly. Those
+two transitions are the next backend milestone.
 
 Enable deterministic backend-owned play with:
 

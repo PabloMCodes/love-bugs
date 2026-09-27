@@ -1,3 +1,4 @@
+from datetime import timedelta
 import unittest
 
 from app.schemas import Point, Pose, TaskRequest
@@ -152,6 +153,107 @@ class SimulationRunnerTests(unittest.TestCase):
         milo = store.snapshot().robots[1]
         self.assertIsNone(milo.task)
         self.assertEqual(milo.game.inventory['crop'].quantity, 3)
+
+    def test_plant_consumes_one_seed_and_populates_plot_once(self):
+        world = default_world()
+        world['robots'][0]['game']['inventory']['seeds'] = {
+            'name': 'Wheat Seeds',
+            'quantity': 2,
+            'sell_price': None,
+        }
+        store = WorldStore(world)
+        store.start_game()
+        request = TaskRequest(
+            request_id='simulation-plant-001',
+            robot_id='robot-a',
+            action='PLANT',
+            location='farm',
+            parameters={'item': 'seeds', 'plot_id': 'plot-1'},
+        )
+        task = store.assign_task(request)
+        simulator = SimulationRunner(store, step_distance=100)
+
+        simulator.tick()
+
+        planted = store.snapshot()
+        robot = planted.robots[0]
+        plot = planted.farm.plots[0]
+        self.assertIsNone(robot.task)
+        self.assertEqual(robot.game.inventory['seeds'].quantity, 1)
+        self.assertEqual(plot.status, 'GROWING')
+        self.assertEqual(plot.crop_id, 'wheat')
+        self.assertEqual(plot.planted_by, 'robot-a')
+        self.assertEqual(plot.ready_at - plot.planted_at, timedelta(seconds=8))
+        self.assertEqual(
+            [event.type for event in planted.events[-4:]],
+            ['robot_arrived', 'inventory_updated', 'crop_planted', 'task_completed'],
+        )
+
+        revision = planted.revision
+        retried = store.assign_task(request)
+        simulator.tick()
+        unchanged = store.snapshot()
+        self.assertEqual(retried.id, task.id)
+        self.assertEqual(retried.status, 'COMPLETED')
+        self.assertEqual(unchanged.revision, revision)
+        self.assertEqual(unchanged.robots[0].game.inventory['seeds'].quantity, 1)
+
+        reset = store.reset_game()
+        self.assertEqual(reset.farm.plots[0].status, 'EMPTY')
+        self.assertEqual(reset.robots[0].game.inventory['seeds'].quantity, 2)
+
+    def test_competing_plant_rechecks_plot_before_consuming_seed(self):
+        world = default_world()
+        for robot in world['robots']:
+            robot['game']['inventory']['seeds'] = {
+                'name': 'Wheat Seeds',
+                'quantity': 1,
+                'sell_price': None,
+            }
+        store = WorldStore(world)
+        store.start_game()
+        for robot_id in ('robot-a', 'robot-b'):
+            store.assign_task(TaskRequest(
+                request_id=f'simulation-plant-{robot_id}',
+                robot_id=robot_id,
+                action='PLANT',
+                location='farm',
+                parameters={'item': 'seeds', 'plot_id': 'plot-1'},
+            ))
+
+        SimulationRunner(store, step_distance=100).tick()
+
+        planted = store.snapshot()
+        self.assertNotIn('seeds', planted.robots[0].game.inventory)
+        self.assertEqual(planted.robots[1].game.inventory['seeds'].quantity, 1)
+        self.assertEqual(planted.farm.plots[0].planted_by, 'robot-a')
+        self.assertIsNone(planted.robots[0].task)
+        self.assertIsNone(planted.robots[1].task)
+        self.assertEqual(planted.events[-1].type, 'task_failed')
+        self.assertEqual(planted.events[-1].data['code'], 'PLOT_OCCUPIED')
+
+    def test_cancelled_plant_does_not_consume_seed(self):
+        world = default_world()
+        world['robots'][0]['game']['inventory']['seeds'] = {
+            'name': 'Wheat Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        store = WorldStore(world)
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-plant-cancelled',
+            robot_id='robot-a',
+            action='PLANT',
+            location='farm',
+            parameters={'item': 'seeds', 'plot_id': 'plot-1'},
+        ))
+
+        store.stop_game()
+
+        stopped = store.snapshot()
+        self.assertEqual(stopped.robots[0].game.inventory['seeds'].quantity, 1)
+        self.assertEqual(stopped.farm.plots[0].status, 'EMPTY')
 
     def test_sell_executes_once_after_market_arrival(self):
         world = default_world()

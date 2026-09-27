@@ -5,6 +5,7 @@ import math
 from threading import RLock
 from uuid import uuid4
 
+from app.game.crops import CropRuleError, apply_planting, quote_planting
 from app.game.market import (
     MarketRuleError,
     apply_purchase,
@@ -768,12 +769,12 @@ class WorldStore:
                 )
 
             activity = activity_for(request.action)
-            if request.action not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL') and activity is None:
+            if request.action not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL', 'PLANT') and activity is None:
                 raise WorldStateError(
                     'INVALID_REQUEST',
-                    'Only MOVE_TO, RETURN_HOME, HARVEST, FISH, BUY, and SELL are implemented by the backend task service.',
+                    'Only MOVE_TO, RETURN_HOME, HARVEST, FISH, BUY, SELL, and PLANT are implemented by the backend task service.',
                 )
-            if request.action not in ('BUY', 'SELL') and request.parameters:
+            if request.action not in ('BUY', 'SELL', 'PLANT') and request.parameters:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} does not accept parameters.',
@@ -796,6 +797,11 @@ class WorldStore:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} must take place at market.',
+                )
+            if request.action == 'PLANT' and request.location != 'farm':
+                raise WorldStateError(
+                    'INVALID_REQUEST',
+                    'PLANT must take place at farm.',
                 )
 
             robot = next(
@@ -828,6 +834,16 @@ class WorldStore:
                         quote_sale(robot.game.model_dump(mode='python'), request.parameters)
                 except MarketRuleError as error:
                     raise WorldStateError(error.code, error.message) from error
+            if request.action == 'PLANT':
+                try:
+                    quote_planting(
+                        robot.game.model_dump(mode='python'),
+                        self._world.farm.model_dump(mode='python'),
+                        request.parameters,
+                        current_stage=self._world.game.stage,
+                    )
+                except CropRuleError as error:
+                    raise WorldStateError(error.code, error.message) from error
 
             now = datetime.now(timezone.utc)
             next_revision = self._world.revision + 1
@@ -848,7 +864,11 @@ class WorldStore:
                         else (
                             f'Begin {activity.label} at {request.location}.'
                             if activity is not None
-                            else f'{request.action.title()} an item at market.'
+                            else (
+                                'Plant a crop at the farm.'
+                                if request.action == 'PLANT'
+                                else f'{request.action.title()} an item at market.'
+                            )
                         )
                     )
                 ),
@@ -890,8 +910,12 @@ class WorldStore:
                             f'{robot.name} was assigned to {activity.label} at {request.location}.'
                             if activity is not None
                             else (
-                                f'{robot.name} was assigned to '
-                                f'{request.action.lower()} an item at market.'
+                                f'{robot.name} was assigned to plant at the farm.'
+                                if request.action == 'PLANT'
+                                else (
+                                    f'{robot.name} was assigned to '
+                                    f'{request.action.lower()} an item at market.'
+                                )
                             )
                         )
                     )
@@ -1045,7 +1069,7 @@ class WorldStore:
                     task is None
                     or task['id'] != step.task_id
                     or (
-                        task['action'] not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL')
+                        task['action'] not in ('MOVE_TO', 'RETURN_HOME', 'BUY', 'SELL', 'PLANT')
                         and activity_for(task['action']) is None
                     )
                     or task['status'] not in ('ASSIGNED', 'NAVIGATING')
@@ -1103,6 +1127,8 @@ class WorldStore:
             self._complete_purchase(world, robot, task, now)
         elif task['action'] == 'SELL':
             self._complete_sale(world, robot, task, now)
+        elif task['action'] == 'PLANT':
+            self._complete_planting(world, robot, task, now)
         elif activity is None:
             robot['task'] = None
             world['events'].append({
@@ -1130,6 +1156,81 @@ class WorldStore:
                 'message': f"{robot['name']} started {activity.label}.",
                 'data': {},
             })
+
+    def _complete_planting(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        now: datetime,
+    ) -> None:
+        try:
+            quote = apply_planting(
+                robot['game'],
+                world['farm'],
+                task['parameters'],
+                current_stage=world['game']['stage'],
+                planted_by=robot['id'],
+                planted_at=now,
+            )
+        except CropRuleError as error:
+            robot['task'] = None
+            world['events'].append({
+                'id': f"event-{task['id']}-failed",
+                'timestamp': now,
+                'type': 'task_failed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} could not plant the crop: {error.message}",
+                'data': {'code': error.code},
+            })
+            return
+
+        plot = next(
+            item for item in world['farm']['plots'] if item['id'] == quote.plot_id
+        )
+        remaining = robot['game']['inventory'].get(
+            quote.seed_item_id,
+            {},
+        ).get('quantity', 0)
+        robot['task'] = None
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} used 1 {quote.seed_name}.",
+                'data': {
+                    'item': quote.seed_item_id,
+                    'quantity': -1,
+                    'total_quantity': remaining,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-planted",
+                'timestamp': now,
+                'type': 'crop_planted',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} planted {quote.crop_name} in {quote.plot_id}.",
+                'data': {
+                    'plot_id': quote.plot_id,
+                    'crop_id': quote.crop_id,
+                    'ready_at': plot['ready_at'],
+                },
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed planting {quote.crop_name}.",
+                'data': {},
+            },
+        ])
 
     def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
         try:

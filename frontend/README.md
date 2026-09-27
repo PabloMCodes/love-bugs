@@ -50,8 +50,8 @@ and the wider World Map share the lower center row.
 ## Current gameplay UI
 
 - **Crop Queue:** derives nonempty entries from `world.farm.plots`, showing ready
-  crops first and growing crops ordered by `ready_at`; all plots remain empty until
-  the backend implements planting.
+  crops first and growing crops ordered by `ready_at`; backend `PLANT` tasks now
+  populate these entries.
 - **Market:** purchase-only list of all three seeds with backend-enforced stage locks.
 - **Transactions:** successful purchases and sales create small parchment notices
   on a transparent right-edge overlay. The notices are derived from paired
@@ -61,8 +61,8 @@ and the wider World Map share the lower center row.
 - **Game controls:** start, stop, reset, Farm Stage, and combined-gold progress.
 
 The next frontend crop milestone is to add derived countdown/progress presentation
-once backend planting begins populating timestamps. The browser may animate from
-those timestamps but must never decide that a crop is ready.
+from the timestamps now populated by backend planting. The browser may animate
+from those timestamps but must never decide that a crop is ready.
 
 ## Robot conversation
 

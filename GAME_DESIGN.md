@@ -20,10 +20,11 @@ round without a browser. The market sells all three seed types and enforces stag
 locks. The frontend has a purchase-only market, market transaction notifications,
 and a full-height Crop Queue driven by canonical farm state.
 
-Schema version 2 now includes the wheat crop definition and three shared farm
-plots. The queue derives its ordering from those plots. `PLANT` is not a valid task
-yet, so plots remain empty, and `HARVEST` still creates wheat without consuming a
-seed. Completing that lifecycle is the next implementation goal; the intended
+Schema version 2 includes the wheat crop definition and three shared farm plots.
+`PLANT` now consumes one owned Wheat Seed at the farm and atomically creates a
+timestamped `GROWING` plot, which the queue renders. The backend does not yet mark
+elapsed crops `READY`, and `HARVEST` still creates wheat without reading a plot.
+Completing those transitions is the next implementation goal; the intended
 cooperative unlock and transfer mechanics remain later phases.
 
 ## Game fantasy
@@ -138,8 +139,8 @@ The Crop Queue is a view of authoritative plots, not a second queue stored in th
 browser. The backend world exposes each plot's stable ID, state (`EMPTY`, `GROWING`,
 or `READY`), crop type, planter, planted timestamp, and ready timestamp. The
 frontend omits empty plots from the active queue, shows ready crops first, then
-sorts growing crops by `ready_at`. Until `PLANT` exists, all three plots remain
-`EMPTY`.
+sorts growing crops by `ready_at`. A successful `PLANT` task now creates those
+growing entries from backend state.
 
 The first vertical slice is deliberately wheat-only:
 

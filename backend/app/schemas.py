@@ -72,7 +72,7 @@ class TaskError(StrictModel):
 class RobotTask(StrictModel):
     id: str
     robot_id: str
-    action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'RETURN_HOME']
+    action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'PLANT', 'RETURN_HOME']
     location: str
     status: Literal[
         'ASSIGNED',
@@ -91,7 +91,7 @@ class RobotTask(StrictModel):
 class TaskRequest(StrictModel):
     request_id: str = Field(min_length=1, max_length=100)
     robot_id: str = Field(min_length=1, max_length=100)
-    action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'RETURN_HOME']
+    action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'PLANT', 'RETURN_HOME']
     location: str = Field(min_length=1, max_length=100)
     parameters: dict[str, Any] = Field(default_factory=dict)
     reason: str | None = Field(default=None, max_length=300)

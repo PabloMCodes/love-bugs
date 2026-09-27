@@ -100,12 +100,12 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Canonical world and live snapshots | Implemented | `GET /world` and WebSocket `/events` publish full authoritative state. |
-| Task lifecycle | Implemented | Move, return home, harvest, fish, buy, and sell are validated and tracked. |
+| Task lifecycle | Implemented | Move, return home, harvest, fish, buy, sell, and plant are validated and tracked. |
 | Simulation | Implemented | Movement, arrival, activity timing, inventory rewards, and trading run without hardware. |
 | Individual inventory and wallets | Implemented | The robot tracker exposes each robot's separate wallet and inventory. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
 | Market purchases | Partial | The purchase-only market sells wheat, carrot, and pumpkin seeds; later seeds unlock permanently at 100 and 150 combined gold. Purchases and sales create transient parchment notifications. |
-| Farm plots and Crop Queue | Partial | Schema version 2 exposes the wheat definition and three shared plots; the queue renders nonempty plots from backend state, but planting and growth do not populate them yet. |
+| Farm plots and Crop Queue | Partial | `PLANT` consumes an owned Wheat Seed and fills a shared plot exactly once; the queue renders it, but elapsed crops do not become ready yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
@@ -116,10 +116,10 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **The crop lifecycle is incomplete.** Shared farm plots now exist, but there is
-   no `PLANT` task, growth transition, ready crop, or plot-aware harvest validation.
-2. **The Crop Queue has no live entries yet.** It correctly derives entries from
-   nonempty backend plots, but no current game action can populate a plot.
+1. **The crop lifecycle is incomplete.** Robots can plant Wheat, but there is no
+   growth transition, ready crop, or plot-aware harvest validation yet.
+2. **Planners do not plant yet.** The API can populate the Crop Queue, but mock and
+   Gemini autonomy still follow the legacy free-harvest loop.
 3. **Planners still use the legacy loop.** Mock and Gemini autonomy harvest free
    wheat or fish, then sell; neither buys, plants, waits for, or harvests a plot.
 4. **Victory presentation is still incomplete.** Completion is enforced by the
@@ -204,7 +204,7 @@ Goal: purchases create a visible decision instead of dead inventory.
 - [x] Enforce stage-based seed availability in the backend.
 - [x] Add the purchase-only market, transaction notifications, and Crop Queue UI shell.
 - [x] Add the wheat crop definition and three authoritative shared farm plots.
-- [ ] Add a validated `PLANT` task that consumes one owned seed exactly once.
+- [x] Add a validated `PLANT` task that consumes one owned seed exactly once.
 - [ ] Advance crops from `GROWING` to `READY` from backend timestamps and events.
 - [ ] Make `HARVEST` require a ready plot, grant its crop once, and empty that plot.
 - [x] Render ready crops first and growing crops by `ready_at` in the Crop Queue.
@@ -245,7 +245,7 @@ Goal: make the proven loop feel polished and demo-ready.
 
 | Workstream | Owns | Builds against | Immediate handoff |
 | --- | --- | --- | --- |
-| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Validated wheat planting, growth transitions, and plot-aware harvest |
+| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Backend-owned growth transitions, then plot-aware harvest |
 | Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Add plot-aware decisions after the wheat slice is validated |
 | Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add derived crop countdown/progress after backend planting populates plot timestamps |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |

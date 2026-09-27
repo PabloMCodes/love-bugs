@@ -19,9 +19,10 @@ permanent farming stages, and complete the shared gold goal without a browser.
 
 The immediate application milestone is Phase 3 of the game plan: use the new
 schema-version-2 shared farm plots to complete the wheat seed → plant → grow →
-harvest → sell slice. The Crop Queue derives its display from `world.farm` and is
-never authoritative itself. Hardware work should continue preserving the current
-task and safety contracts while planting is added.
+harvest → sell slice. `PLANT` is now a valid arrival-time transaction; the Crop
+Queue derives its display from `world.farm` and is never authoritative itself.
+Hardware work should preserve the task and safety contracts while growth and
+plot-aware harvesting are added.
 
 ## Shared setup
 
@@ -147,10 +148,11 @@ team's chosen private transport to reach the ESP32.
 
 ## Agent checklist
 
-- Submit only `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, or `SELL` through
-  `POST /tasks`. `WAIT` means do not submit a task.
-- Do not submit `PLANT` yet; it becomes valid only when `api.md`, schemas, task
-  validation, simulation, planners, and tests are updated together.
+- Submit only `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, or `PLANT`
+  through `POST /tasks`. `WAIT` means do not submit a task.
+- Submit `PLANT` at `farm` with exactly `item` and `plot_id`. It completes on
+  confirmed arrival and may still fail if the seed or empty plot is no longer
+  available.
 - Generate one stable `request_id` per intended task and reuse it only when retrying
   that identical request. A retry returns the same task in its latest state.
 - Respect the required locations and trade parameters documented in `api.md`.

@@ -64,6 +64,7 @@ class SimulationRunner:
                     'FISH',
                     'BUY',
                     'SELL',
+                    'PLANT',
                 )
                 or task.status not in ('ASSIGNED', 'NAVIGATING')
                 or robot.physical.pose is None

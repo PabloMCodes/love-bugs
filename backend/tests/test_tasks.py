@@ -128,6 +128,60 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(parameters_response.status_code, 400)
         self.assertEqual(parameters_response.json()['error']['code'], 'INVALID_REQUEST')
 
+    def test_plant_task_requires_owned_seed_empty_plot_and_exact_parameters(self):
+        self.client.post('/game/start')
+        base_request = {
+            **self.request,
+            'action': 'PLANT',
+            'location': 'farm',
+            'parameters': {'item': 'seeds', 'plot_id': 'plot-1'},
+        }
+
+        no_seed = self.client.post('/tasks', json={
+            **base_request,
+            'request_id': 'request-plant-no-seed',
+        })
+        malformed = self.client.post('/tasks', json={
+            **base_request,
+            'request_id': 'request-plant-malformed',
+            'parameters': {'item': 'seeds'},
+        })
+        self.assertEqual(no_seed.status_code, 409)
+        self.assertEqual(no_seed.json()['error']['code'], 'INSUFFICIENT_INVENTORY')
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(malformed.json()['error']['code'], 'INVALID_REQUEST')
+
+        world = default_world()
+        world['robots'][0]['game']['inventory']['seeds'] = {
+            'name': 'Wheat Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            wrong_location = client.post('/tasks', json={
+                **base_request,
+                'request_id': 'request-plant-wrong-location',
+                'location': 'market',
+            })
+            unknown_plot = client.post('/tasks', json={
+                **base_request,
+                'request_id': 'request-plant-unknown-plot',
+                'parameters': {'item': 'seeds', 'plot_id': 'plot-99'},
+            })
+            accepted = client.post('/tasks', json={
+                **base_request,
+                'request_id': 'request-plant-accepted',
+            })
+
+        self.assertEqual(wrong_location.status_code, 400)
+        self.assertEqual(wrong_location.json()['error']['code'], 'INVALID_REQUEST')
+        self.assertEqual(unknown_plot.status_code, 404)
+        self.assertEqual(unknown_plot.json()['error']['code'], 'NOT_FOUND')
+        self.assertEqual(accepted.status_code, 202)
+        self.assertEqual(accepted.json()['action'], 'PLANT')
+        self.assertEqual(accepted.json()['parameters'], base_request['parameters'])
+
     def test_sell_task_validates_inventory_and_parameters(self):
         world = default_world()
         world['robots'][1]['game']['inventory']['crop'] = {

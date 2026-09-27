@@ -29,8 +29,8 @@ and complete the shared gold goal. The dashboard now includes a purchase-only se
 market, an authoritative Crop Queue backed by three shared farm plots, transaction
 notifications, live robot conversation, and session controls.
 
-The immediate product goal is to complete the first authoritative crop lifecycle:
-a validated `PLANT` action, timestamped growth, and plot-aware harvesting. The
-world and Crop Queue now share the version 2 farm contract, but purchased seeds
-still remain inventory and the existing `HARVEST` action still grants wheat
-without consuming a seed. See `GAME_PLAN.md` for the implementation sequence.
+The immediate product goal is to complete the first authoritative crop lifecycle.
+`PLANT` now consumes one owned Wheat Seed and creates a timestamped growing plot;
+the remaining work is the backend `READY` transition and plot-aware harvesting.
+Until then, the existing `HARVEST` action still grants wheat without reading a
+plot. See `GAME_PLAN.md` for the implementation sequence.

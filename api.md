@@ -236,18 +236,27 @@ checks replay before checking whether the robot is busy.
 | `FISH` | `lake` | `{}` | Arrival plus backend activity timer; adds fish |
 | `BUY` | `market` | `item`, `quantity` | Arrival plus validated transaction |
 | `SELL` | `market` | `item`, `quantity` | Arrival plus validated transaction |
+| `PLANT` | `farm` | `item`, `plot_id` | Arrival plus validated seed consumption; creates a `GROWING` plot |
 | `RETURN_HOME` | `homebase` | `{}` | Confirmed arrival |
 
 `location` is required and validated against the action. One nonterminal task per robot; competing requests receive `409`. The game must be running and the robot available. A robot already confirmed in the required zone can skip navigation.
 
 The shipped Market UI submits `BUY` tasks only. Autonomous agents may submit both
-`BUY` and `SELL`; successful purchases and sales appear as transient frontend
-notifications derived from authoritative world events. A task does not immediately
-alter a wallet from anywhere on the map. Check stage access, stock, prices, funds,
-and inventory again when the transaction executes; apply inventory and currency
-changes atomically and only once. Use execution-time prices for the MVP. A locked
-item returns `SEED_LOCKED`; a failed execution fails the task without a partial
-transaction.
+`BUY` and `SELL`; they are not yet taught to choose `PLANT`. Successful purchases
+and sales appear as transient frontend notifications derived from authoritative
+world events. A task does not immediately alter a wallet from anywhere on the map.
+Check stage access, stock, prices, funds, and inventory again when the transaction
+executes; apply inventory and currency changes atomically and only once. Use
+execution-time prices for the MVP. A locked item returns `SEED_LOCKED`; a failed
+execution fails the task without a partial transaction.
+
+`PLANT` always consumes exactly one seed and accepts exactly
+`{ "item": "seeds", "plot_id": "plot-1" }` for the current wheat slice. Assignment
+checks that the acting robot owns the seed and the plot is empty. Arrival repeats
+those checks atomically before removing the seed and setting `crop_id`,
+`planted_by`, `planted_at`, `ready_at`, and status `GROWING`. If another robot
+claims the plot first, execution fails with `PLOT_OCCUPIED` and keeps the seed.
+Cancellation before arrival also keeps the seed.
 
 Task lifecycle:
 
@@ -255,7 +264,14 @@ Task lifecycle:
 ASSIGNED → NAVIGATING → ACTIVE → COMPLETED
 ```
 
-Navigation may be skipped when already at the destination. Movement-only tasks complete on arrival without an activity timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measures activity completion, not distance traveled: it stays zero during navigation, advances during an activity, and is one on completion. Terminal failure includes `error: { "code": "...", "message": "..." }`; otherwise error is `null`. Cancellation or failure never grants the completion reward. Goal completion sets the game to `COMPLETED`, cancels remaining work, and stops dispatch and movement.
+Navigation may be skipped when already at the destination. Movement-only tasks and
+arrival-time transactions (`BUY`, `SELL`, and `PLANT`) complete without an activity
+timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measures
+activity completion, not distance traveled: it stays zero during navigation,
+advances during an activity, and is one on completion. Terminal failure includes
+`error: { "code": "...", "message": "..." }`; otherwise error is `null`.
+Cancellation or failure never grants the completion reward. Goal completion sets
+the game to `COMPLETED`, cancels remaining work, and stops dispatch and movement.
 
 Contract version 2 adds `farm.crops` and three shared `farm.plots`. Empty plots
 contain null crop metadata. A nonempty plot has status `GROWING` or `READY` and
@@ -263,10 +279,10 @@ must include `crop_id`, `planted_by`, `planted_at`, and `ready_at`. Clients deri
 the visible queue from these records: omit empty plots, show ready plots first,
 then sort growing plots by `ready_at`.
 
-The `PLANT` action and growth transitions are not implemented yet, so version 2
-plots currently remain empty. `HARVEST` is still the version 1-style timed
-collection that grants wheat without seed consumption. Internal `WAIT` behavior
-still defers task submission.
+The `PLANT` action now populates version 2 plots with backend timestamps. The
+backend does not yet transition elapsed plots to `READY`, and `HARVEST` is still
+the version 1-style timed collection that grants wheat without reading a plot.
+Internal `WAIT` behavior still defers task submission.
 
 ### Errors
 
@@ -286,8 +302,9 @@ for conflicting state or unavailable funds/stock, `422` for malformed or
 schema-invalid payloads handled by FastAPI, and `503` for an unavailable required
 subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`,
 `GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`,
-`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SEED_LOCKED`, and
-`PERSISTENCE_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
+`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SEED_LOCKED`,
+`PLOT_OCCUPIED`, and `PERSISTENCE_UNAVAILABLE`. Do not expose secrets or stack
+traces in errors.
 
 ## Live updates: WebSocket /events
 
