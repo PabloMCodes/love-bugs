@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" preserveAspectRatio="none" shape-rendering="crispEdges">
+  <path d="m0 10.22h1.14v-1.29h1.15v-1.49h75.38v1.49h1.19v1.29h1.14v55.42h-1.23v1.05h-1.1v1.04h-62.89v1.18h-1.13v1.01h-1.06v1h-1v0.7h-1.09v0.5h-1.18v0.84h-3.42v-3.54h0.51v-1.69h-4.15v-1.04h-1.12v-1.05h-1.14v-55.42z" fill="#476E93" />
+  <path d="m1.22 8.71h77.56v56.36h-1.13v1.39h-62.92v0.8h-1.05v1.08h-1.03v1.09h-1.03v0.89h-1.13v0.67h-1.14v0.66h-2.37v-2.23h0.49v-2.96h-5.23v-1.39h-1.02v-56.36z" fill="#D8EDFC" />
+  <path d="m2.22 9.83h1.83v-0.02h72.62v1.33h0.95v1.19h1.16v52.76h-1.13v1.15h-0.98v0.22h-61.94v0.8h-1.05v1.08h-1.03v1.09h-1.03v0.89h-1.13v0.67h-1.14v0.66h-2.37v-2.23h0.89v0.86h1.06v-1.18h1.68v-1.16h1.13v-1.48h0.92v-1.35h62.71v-1.17h2.02v-50.69h-1.15v-2.24h-71.31v1.43h-1.26v0.88h-0.56v49.64h0.8v1.06h0.16v0.63h-0.03v0.79h-0.89v-1.05h-0.93v-54.56z" fill="#A8D6FA" />
+  <path d="m2.22 9.83h1.84v1.26h-1.84v-1.26z" fill="#D6ECFB" />
+  <path d="m76.67 8.73h0.95v2.37h-0.95v-2.37z" fill="#D6ECFB" />
+  <path d="m77.51 10.94h0.76v1.4h-0.76v-1.4z" fill="#D6ECFB" />
+  <path d="m77.42 63.76h0.77v1.31h-0.77v-1.31z" fill="#D6ECFB" />
+  <path d="m76.56 65.19h0.87v1.11h-0.87v-1.11z" fill="#D6ECFB" />
+  <path d="m2.24 65.07h0.91v0.7h-0.91v-0.7z" fill="#D6ECFB" />
+  <rect x="2.225" y="7.441" width="75.44" height="1.279" fill="#476E93" />
+  <rect x="1.145" y="8.943" width="1.08" height="1.279" fill="#476E93" />
+  <rect x="77.66" y="8.943" width="1.143" height="1.279" fill="#476E93" />
+  <rect x="2.225" y="9.914" width=".8633" height="1.141" fill="#EFFAFE" />
+  <rect x="5.148" y="11.07" width=".9961" height="1.25" fill="#EFFAFE" />
+  <rect x="4.074" y="12.37" width=".9961" height="1.305" fill="#EFFAFE" />
+  <rect x="74.41" y="11.07" width="1.035" height="1.25" fill="#EFFAFE" />
+  <rect x="75.48" y="12.41" width="1.035" height="1.258" fill="#EFFAFE" />
+  <rect x="74.41" y="63.75" width="1.035" height="1.25" fill="#EFFAFE" />
+  <rect x="75.52" y="62.54" width=".9883" height="1.133" fill="#EFFAFE" />
+  <rect x="4.074" y="62.54" width=".9609" height="1.133" fill="#EFFAFE" />
+  <rect x="5.148" y="63.77" width=".9961" height="1.25" fill="#EFFAFE" />
+</svg>
