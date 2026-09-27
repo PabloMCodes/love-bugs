@@ -8,13 +8,18 @@ gaps, milestone order, and end-to-end acceptance scenario.
 
 ## Current team milestone
 
-WALL-Y now has a separate [click-to-drive bring-up tool](backend/app/navigation/README.md)
-using the supplied BLE protocol and existing ArUco tracker. It deliberately does
-not consume backend tasks or publish poses yet. Do not run it alongside another
-motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
-The tool also supports two independent robots via `--robots-config
-navigation_robots.json`, with per-robot calibration/targets and a shared emergency
-stop. This local mode is still separate from backend autonomy and task execution.
+The [navigation tool](backend/app/navigation/README.md) supports two robots,
+ArUco localization, BLE control, calibrated traffic protection, and local clicked
+targets. With `--backend-url`, its existing `BackendBridge` publishes pose/health,
+consumes backend tasks, and reports arrivals instead of accepting clicked targets.
+Do not run it alongside another motor controller. The original firmware is
+archived in `firmware/wall_y/wall_y.ino`.
+
+The adapter is implemented; a complete physical autonomous round is not yet
+verified. See [CAMERA_ORCHESTRATION_PLAN.md](CAMERA_ORCHESTRATION_PLAN.md) for the
+remaining destination calibration, arrival validation, stop propagation, traffic,
+and end-to-end acceptance work. Local click-to-drive success alone does not verify
+backend task execution or economy changes.
 
 The autonomous simulation baseline is implemented and tested: Wall-y and Eeva can
 start at home, collect different resources, sell their own inventory, agree on

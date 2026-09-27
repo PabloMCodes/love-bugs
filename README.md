@@ -14,6 +14,8 @@ The project is designed so the same game rules run in two modes:
 
 ## Start here
 
+- [CAMERA_ORCHESTRATION_PLAN.md](CAMERA_ORCHESTRATION_PLAN.md): audited implementation
+  order for connecting physical camera navigation to backend-owned agent gameplay.
 - [PROJECT_STATUS.md](PROJECT_STATUS.md): consolidated implementation history,
   current scope, subsystem contracts, verification state, risks, and next goals.
 - [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md): historical pre-integration main-branch
