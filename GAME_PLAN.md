@@ -1,5 +1,12 @@
 # Love Bugs game plan
 
+> **Gameplay direction update:** [GAME_DESIGN.md](GAME_DESIGN.md) is now the
+> authoritative reference for the planned three-stage farming tycoon, fishing,
+> cooperative unlocks, and money transfers. The simpler Repair Fund below records
+> the current technical baseline and earlier milestone plan. Do not implement its
+> generic `tool_upgrade` recommendation without first reconciling the roadmap with
+> the newer design.
+
 This document is the shared product and implementation direction for the game.
 It explains what the demo is trying to prove, how a round should feel, what is
 already implemented, and what each subsystem needs next. The API contract remains
