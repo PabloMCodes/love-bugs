@@ -236,3 +236,41 @@ before uploading. Existing navigation refreshes every 300 ms; keep refresh below
 traffic movement so a frozen laptop cannot leave a connected robot driving.
 The sketch still needs compilation/upload with your installed ESP32 Arduino core;
 it cannot be flashed or physically verified from this development laptop.
+
+## Draw buildings before the game
+
+On the camera laptop, stop navigation and any other robot controller first, then
+run from `backend`:
+
+```sh
+.venv/bin/python -m app.navigation.calibrate --camera 1 --config traffic_config.json
+```
+
+This setup tool opens only the camera; it never connects to BLE or starts a game.
+When the image settles, press **SPACE** to freeze it for editing:
+
+- **A**: drag the usable arena rectangle.
+- **B**: drag a box around each building. Include walls, roofs/overhangs and every
+  part the robot could hit. Mark its full occupied footprint, not just a doorway.
+- **W / E**: drag a tight box around the entire corresponding robot (including
+  wheels/attachments), then click its ArUco marker's **center**. This computes
+  the largest marker-to-box-corner distance as its turning radius in pixels.
+- **U**: remove the last building box; repeat to redraw older boxes.
+- **S**: save into the existing traffic JSON. **Q** closes; unsaved edits are lost.
+  Selecting another mode cancels an unfinished box/marker selection.
+
+The robots are **6.2 × 5.2 inches**: with a centered marker their minimum turning
+radius is `hypot(6.2, 5.2) / 2 ≈ 4.05 inches`. The camera measurement avoids guessing
+pixels per inch and also handles an off-center marker conservatively. If the
+robot is rotated, its axis-aligned box may yield a larger, conservative radius.
+The blue circle shows that radius; the red circle adds the configured margin.
+Building boxes automatically get that same radius + margin in the planner;
+you do not need to manually enlarge them for the robot's width.
+
+Saving keeps speed, latency and other control settings, but sets
+`calibrated: false` so changed geometry must be reviewed before movement. Check
+both radii, margin and measured speed/stop settings, then set `calibrated: true`
+and run phase 3 before phase 4 as above. A changed image resolution clears old
+building/arena boxes; remeasure both robots as well. If the camera moves or zoom
+changes, rerun setup even if resolution is unchanged. Buildings moved during a
+game require stopping navigation and updating this static map.
