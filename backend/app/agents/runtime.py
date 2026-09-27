@@ -5,6 +5,7 @@ import logging
 import math
 
 from app.agents.orchestrator import AgentOrchestrator
+from app.agents.banter import BanterCoordinator
 from app.schemas import TaskRequest
 from app.state import WorldStateError, WorldStore
 
@@ -29,6 +30,7 @@ class AutonomyRunner:
             raise ValueError('Autonomy poll interval must be positive and finite')
         self.store = store
         self.orchestrator = orchestrator
+        self.banter = BanterCoordinator(orchestrator.planner, orchestrator.chat)
         self.poll_interval_seconds = interval
 
     def read_world(self) -> dict:
@@ -52,7 +54,10 @@ class AutonomyRunner:
             return False
 
     async def tick(self):
-        return await self.orchestrator.tick(self.read_world, self.submit_task)
+        outcomes = await self.orchestrator.tick(self.read_world, self.submit_task)
+        await self.banter.tick(self.read_world(), task_activity=any(
+            outcome.status != 'waiting' for outcome in outcomes))
+        return outcomes
 
     async def run(self) -> None:
         try:
@@ -64,3 +69,5 @@ class AutonomyRunner:
                 await asyncio.sleep(self.poll_interval_seconds)
         except asyncio.CancelledError:
             return
+        finally:
+            await self.banter.close()

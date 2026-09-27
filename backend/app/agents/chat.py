@@ -48,7 +48,7 @@ class AgentChat:
         snapshot['agent_messages'] = deepcopy(self.messages[-20:])
         return snapshot
 
-    def publish(self, world, robot_id, decision, *, status):
+    def publish(self, world, robot_id, decision, *, status, kind=None):
         self.reset(world['session_id'])
         if not decision.message:
             return
@@ -74,6 +74,7 @@ class AgentChat:
             'location': decision.location,
             'parameters': parameters,
             'status': status,
+            **({'kind': kind} if kind else {}),
         })
         self.messages = self.messages[-100:]
         self.revision += 1

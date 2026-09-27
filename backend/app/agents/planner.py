@@ -129,6 +129,21 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
 class MockPlanner:
     """Explicit offline demo policy, never a silent substitute for Gemini."""
 
+    async def converse(self, world, robot_id, opener, topic):
+        pairs = (
+            ('If I had legs, I’d be quite tired by now.', 'Wheels were an excellent life choice.'),
+            ('Do you think a wheel can have a favorite direction?', 'Mine seem pretty attached to forward.'),
+            ('I think I’d look good in a tiny hat.', 'As long as it doesn’t cover your marker.'),
+            ('Would a robot picnic need a blanket?', 'Only if we invite the crumbs.'),
+            ('I could get used to this little world.', 'It’s a good size for the two of us.'),
+            ('If we had pockets, what would you keep in yours?', 'A spare pocket. Just in case.'),
+            ('Do you ever wish you could skip?', 'I’d settle for a dignified little wobble.'),
+            ('I’ve decided rolling counts as dancing.', 'Then we’ve been rehearsing all day.'),
+            ('A tiny bench would look nice here.', 'We could park beside it very thoughtfully.'),
+            ('I wonder if fish think we’re strange.', 'We do bring our own wheels everywhere.'),
+        )
+        return pairs[topic % len(pairs)][1 if opener else 0]
+
     async def decide(self, world: dict, robot_id: str) -> Decision:
         robot = get_robot(world, robot_id)
         for item_id in robot['game']['inventory']:

@@ -70,7 +70,7 @@ export default function AgentChat({ world }) {
                                 </time>
                             </div>
                             <p className="break-words text-sm">{message.text}</p>
-                            <p className="mt-2 text-xs text-[#5b7990]">
+                            {message.kind !== 'banter' && <p className="mt-2 text-xs text-[#5b7990]">
                                 {message.status === 'accepted'
                                     ? 'Accepted'
                                     : message.status === 'waiting'
@@ -81,7 +81,7 @@ export default function AgentChat({ world }) {
                                     ? ` · ${message.parameters.quantity} ${message.parameters.item}`
                                     : ''
                                 }
-                            </p>
+                            </p>}
                         </article>
                     ))}
                 </div>
