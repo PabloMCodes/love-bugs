@@ -38,6 +38,20 @@ export function startGame(signal) {
     });
 }
 
+export function stopGame(signal) {
+    return request('/game/stop', {
+        method: 'POST',
+        signal,
+    });
+}
+
+export function resetGame(signal) {
+    return request('/game/reset', {
+        method: 'POST',
+        signal,
+    });
+}
+
 export function submitTask(task, signal) {
     return request('/tasks', {
         method: 'POST',

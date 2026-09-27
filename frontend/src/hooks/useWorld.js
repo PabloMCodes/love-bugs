@@ -1,6 +1,12 @@
 // Own the current world snapshot, connection status, session changes, and revision checks across REST and WebSocket updates.
 import { useEffect, useRef, useState } from 'react';
-import { getWorld, startGame, submitTask } from '../api/client.js';
+import {
+    getWorld,
+    resetGame,
+    startGame,
+    stopGame,
+    submitTask,
+} from '../api/client.js';
 import { worldSocketUrl } from '../api/events.js';
 import { mockWorldState } from '../data/mockWorldState.js';
 import { getTaskDefinition, taskCatalog } from '../data/taskCatalog.js';
@@ -81,6 +87,37 @@ export function useWorld() {
             ...current,
             error: error?.message || 'Unable to reach the backend.',
         }));
+    }
+
+    async function runGameCommand(command) {
+        if (!backendSelectedRef.current) {
+            throw new Error('Connect to the backend to control the game session.');
+        }
+
+        try {
+            const snapshot = await command();
+            applyBackendSnapshot(snapshot);
+            setConnection((current) => ({
+                ...current,
+                error: null,
+            }));
+            return snapshot;
+        } catch (error) {
+            reportBackendError(error);
+            throw error;
+        }
+    }
+
+    function startSession() {
+        return runGameCommand(startGame);
+    }
+
+    function stopSession() {
+        return runGameCommand(stopGame);
+    }
+
+    function resetSession() {
+        return runGameCommand(resetGame);
     }
 
     useEffect(() => {
@@ -966,6 +1003,9 @@ export function useWorld() {
         connection,
         buyMarketItem,
         dispatchAgentTask,
+        resetSession,
         sellInventoryItem,
+        startSession,
+        stopSession,
     };
 }

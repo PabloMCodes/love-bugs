@@ -4,13 +4,17 @@ import MarketPanel from './components/MarketPanel.jsx';
 import RobotPanel from './components/RobotPanel.jsx';
 import WorldMap from './components/WorldMap.jsx';
 import AgentChat from './components/AgentChat.jsx';
+import GameControls from './components/GameControls.jsx';
 
 export default function App() {
     const {
         world,
         connection,
         buyMarketItem,
+        resetSession,
         sellInventoryItem,
+        startSession,
+        stopSession,
     } = useWorld();
 
     return (
@@ -42,6 +46,14 @@ export default function App() {
                 </div>
 
                 <RobotPanel robots={world.robots} />
+
+                <GameControls
+                    backendAvailable={connection.source === 'backend'}
+                    game={world.game}
+                    onReset={resetSession}
+                    onStart={startSession}
+                    onStop={stopSession}
+                />
 
                 <div className="grid min-h-80 w-full auto-rows-[20rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-3 lg:grid-rows-1 lg:auto-rows-auto">
                     <MarketPanel

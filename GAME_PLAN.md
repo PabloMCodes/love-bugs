@@ -108,7 +108,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Market purchases | Partial | Items can be bought, but seeds and tool upgrades do not affect gameplay yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
-| Goal presentation | Partial | Goal state exists, but the current dashboard does not clearly present progress, start/reset, or victory. |
+| Goal presentation | Partial | The dashboard presents progress and lifecycle controls; a dedicated victory presentation remains. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
 | Persistence/history | Implemented | Accepted transitions and pose history persist through SQLite or Tiger Data. |
 
@@ -164,8 +164,8 @@ Goal: one understandable, deterministic simulation round.
   candidate, then adjust using measured round duration.
 - [x] Keep only wheat and salmon as collected resources for this phase.
 - [x] Fix autonomous `SELL` validation to read the selected robot's inventory.
-- [ ] Add a compact goal HUD with game status, combined gold, target, and progress.
-- [ ] Add session-level start, stop, and reset controls without restoring manual
+- [x] Add a compact goal HUD with game status, combined gold, target, and progress.
+- [x] Add session-level start, stop, and reset controls without restoring manual
   robot-action buttons.
 - [ ] Add a clear victory state and prevent post-completion task dispatch.
 - [x] Add an end-to-end test covering collect → inventory → sell → gold → victory.
