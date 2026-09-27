@@ -15,7 +15,7 @@ from app.config import AgentConfig
 def demo_world():
     return {
         'session_id': 'agent-demo', 'revision': 1, 'mode': 'simulation',
-        'game': {'status': 'RUNNING', 'goal': {'type': 'earn_gold', 'current': 80, 'target': 500}},
+        'game': {'status': 'RUNNING', 'goal': {'type': 'earn_gold', 'current': 80, 'target': 200}},
         'map': {'width': 100, 'height': 100, 'locations': {
             'homebase': {'x': 50, 'y': 50}, 'farm': {'x': 20, 'y': 30},
             'lake': {'x': 70, 'y': 80}, 'market': {'x': 80, 'y': 40}}},

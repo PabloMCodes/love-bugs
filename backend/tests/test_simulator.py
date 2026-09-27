@@ -2,7 +2,7 @@ import unittest
 
 from app.schemas import Point, Pose, TaskRequest
 from app.simulation.simulator import SimulationRunner, move_pose_toward
-from app.state import WorldStore, default_world
+from app.state import WorldStateError, WorldStore, default_world
 
 
 class MovementTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class SimulationRunnerTests(unittest.TestCase):
         moving = store.snapshot().robots[0]
         self.assertEqual(moving.task.status, 'NAVIGATING')
         self.assertIsNone(moving.game.location)
-        self.assertNotEqual((moving.physical.pose.x, moving.physical.pose.y), (12, 30))
+        self.assertNotEqual((moving.physical.pose.x, moving.physical.pose.y), (50, 30))
 
         for _ in range(10):
             simulator.tick()
@@ -103,7 +103,11 @@ class SimulationRunnerTests(unittest.TestCase):
             action='FISH',
             location='lake',
         ))
-        simulator = SimulationRunner(store, interval_seconds=.25)
+        simulator = SimulationRunner(
+            store,
+            interval_seconds=.25,
+            step_distance=100,
+        )
 
         simulator.tick()
         started = store.snapshot().robots[0]
@@ -119,12 +123,12 @@ class SimulationRunnerTests(unittest.TestCase):
         completed = store.snapshot()
         billy = completed.robots[0]
         self.assertIsNone(billy.task)
-        self.assertEqual(billy.game.inventory['fish'].quantity, 3)
+        self.assertEqual(billy.game.inventory['fish'].quantity, 1)
         self.assertEqual(completed.events[-2].type, 'inventory_updated')
         self.assertEqual(completed.events[-1].type, 'task_completed')
 
         simulator.tick()
-        self.assertEqual(store.snapshot().robots[0].game.inventory['fish'].quantity, 3)
+        self.assertEqual(store.snapshot().robots[0].game.inventory['fish'].quantity, 1)
 
     def test_harvest_travels_to_farm_before_activity(self):
         store = WorldStore()
@@ -147,10 +151,16 @@ class SimulationRunnerTests(unittest.TestCase):
 
         milo = store.snapshot().robots[1]
         self.assertIsNone(milo.task)
-        self.assertEqual(milo.game.inventory['crop'].quantity, 6)
+        self.assertEqual(milo.game.inventory['crop'].quantity, 3)
 
     def test_sell_executes_once_after_market_arrival(self):
-        store = WorldStore()
+        world = default_world()
+        world['robots'][1]['game']['inventory']['crop'] = {
+            'name': 'Wheat',
+            'quantity': 3,
+            'sell_price': 12,
+        }
+        store = WorldStore(world)
         store.start_game()
         store.assign_task(TaskRequest(
             request_id='simulation-sell-001',
@@ -159,7 +169,7 @@ class SimulationRunnerTests(unittest.TestCase):
             location='market',
             parameters={'item': 'crop', 'quantity': 2},
         ))
-        simulator = SimulationRunner(store)
+        simulator = SimulationRunner(store, step_distance=100)
 
         simulator.tick()
         completed = store.snapshot()
@@ -178,6 +188,13 @@ class SimulationRunnerTests(unittest.TestCase):
     def test_sale_completes_goal_and_cancels_other_work(self):
         world = default_world()
         world['game']['goal']['target'] = 100
+        world['robots'][1]['physical']['pose'] = {'x': 80, 'y': 25, 'heading': 180}
+        world['robots'][1]['game']['location'] = 'market'
+        world['robots'][1]['game']['inventory']['crop'] = {
+            'name': 'Wheat',
+            'quantity': 2,
+            'sell_price': 12,
+        }
         store = WorldStore(world)
         store.start_game()
         store.assign_task(TaskRequest(
@@ -204,6 +221,90 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertIn('task_cancelled', [event.type for event in completed.events])
         self.assertEqual(completed.events[-1].type, 'game_completed')
 
+    def test_clean_round_collects_sells_and_completes_shared_goal_once(self):
+        store = WorldStore()
+        initial = store.snapshot()
+        self.assertEqual(initial.game.status, 'READY')
+        self.assertEqual(initial.game.goal.current, 80)
+        self.assertEqual(initial.game.goal.target, 200)
+        self.assertTrue(all(robot.game.location == 'homebase' for robot in initial.robots))
+        self.assertTrue(all(robot.game.inventory == {} for robot in initial.robots))
+
+        store.start_game()
+        simulator = SimulationRunner(
+            store,
+            interval_seconds=2.5,
+            step_distance=100,
+        )
+
+        request_number = 0
+
+        def collect(robot_id, action, location):
+            nonlocal request_number
+            request_number += 1
+            store.assign_task(TaskRequest(
+                request_id=f'clean-round-collect-{request_number}',
+                robot_id=robot_id,
+                action=action,
+                location=location,
+            ))
+            simulator.tick()
+            simulator.tick()
+
+        for _ in range(2):
+            collect('robot-a', 'HARVEST', 'farm')
+        for _ in range(3):
+            collect('robot-b', 'FISH', 'lake')
+
+        collected = store.snapshot()
+        self.assertEqual(collected.robots[0].game.inventory['crop'].quantity, 6)
+        self.assertEqual(collected.robots[1].game.inventory['fish'].quantity, 3)
+        self.assertEqual(collected.game.goal.current, 80)
+
+        store.assign_task(TaskRequest(
+            request_id='clean-round-sell-wheat',
+            robot_id='robot-a',
+            action='SELL',
+            location='market',
+            parameters={'item': 'crop', 'quantity': 6},
+        ))
+        simulator.tick()
+        after_wheat = store.snapshot()
+        self.assertEqual(after_wheat.game.status, 'RUNNING')
+        self.assertEqual(after_wheat.game.goal.current, 152)
+        self.assertNotIn('crop', after_wheat.robots[0].game.inventory)
+
+        store.assign_task(TaskRequest(
+            request_id='clean-round-sell-fish',
+            robot_id='robot-b',
+            action='SELL',
+            location='market',
+            parameters={'item': 'fish', 'quantity': 3},
+        ))
+        simulator.tick()
+        completed = store.snapshot()
+        self.assertEqual(completed.game.status, 'COMPLETED')
+        self.assertEqual(completed.game.goal.current, 206)
+        self.assertEqual(completed.robots[0].game.money, 112)
+        self.assertEqual(completed.robots[1].game.money, 94)
+        self.assertNotIn('fish', completed.robots[1].game.inventory)
+        self.assertEqual(
+            sum(event.type == 'game_completed' for event in completed.events),
+            1,
+        )
+
+        revision = completed.revision
+        simulator.tick()
+        self.assertEqual(store.snapshot().revision, revision)
+        with self.assertRaises(WorldStateError) as context:
+            store.assign_task(TaskRequest(
+                request_id='clean-round-after-completion',
+                robot_id='robot-a',
+                action='RETURN_HOME',
+                location='homebase',
+            ))
+        self.assertEqual(context.exception.code, 'GAME_NOT_RUNNING')
+
     def test_buy_executes_once_and_updates_wallet_inventory_and_stock(self):
         store = WorldStore()
         store.start_game()
@@ -214,7 +315,7 @@ class SimulationRunnerTests(unittest.TestCase):
             location='market',
             parameters={'item': 'tool_upgrade', 'quantity': 1},
         ))
-        simulator = SimulationRunner(store)
+        simulator = SimulationRunner(store, step_distance=100)
 
         simulator.tick()
         completed = store.snapshot()

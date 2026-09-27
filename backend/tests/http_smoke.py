@@ -59,6 +59,15 @@ def main():
                             time.sleep(.1)
                         raise AssertionError('Task did not finish')
 
+                    seed_sale_inventory = {
+                        'request_id': 'harvest-for-sale',
+                        'robot_id': 'robot-b',
+                        'action': 'HARVEST',
+                        'location': 'farm',
+                    }
+                    assert client.post('/tasks', json=seed_sale_inventory).status_code == 202
+                    assert task_done('robot-b')['game']['inventory']['crop']['quantity'] == 3
+
                     for action, params, expected in [('SELL', {'item': 'crop', 'quantity': 1}, 52),
                                                       ('BUY', {'item': 'seeds', 'quantity': 1}, 47)]:
                         request = {'request_id': action, 'robot_id': 'robot-b', 'action': action,
@@ -81,12 +90,12 @@ def main():
                     assert client.post('/tasks', json=request).status_code == 202
                     assert task_done('robot-a')['game']['location'] == 'homebase'
                     events = client.get('/events').json()['events']
-                    assert sum(e['type'] == 'task_completed' for e in events) == 4
+                    assert sum(e['type'] == 'task_completed' for e in events) == 5
                     assert len(client.get('/robots').json()['robots']) == 2
                     assert client.get('/robots/robot-a').json()['id'] == 'robot-a'
                     assert len(client.get('/market').json()['items']) == 3
                     tasks = client.get('/tasks').json()['tasks']
-                    assert len(tasks) == 4
+                    assert len(tasks) == 5
                     assert all(task['status'] == 'COMPLETED' for task in tasks)
                     assert client.get(f"/tasks/{tasks[0]['id']}").json() == tasks[0]
                     path = client.get('/robots/robot-a/history').json()

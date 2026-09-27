@@ -50,7 +50,7 @@ def default_world(mode: str = 'simulation') -> dict:
         'mode': mode,
         'game': {
             'status': 'READY',
-            'goal': {'type': 'earn_gold', 'target': 500, 'current': 80},
+            'goal': {'type': 'earn_gold', 'target': 200, 'current': 80},
         },
         'map': {
             'width': 100,
@@ -68,7 +68,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 'name': 'Wall-y',
                 'physical': {
                     'online': True,
-                    'pose': {'x': 12, 'y': 30, 'heading': 0},
+                    'pose': {'x': 50, 'y': 30, 'heading': 0},
                     'pose_updated_at': now,
                     'tracking': 'TRACKED',
                     'battery': .82,
@@ -76,12 +76,9 @@ def default_world(mode: str = 'simulation') -> dict:
                     'stopped': False,
                 },
                 'game': {
-                    'location': 'lake',
+                    'location': 'homebase',
                     'money': 40,
-                    'inventory': {
-                        'fish': {'name': 'Salmon', 'quantity': 2, 'sell_price': 18},
-                        'berries': {'name': 'Wild Berries', 'quantity': 4, 'sell_price': 9},
-                    },
+                    'inventory': {},
                 },
                 'task': None,
             },
@@ -90,7 +87,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 'name': 'Eve',
                 'physical': {
                     'online': True,
-                    'pose': {'x': 80, 'y': 25, 'heading': 180},
+                    'pose': {'x': 50, 'y': 30, 'heading': 180},
                     'pose_updated_at': now,
                     'tracking': 'TRACKED',
                     'battery': .94,
@@ -98,13 +95,9 @@ def default_world(mode: str = 'simulation') -> dict:
                     'stopped': False,
                 },
                 'game': {
-                    'location': 'market',
+                    'location': 'homebase',
                     'money': 40,
-                    'inventory': {
-                        'crop': {'name': 'Wheat', 'quantity': 3, 'sell_price': 12},
-                        'corn': {'name': 'Corn', 'quantity': 1, 'sell_price': 15},
-                        'wood': {'name': 'Wood', 'quantity': 6, 'sell_price': 6},
-                    },
+                    'inventory': {},
                 },
                 'task': None,
             },
@@ -123,7 +116,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 'type': 'game_ready',
                 'robot_id': None,
                 'task_id': None,
-                'message': 'Wall-y is at the lake and Eve is at the market.',
+                'message': 'Wall-y and Eve are at homebase, ready to begin.',
                 'data': {},
             },
         ],

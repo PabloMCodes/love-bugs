@@ -8,7 +8,7 @@ export const mockWorldState = {
         status: 'READY',
         goal: {
             type: 'earn_gold',
-            target: 500,
+            target: 200,
             current: 80,
         },
     },
@@ -28,7 +28,7 @@ export const mockWorldState = {
             name: 'Wall-y',
             physical: {
                 online: true,
-                pose: { x: 12, y: 30, heading: 0 },
+                pose: { x: 50, y: 30, heading: 0 },
                 pose_updated_at: '2026-09-26T13:00:00.000Z',
                 tracking: 'TRACKED',
                 battery: 0.82,
@@ -36,20 +36,9 @@ export const mockWorldState = {
                 stopped: false,
             },
             game: {
-                location: 'lake',
+                location: 'homebase',
                 money: 40,
-                inventory: {
-                    fish: {
-                        name: 'Salmon',
-                        quantity: 2,
-                        sell_price: 18,
-                    },
-                    berries: {
-                        name: 'Wild Berries',
-                        quantity: 4,
-                        sell_price: 9,
-                    },
-                },
+                inventory: {},
             },
             task: null,
         },
@@ -58,7 +47,7 @@ export const mockWorldState = {
             name: 'Eve',
             physical: {
                 online: true,
-                pose: { x: 80, y: 25, heading: 180 },
+                pose: { x: 50, y: 30, heading: 180 },
                 pose_updated_at: '2026-09-26T13:00:00.000Z',
                 tracking: 'TRACKED',
                 battery: 0.94,
@@ -66,25 +55,9 @@ export const mockWorldState = {
                 stopped: false,
             },
             game: {
-                location: 'market',
+                location: 'homebase',
                 money: 40,
-                inventory: {
-                    crop: {
-                        name: 'Wheat',
-                        quantity: 3,
-                        sell_price: 12,
-                    },
-                    corn: {
-                        name: 'Corn',
-                        quantity: 1,
-                        sell_price: 15,
-                    },
-                    wood: {
-                        name: 'Wood',
-                        quantity: 6,
-                        sell_price: 6,
-                    },
-                },
+                inventory: {},
             },
             task: null,
         },
@@ -118,7 +91,7 @@ export const mockWorldState = {
             type: 'game_ready',
             robot_id: null,
             task_id: null,
-            message: 'Wall-y is at the lake and Eve is at the market.',
+            message: 'Wall-y and Eve are at homebase, ready to begin.',
             data: {},
         },
     ],

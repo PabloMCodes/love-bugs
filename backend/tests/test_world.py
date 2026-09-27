@@ -15,7 +15,13 @@ class WorldRouteTests(unittest.TestCase):
         world = response.json()
         self.assertEqual(world['schema_version'], 1)
         self.assertEqual([robot['id'] for robot in world['robots']], ['robot-a', 'robot-b'])
-        self.assertEqual(world['robots'][1]['game']['inventory']['crop']['quantity'], 3)
+        self.assertTrue(all(robot['game']['location'] == 'homebase' for robot in world['robots']))
+        self.assertTrue(all(robot['game']['inventory'] == {} for robot in world['robots']))
+        self.assertEqual(world['game']['goal'], {
+            'type': 'earn_gold',
+            'target': 200,
+            'current': 80,
+        })
         self.assertEqual(world['map']['locations']['market'], {'x': 80.0, 'y': 25.0})
 
     def test_snapshots_cannot_mutate_store(self):

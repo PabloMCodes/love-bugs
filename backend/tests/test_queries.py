@@ -77,7 +77,11 @@ class QueryRouteTests(unittest.TestCase):
             action='FISH',
             location='lake',
         )
-        simulator = SimulationRunner(self.store, interval_seconds=.25)
+        simulator = SimulationRunner(
+            self.store,
+            interval_seconds=.25,
+            step_distance=100,
+        )
         simulator.tick()
         simulator.tick()
 

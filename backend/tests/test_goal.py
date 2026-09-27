@@ -55,7 +55,7 @@ class GoalRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()['error']['code'], 'GAME_NOT_READY')
-        self.assertEqual(self.store.snapshot().game.goal.target, 500)
+        self.assertEqual(self.store.snapshot().game.goal.target, 200)
 
     def test_rejects_target_that_is_already_met(self):
         response = self.client.post('/goal', json={
@@ -65,7 +65,7 @@ class GoalRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()['error']['code'], 'INVALID_REQUEST')
-        self.assertEqual(self.store.snapshot().game.goal.target, 500)
+        self.assertEqual(self.store.snapshot().game.goal.target, 200)
 
 
 if __name__ == '__main__':

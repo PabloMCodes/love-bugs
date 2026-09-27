@@ -36,7 +36,7 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()['status'], 'ASSIGNED')
         self.assertEqual(world['game']['status'], 'RUNNING')
-        self.assertEqual(world['robots'][0]['game']['location'], 'lake')
+        self.assertEqual(world['robots'][0]['game']['location'], 'homebase')
         self.assertEqual(world['robots'][0]['task'], response.json())
         self.assertEqual(world['events'][-1]['type'], 'task_assigned')
 
@@ -129,7 +129,12 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(parameters_response.json()['error']['code'], 'INVALID_REQUEST')
 
     def test_sell_task_validates_inventory_and_parameters(self):
-        self.client.post('/game/start')
+        world = default_world()
+        world['robots'][1]['game']['inventory']['crop'] = {
+            'name': 'Wheat',
+            'quantity': 3,
+            'sell_price': 12,
+        }
         request = {
             **self.request,
             'request_id': 'request-sell-001',
@@ -139,7 +144,9 @@ class TaskRouteTests(unittest.TestCase):
             'parameters': {'item': 'crop', 'quantity': 2},
         }
 
-        accepted = self.client.post('/tasks', json=request)
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            accepted = client.post('/tasks', json=request)
 
         self.assertEqual(accepted.status_code, 202)
         self.assertEqual(accepted.json()['action'], 'SELL')

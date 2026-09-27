@@ -128,10 +128,7 @@ These are the highest-value gaps to close before adding more content:
 4. **Purchases are currently cosmetic inventory.** Seeds and the tool upgrade cost
    gold but do not unlock or improve actions. Useless purchases make autonomous
    behavior look incorrect.
-5. **The seeded world skips the beginning of the story.** Robots currently start
-   at the lake and market with several unrelated resources. A new round should
-   start from a deliberate, easily explained setup.
-6. **Balancing is still placeholder data.** The target, starting gold, yields,
+5. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
 ## Scope for the first complete demo
@@ -168,17 +165,17 @@ after the acceptance scenario below works in both simulation and hardware modes.
 
 Goal: one understandable, deterministic simulation round.
 
-- [ ] Start both robots at homebase with a small, intentional wallet and empty
+- [x] Start both robots at homebase with a small, intentional wallet and empty
   sellable inventory.
-- [ ] Choose and test one demo goal target. Start with **200 gold** as a tuning
+- [x] Choose and test one demo goal target. Start with **200 gold** as a tuning
   candidate, then adjust using measured round duration.
-- [ ] Keep only wheat and salmon as collected resources for this phase.
+- [x] Keep only wheat and salmon as collected resources for this phase.
 - [ ] Fix autonomous `SELL` validation to read the selected robot's inventory.
 - [ ] Add a compact goal HUD with game status, combined gold, target, and progress.
 - [ ] Add session-level start, stop, and reset controls without restoring manual
   robot-action buttons.
 - [ ] Add a clear victory state and prevent post-completion task dispatch.
-- [ ] Add an end-to-end test covering collect → inventory → sell → gold → victory.
+- [x] Add an end-to-end test covering collect → inventory → sell → gold → victory.
 
 Exit criterion: a teammate unfamiliar with the code can start the app, understand
 the objective immediately, and watch a complete simulated round without issuing

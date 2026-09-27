@@ -392,7 +392,11 @@ class BlockedRouteTests(unittest.TestCase):
             'action': 'FISH',
             'location': 'lake',
         }).json()
-        activity_client.app.state.simulator.tick()
+        activity_client.post('/robots/robot-a/arrived', json={
+            'session_id': activity_store.snapshot().session_id,
+            'task_id': task['id'],
+            'location': 'lake',
+        }).raise_for_status()
 
         response = activity_client.post('/robots/robot-a/blocked', json={
             'session_id': activity_store.snapshot().session_id,

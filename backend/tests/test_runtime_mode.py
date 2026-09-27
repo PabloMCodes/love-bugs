@@ -155,7 +155,7 @@ class RuntimeModeTests(unittest.TestCase):
                 self.assertIsNone(completed['task'])
                 self.assertEqual(
                     completed['game']['inventory']['fish']['quantity'],
-                    before['game']['inventory']['fish']['quantity'] + 1,
+                    before['game']['inventory'].get('fish', {}).get('quantity', 0) + 1,
                 )
                 self.assertEqual(
                     completed['physical']['pose'],
