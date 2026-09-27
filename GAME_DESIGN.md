@@ -1,15 +1,29 @@
 # Love Bugs tycoon game design
 
-Status: **captured design direction; not implemented or numerically finalized yet**.
+Status: **partially implemented; crop lifecycle and cooperative economy remain planned**.
 
-This document records the intended game mechanics before implementation begins.
-It is the product reference for farming progression, fishing, money, cooperation,
-and map changes. Exact prices, timers, probabilities, and unlock thresholds remain
-balancing decisions until they are measured in simulation.
+This document records the intended mechanics and the boundary between implemented
+gameplay and planned expansion. It is the product reference for farming progression,
+fishing, money, cooperation, and map changes. Exact prices, timers, probabilities,
+and unlock thresholds remain balancing decisions until they are measured in simulation.
 
 The existing API and implementation are described in [api.md](api.md). Planned
 mechanics in this document do not change that stable contract until the related
 schema, endpoints, tests, examples, and consumers are updated together.
+
+## Current implementation checkpoint
+
+The backend currently supports the reliable pre-planting loop: deterministic or
+Gemini autonomy can move, harvest wheat directly, fish, sell robot-owned inventory,
+advance the combined-gold goal, unlock seed stages automatically, and complete a
+round without a browser. The market sells all three seed types and enforces stage
+locks. The frontend has a purchase-only market, market transaction notifications,
+and a full-height Crop Queue shell.
+
+The queue is not connected to game state yet. The canonical world has no `farm`
+or plot records, `PLANT` is not a valid task, and `HARVEST` still creates wheat
+without consuming a seed. Those limitations define the next implementation goal;
+the intended cooperative unlock and transfer mechanics remain later phases.
 
 ## Game fantasy
 
@@ -113,8 +127,29 @@ model that still creates decisions. Recommended starting point:
 - Either robot may harvest a ready shared plot unless playtesting shows that crop
   ownership is more understandable.
 
-The exact number of plots and whether only the planter may harvest are still open
-decisions.
+The working implementation default is **three shared plots**. Either robot may
+harvest a ready plot. This remains a balancing choice and can change after the
+first complete wheat simulation pass.
+
+### Crop Queue implementation goal
+
+The Crop Queue is a view of authoritative plots, not a second queue stored in the
+browser. The backend world should expose each plot's stable ID, state (`EMPTY`,
+`GROWING`, or `READY`), crop type, planter, planted timestamp, and ready timestamp.
+The frontend should omit empty plots from the active queue, show ready crops first,
+then sort growing crops by `ready_at`.
+
+The first vertical slice is deliberately wheat-only:
+
+1. Buy one Wheat Seed through the existing market transaction.
+2. Submit `PLANT` at the farm with a seed item and empty plot ID.
+3. Atomically consume one seed and create one `GROWING` plot.
+4. Transition it once to `READY` from backend-owned time and publish an event.
+5. Submit plot-aware `HARVEST`, grant Wheat once, and return the plot to `EMPTY`.
+6. Sell the harvested Wheat through the existing market transaction.
+
+Only after this sequence passes cancellation, retry, reset, and reconnect tests
+should carrot and pumpkin reuse the same rules with different timings and values.
 
 ## Stage progression
 
@@ -378,30 +413,31 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 3. Combined money reaches the final target after pumpkin stage is active.
 4. The game completes exactly once and autonomous dispatch stops.
 
-## Open decisions before implementation
+## Open decisions before later phases
 
 - Exact seed costs, grow times, and crop sale values.
 - Stage eligibility thresholds, cooperative unlock costs, and final target.
-- Farm plot count and crop ownership rules.
+- Final farm plot count and whether playtesting justifies planter-only harvesting.
 - Whether both robots must contribute a positive amount to an unlock.
 - Proposal timeout and cancellation behavior.
 - Whether earlier seeds remain available after later stages unlock.
 - Fish-tier probabilities.
 - Whether one robot can have multiple pending money requests.
 - Which cooperation actions are tasks versus separate transaction endpoints.
-- How the frontend visually represents planted/growing/ready plots.
+- Final queue-card treatment after authoritative planted/growing/ready data exists.
 
 ## Suggested implementation order
 
 No implementation begins merely because it appears in this document. When the
 team is ready, the safest order is:
 
-1. Finalize numeric balancing candidates and farm plot rules.
-2. Add authoritative seed/crop/stage definitions and world state.
-3. Implement buy seed → plant → grow → harvest → sell deterministically.
-4. Add map stage rendering and farm plot state.
-5. Implement seeded fishing duration and reward tiers.
-6. Add money request/transfer transactions.
-7. Add cooperative unlock proposal, agreement, contributions, and stage changes.
-8. Expand mock autonomy, then Gemini prompts, against the same validated actions.
-9. Run the complete loop in simulation before connecting it to physical motion.
+1. Add authoritative crop definitions and three shared farm plots to world state.
+2. Implement the wheat buy → plant → grow → harvest → sell slice deterministically.
+3. Connect the existing Crop Queue UI to farm plots and backend timestamps.
+4. Generalize the validated lifecycle to carrot and pumpkin.
+5. Add map stage rendering and richer farm plot state.
+6. Implement seeded fishing duration and reward tiers.
+7. Add money request/transfer transactions.
+8. Add cooperative unlock proposal, agreement, contributions, and stage changes.
+9. Expand mock autonomy, then Gemini prompts, against the same validated actions.
+10. Run the complete loop in simulation before connecting it to physical motion.

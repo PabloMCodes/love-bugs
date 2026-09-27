@@ -23,6 +23,14 @@ The project is designed so the same game rules run in two modes:
 - [backend/README.md](backend/README.md): backend setup and subsystem details.
 - [frontend/README.md](frontend/README.md): dashboard setup and frontend structure.
 
-The current product direction is the three-stage farming and fishing tycoon in
-`GAME_DESIGN.md`. The immediate technical priority remains a reliable end-to-end
-round whose state can later support those mechanics in both simulation and hardware.
+The current baseline already completes a backend-owned autonomous simulation round:
+robots collect, travel, sell their own inventory, advance permanent farming stages,
+and complete the shared gold goal. The dashboard now includes a purchase-only seed
+market, a Crop Queue shell, transaction notifications, live robot conversation,
+and session controls.
+
+The immediate product goal is the first authoritative crop lifecycle: shared farm
+plots, a validated `PLANT` action, timestamped growth, plot-aware harvesting, and
+live Crop Queue entries. Until that contract is implemented, purchased seeds remain
+inventory and the existing `HARVEST` action still grants wheat without consuming a
+seed. See `GAME_PLAN.md` for the implementation sequence.

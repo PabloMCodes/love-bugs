@@ -13,11 +13,15 @@ using the supplied BLE protocol and existing ArUco tracker. It deliberately does
 not consume backend tasks or publish poses yet. Do not run it alongside another
 motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
 
-The immediate milestone is Phase 1 of the game plan: a complete autonomous
-simulation round in which Wall-y and Eeva start at home, collect different
-resources, sell their own inventory, advance the shared repair fund, and trigger
-one clear victory state. Teammate integrations should preserve that scenario in
-hardware mode instead of introducing a second game loop.
+The autonomous simulation baseline is implemented and tested: Wall-y and Eeva can
+start at home, collect different resources, sell their own inventory, advance
+permanent farming stages, and complete the shared gold goal without a browser.
+
+The immediate application milestone is Phase 3 of the game plan: add authoritative
+shared farm plots and complete the wheat seed → plant → grow → harvest → sell slice.
+The existing Crop Queue is UI scaffolding only; integrations must not treat its
+browser display as authoritative state. Hardware work should continue preserving
+the current task and safety contracts while the farm schema is coordinated.
 
 ## Shared setup
 
@@ -97,6 +101,11 @@ backend is running. Payload meaning and lifecycle rules live in [api.md](api.md)
 - Send commands over HTTP; the world WebSocket is server-to-client only.
 - Render the returned robot list and market data instead of assuming fixed names,
   counts, balances, stock, or prices.
+- Treat the current Crop Queue as a placeholder until `api.md` defines farm plots.
+  When plots arrive, render backend timestamps and states rather than running an
+  authoritative browser-only growth timer.
+- The Market UI is purchase-only. Robot sales still execute through validated
+  tasks and appear as transient parchment notifications from world events.
 - Show connection loss and reconnect with bounded backoff. Fetch `GET /world` at
   startup, but do not let an older REST response overwrite a newer socket state.
 - Set `VITE_API_BASE_URL` when the backend is not at `http://localhost:8000`, and
@@ -140,6 +149,8 @@ team's chosen private transport to reach the ESP32.
 
 - Submit only `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, or `SELL` through
   `POST /tasks`. `WAIT` means do not submit a task.
+- Do not submit `PLANT` yet; it becomes valid only when `api.md`, schemas, task
+  validation, simulation, planners, and tests are updated together.
 - Generate one stable `request_id` per intended task and reuse it only when retrying
   that identical request. A retry returns the same task in its latest state.
 - Respect the required locations and trade parameters documented in `api.md`.

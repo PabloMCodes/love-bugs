@@ -77,7 +77,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   "mode": "simulation",
   "game": {
     "status": "RUNNING",
-    "goal": { "type": "earn_gold", "target": 500, "current": 80 },
+    "goal": { "type": "earn_gold", "target": 200, "current": 80 },
     "stage": 1
   },
   "map": {
@@ -229,7 +229,14 @@ checks replay before checking whether the robot is busy.
 
 `location` is required and validated against the action. One nonterminal task per robot; competing requests receive `409`. The game must be running and the robot available. A robot already confirmed in the required zone can skip navigation.
 
-Shop buttons submit `BUY`/`SELL` tasks for the selected robot. They do not immediately alter its wallet from anywhere on the map. Check stage access, stock, prices, funds, and inventory again when the transaction executes; apply inventory and currency changes atomically and only once. Use execution-time prices for the MVP and explain this in the shop UI. A locked item returns `SEED_LOCKED`; a failed execution fails the task without a partial transaction.
+The shipped Market UI submits `BUY` tasks only. Autonomous agents may submit both
+`BUY` and `SELL`; successful purchases and sales appear as transient frontend
+notifications derived from authoritative world events. A task does not immediately
+alter a wallet from anywhere on the map. Check stage access, stock, prices, funds,
+and inventory again when the transaction executes; apply inventory and currency
+changes atomically and only once. Use execution-time prices for the MVP. A locked
+item returns `SEED_LOCKED`; a failed execution fails the task without a partial
+transaction.
 
 Task lifecycle:
 
@@ -239,7 +246,13 @@ ASSIGNED → NAVIGATING → ACTIVE → COMPLETED
 
 Navigation may be skipped when already at the destination. Movement-only tasks complete on arrival without an activity timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measures activity completion, not distance traveled: it stays zero during navigation, advances during an activity, and is one on completion. Terminal failure includes `error: { "code": "...", "message": "..." }`; otherwise error is `null`. Cancellation or failure never grants the completion reward. Goal completion sets the game to `COMPLETED`, cancels remaining work, and stops dispatch and movement.
 
-Planting, growth cycles, upgrades, and `WAIT` need not be implemented to support this contract. Initially `HARVEST` can mean a simple timed collection without seed consumption. Any agent waiting behavior can simply defer task submission.
+Planting and growth cycles are not part of MVP contract version 1. The current
+`HARVEST` action is a simple timed collection without seed consumption, and the
+frontend Crop Queue is not authoritative. The next planned coordinated contract
+extension adds farm plots and `PLANT`; it must update `schema_version` if the world
+shape changes incompatibly, plus this document, schemas, tests, examples, planners,
+and frontend consumers in the same change. Internal `WAIT` behavior still defers
+task submission.
 
 ### Errors
 

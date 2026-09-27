@@ -360,12 +360,18 @@ Trade checks here are preflight only; the task service must recheck funds, stock
 and inventory atomically at execution. The host owns freshness thresholds and
 must mark stale camera poses as `STALE` before allowing physical tasks.
 
-The frontend now reads the authoritative backend world and submits movement and
-collection tasks to the shared task service. Its local simulation remains an
-offline fallback. The game process can host one autonomous orchestrator, and the
-frontend conversation panel is a read-only spectator feed.
+The frontend now reads the authoritative backend world, owns only session controls
+and seed-purchase interactions, and keeps a local simulation fallback. Movement,
+collection, and sales normally come from the backend orchestrator through the
+shared task service. The frontend conversation panel is a read-only spectator feed.
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
+
+The visible Crop Queue is currently a frontend shell. There is no `farm` field in
+the canonical world, no `PLANT` action, and no crop-growth timer. The current
+`HARVEST` activity grants wheat directly. The next backend milestone is one
+coordinated wheat lifecycle with shared plots, timestamped readiness, plot-aware
+harvesting, events, API documentation, and exactly-once tests.
 
 Enable deterministic backend-owned play with:
 

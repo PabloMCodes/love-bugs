@@ -102,12 +102,13 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Canonical world and live snapshots | Implemented | `GET /world` and WebSocket `/events` publish full authoritative state. |
 | Task lifecycle | Implemented | Move, return home, harvest, fish, buy, and sell are validated and tracked. |
 | Simulation | Implemented | Movement, arrival, activity timing, inventory rewards, and trading run without hardware. |
-| Individual inventory and wallets | Implemented | The market sell view exposes each robot separately. |
+| Individual inventory and wallets | Implemented | The robot tracker exposes each robot's separate wallet and inventory. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
-| Market purchases | Partial | Wheat starts unlocked; carrot and pumpkin unlock permanently at 100 and 150 combined gold. Planting is not implemented yet. |
+| Market purchases | Partial | The purchase-only market sells wheat, carrot, and pumpkin seeds; later seeds unlock permanently at 100 and 150 combined gold. Purchases and sales create transient parchment notifications. |
+| Crop Queue | UI scaffold | A full-height queue panel is present, but it remains at `0 active` because the world has no authoritative farm plots yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
-| Goal presentation | Partial | The dashboard presents progress and lifecycle controls; a dedicated victory presentation remains. |
+| Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
 | Persistence/history | Implemented | Accepted transitions and pose history persist through SQLite or Tiger Data. |
 
@@ -115,12 +116,15 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **Victory presentation is still incomplete.** The HUD now explains the objective,
-   current/target gold, and game status, but completion needs a clear celebration.
-2. **Purchases are currently cosmetic inventory.** Seeds cost gold but cannot be
-   planted yet. Useless purchases make autonomous
-   behavior look incorrect.
-3. **Balancing is still placeholder data.** The target, starting gold, yields,
+1. **The farm is not authoritative yet.** There are no farm plots, `PLANT` task,
+   growth timestamps, ready crops, or plot-aware harvest validation.
+2. **The Crop Queue is display-only.** It must render nonempty backend plots sorted
+   by readiness instead of maintaining browser-local timers or crop state.
+3. **Planners still use the legacy loop.** Mock and Gemini autonomy harvest free
+   wheat or fish, then sell; neither buys, plants, waits for, or harvests a plot.
+4. **Victory presentation is still incomplete.** Completion is enforced by the
+   backend, but the frontend still needs a clear celebration.
+5. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
 ## Scope for the first complete demo
@@ -137,9 +141,9 @@ These are the highest-value gaps to close before adding more content:
 - Simulation/hardware switching behind the same contract.
 - Stop, reset, offline, stale-tracking, and blocked safety behavior.
 
-### Deferred until the loop is reliable
+### Next expansion after the reliable baseline
 
-- Planting and crop-growth cycles.
+- Authoritative planting, crop-growth, and plot-aware harvesting.
 - Dynamic prices, auctions, or a complex economy.
 - Inventory transfers between robots.
 - More locations, resources, or robots.
@@ -148,8 +152,9 @@ These are the highest-value gaps to close before adding more content:
 - Camera video inside the dashboard.
 - Multiplayer or remote public deployment.
 
-Deferring these features is a scope decision, not a rejection. Each can be added
-after the acceptance scenario below works in both simulation and hardware modes.
+The crop lifecycle is the active next milestone. The remaining features stay
+deferred until that lifecycle is reliable in simulation and the existing hardware
+safety boundary remains intact.
 
 ## Roadmap
 
@@ -163,10 +168,11 @@ Goal: one understandable, deterministic simulation round.
   candidate, then adjust using measured round duration.
 - [x] Keep only wheat and salmon as collected resources for this phase.
 - [x] Fix autonomous `SELL` validation to read the selected robot's inventory.
-- [x] Add a compact goal HUD with game status, combined gold, target, and progress.
+- [x] Add a compact Farm Stage HUD with combined gold, target, and progress.
 - [x] Add session-level start, stop, and reset controls without restoring manual
   robot-action buttons.
-- [ ] Add a clear victory state and prevent post-completion task dispatch.
+- [x] Prevent post-completion task dispatch and cancel remaining work at victory.
+- [ ] Add a clear dedicated frontend victory celebration.
 - [x] Add an end-to-end test covering collect → inventory → sell → gold → victory.
 
 Exit criterion: a teammate unfamiliar with the code can start the app, understand
@@ -196,7 +202,12 @@ Goal: purchases create a visible decision instead of dead inventory.
 
 - [x] Replace placeholder purchases with wheat, carrot, and pumpkin seeds.
 - [x] Enforce stage-based seed availability in the backend.
-- [ ] Implement the complete seed → plant → grow → harvest → sell loop.
+- [x] Add the purchase-only market, transaction notifications, and Crop Queue UI shell.
+- [ ] Add authoritative crop definitions and a small shared set of farm plots.
+- [ ] Add a validated `PLANT` task that consumes one owned seed exactly once.
+- [ ] Advance crops from `GROWING` to `READY` from backend timestamps and events.
+- [ ] Make `HARVEST` require a ready plot, grant its crop once, and empty that plot.
+- [ ] Render ready crops first and growing crops by `ready_at` in the Crop Queue.
 - [ ] Teach both planners to compare seed cost, growth time, and expected crop value.
 - [ ] Test that purchases, planting, growth, harvesting, and sales resolve exactly once.
 
@@ -234,9 +245,9 @@ Goal: make the proven loop feel polished and demo-ready.
 
 | Workstream | Owns | Builds against | Immediate handoff |
 | --- | --- | --- | --- |
-| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Phase 1 seed/balance changes and sell-validation fix |
-| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Host orchestrator in backend lifecycle |
-| Frontend | Objective, progress, robot state, market, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Goal HUD and session-level controls |
+| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Authoritative farm plots plus the wheat plant/grow/harvest slice |
+| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Add plot-aware decisions after the wheat slice is validated |
+| Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Render authoritative plots and growth timing in the existing queue shell |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |
 | Navigation/control | Destination following, arrival, cancellation, blocked handling | Active task plus map locations | Safe adapter from tasks to robot commands |
 | ESP32/robot | Motor execution, health reporting, local watchdog | Private navigation transport | Stop on stale commands and publish health |
@@ -277,6 +288,8 @@ come from the real adapters instead of `SimulationRunner`.
 | Timer/loss state | Deferred | Hardware loop is reliable with time margin |
 | Seed catalog | Wheat 5; carrot 10; pumpkin 20 | Simulation balancing produces better values |
 | Seed mechanics | Purchases visible; planting pending | Planting is implemented as a complete loop |
+| Farm model | Start with three shared plots; queue is derived from nonempty plots | Simulation makes a different capacity clearer |
+| First crop slice | Wheat before generalizing carrot and pumpkin | Wheat passes buy → plant → grow → harvest → sell tests |
 
 Any change to an endpoint, world field, event meaning, or task lifecycle must be
 coordinated through [api.md](api.md), updated in consumers and examples, and tested
