@@ -386,6 +386,9 @@ proposals separately through `POST /tasks` while chat is enabled.
 | `GET /agent-chat` | Return the current bounded conversation snapshot. |
 | WebSocket `/agent-chat/events` | Send full conversation snapshots every 500 ms, including history on reconnect. |
 
+The shipped frontend is a read-only spectator of the WebSocket feed. It does not
+call `POST /agent-chat/round` or submit tasks from conversation messages.
+
 A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussion"`,
 `running`, `error` (string or null), `interval_seconds`, and `messages`. Each message:
 

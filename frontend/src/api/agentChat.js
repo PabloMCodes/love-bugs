@@ -5,17 +5,3 @@ export function chatSocketUrl() {
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     return url.toString();
 }
-
-export async function discussWorld(world, provider, signal) {
-    const response = await fetch(`${apiBase}/agent-chat/round`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ world, provider }),
-        signal,
-    });
-    const result = await response.json();
-    if (!response.ok) {
-        throw new Error(typeof result.detail === 'string' ? result.detail : 'Unable to start discussion');
-    }
-    return result;
-}

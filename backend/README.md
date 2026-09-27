@@ -362,8 +362,8 @@ must mark stale camera poses as `STALE` before allowing physical tasks.
 
 The frontend now reads the authoritative backend world and submits movement and
 collection tasks to the shared task service. Its local simulation remains an
-offline fallback. The game process can host one autonomous orchestrator; the
-browser discussion preview remains available when backend autonomy is disabled.
+offline fallback. The game process can host one autonomous orchestrator, and the
+frontend conversation panel is a read-only spectator feed.
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
 
@@ -400,34 +400,22 @@ Run the chat API from `backend` in a terminal with your exported Gemini API key:
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Start the frontend in a second terminal using its README instructions. In the
-**Robot conversation** panel, choose **Mock demo** or **Gemini agents**, then
-**Start chat**. Pause stops future rounds; an in-flight round may finish. Gemini
-mode makes paid/quota-counted calls; mock mode is explicitly scripted. No model
-calls happen until a browser starts the conversation. The key stays on the backend.
+Start the frontend in a second terminal using its README instructions. The
+**Robot conversation** panel subscribes to the shared WebSocket feed and does not
+choose a provider, start planning rounds, or submit proposed tasks. Configure the
+backend provider with `AUTONOMY_PROVIDER`, enable it with `AUTONOMY_ENABLED=true`,
+restart the backend, and start the game through the lifecycle API or UI.
 
-Each round sends the current frontend world snapshot to the local backend.
-Every available robot proposes one action and a brief public `message` to its
-teammates. The second robot receives the first robot's message before answering;
-the next round includes the recent conversation, so both robots can respond.
-These are intentional public coordination messages, not private model reasoning.
-They appear over WebSocket within roughly half a second of each model response.
-
-The chat service itself is a **discussion-only preview**, but the frontend dispatches
-new proposals while chat is enabled. `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`,
-`BUY`, and `SELL` therefore use the authoritative backend task service.
-READY and RUNNING games may discuss; stopped, completed, busy, offline, or untracked
-robots are skipped. The standalone `AgentOrchestrator` is not yet hosted by the game
-process.
+Every available robot publishes one brief public `message` with its accepted
+action or reason for waiting. These are intentional public coordination messages,
+not private model reasoning. They appear over WebSocket within roughly half a
+second and reconnecting viewers receive the latest full history.
 
 The service keeps one shared conversation in memory, with at most 100 messages;
-only the latest 20 are sent to models. A new game session or provider switch clears
-the history. Restarting the backend clears it too. One browser should operate the
-Start/Pause controls; other browsers can watch the same live feed without starting
-another loop. Concurrent rounds are rejected, and the default 10-second cooldown
-is enforced server-side. Browser rounds wait at least 12 seconds after completion.
-Model errors pause that browser's loop and display a redacted error, without
-fabricating chat messages. Reconnecting viewers receive the latest full history.
+only the latest 20 are sent to models. A new game session clears the history, and
+restarting the backend clears it too. The legacy discussion-round endpoint remains
+available to direct API clients only when backend autonomy is disabled; the shipped
+frontend never calls it.
 
 Configuration:
 

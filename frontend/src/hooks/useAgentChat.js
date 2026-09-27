@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
-import { chatSocketUrl, discussWorld } from '../api/agentChat.js';
+import { useEffect, useState } from 'react';
+import { chatSocketUrl } from '../api/agentChat.js';
 
-export function useAgentChat(world) {
-    const [feed, setFeed] = useState({ messages: [], running: false, provider: 'mock' });
+export function useAgentChat() {
+    const [feed, setFeed] = useState({
+        messages: [],
+        running: false,
+        provider: 'mock',
+        mode: 'discussion',
+    });
     const [connected, setConnected] = useState(false);
-    const [enabled, setEnabled] = useState(false);
-    const [provider, setProvider] = useState('mock');
     const [error, setError] = useState(null);
-    const worldRef = useRef(world);
-    worldRef.current = world;
 
     useEffect(() => {
         let disposed = false;
@@ -26,7 +27,10 @@ export function useAgentChat(world) {
                 if (disposed) return;
                 try {
                     const snapshot = JSON.parse(event.data);
-                    if (Array.isArray(snapshot.messages)) setFeed(snapshot);
+                    if (Array.isArray(snapshot.messages)) {
+                        setFeed(snapshot);
+                        setError(null);
+                    }
                 } catch {
                     setError('Unable to read the chat feed');
                 }
@@ -60,36 +64,5 @@ export function useAgentChat(world) {
         };
     }, []);
 
-    useEffect(() => {
-        if (!enabled) return;
-        let disposed = false;
-        let timer;
-        const controller = new AbortController();
-        async function round() {
-            try {
-                const snapshot = await discussWorld(worldRef.current, provider, controller.signal);
-                if (disposed) return;
-                setFeed(snapshot);
-                setError(snapshot.error);
-                if (snapshot.error) {
-                    setEnabled(false);
-                    return;
-                }
-                timer = window.setTimeout(round, Math.max(12000, (snapshot.interval_seconds + 1) * 1000));
-            } catch (failure) {
-                if (disposed) return;
-                setError(failure.message || 'Unable to reach the chat server');
-                setEnabled(false);
-            }
-        }
-        setError(null);
-        round();
-        return () => {
-            disposed = true;
-            controller.abort();
-            window.clearTimeout(timer);
-        };
-    }, [enabled, provider]);
-
-    return { feed, connected, enabled, setEnabled, provider, setProvider, error };
+    return { feed, connected, error };
 }

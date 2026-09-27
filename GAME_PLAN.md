@@ -107,7 +107,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
 | Market purchases | Partial | Items can be bought, but seeds and tool upgrades do not affect gameplay yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
-| Robot conversation | Partial | Backend autonomy publishes accepted decisions; the optional browser discussion preview still exists. |
+| Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | Goal state exists, but the current dashboard does not clearly present progress, start/reset, or victory. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
 | Persistence/history | Implemented | Accepted transitions and pose history persist through SQLite or Tiger Data. |
@@ -184,7 +184,7 @@ Goal: the game continues when no browser is open.
   (`mock` or `gemini`) without exposing API credentials to the browser.
 - [x] Submit autonomous work through the existing authoritative task service.
 - [x] Publish accepted/waiting decisions to the shared conversation feed.
-- [ ] Make the frontend conversation panel a spectator/control surface, not the
+- [x] Make the frontend conversation panel a spectator/control surface, not the
   owner of round timing.
 - [x] Ensure only one orchestrator can dispatch for a session.
 

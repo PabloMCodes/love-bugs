@@ -10,7 +10,6 @@ export default function App() {
         world,
         connection,
         buyMarketItem,
-        dispatchAgentTask,
         sellInventoryItem,
     } = useWorld();
 
@@ -56,10 +55,7 @@ export default function App() {
                         sellDisabled={world.game.status === 'COMPLETED'}
                     />
                     <WorldMap world={world} />
-                    <AgentChat
-                        onTaskProposal={dispatchAgentTask}
-                        world={world}
-                    />
+                    <AgentChat world={world} />
                 </div>
             </div>
         </main>

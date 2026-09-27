@@ -1,33 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useAgentChat } from '../hooks/useAgentChat.js';
 
-export default function AgentChat({ onTaskProposal, world }) {
-    const { feed, connected, enabled, setEnabled, provider, setProvider, error } = useAgentChat(world);
+export default function AgentChat({ world }) {
+    const { feed, connected, error } = useAgentChat();
     const list = useRef(null);
     const follow = useRef(true);
-    const handledMessageIds = useRef(new Set());
-    const proposalHandler = useRef(onTaskProposal);
-    proposalHandler.current = onTaskProposal;
     const messages = feed.session_id === world.session_id ? feed.messages : [];
     const lastMessage = messages.at(-1)?.id;
-
-    useEffect(() => {
-        handledMessageIds.current.clear();
-    }, [world.session_id]);
-
-    useEffect(() => {
-        messages.forEach((message) => {
-            if (handledMessageIds.current.has(message.id)) {
-                return;
-            }
-
-            handledMessageIds.current.add(message.id);
-
-            if (enabled && message.status === 'proposed') {
-                proposalHandler.current(message);
-            }
-        });
-    }, [enabled, messages]);
 
     useEffect(() => {
         if (follow.current && list.current) list.current.scrollTop = list.current.scrollHeight;
@@ -38,33 +17,13 @@ export default function AgentChat({ onTaskProposal, world }) {
             <h2 className="mb-3 text-lg font-semibold">Robot conversation</h2>
 
             <div className="market-crate flex min-h-0 w-full flex-1 flex-col overflow-hidden p-5">
-                <div className="chat-controls flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5">
-                    <label
-                        htmlFor="chat-provider"
-                        className="text-xs font-bold uppercase tracking-wide"
-                    >
-                        Voices
-                    </label>
-                    <select
-                        id="chat-provider"
-                        value={provider}
-                        disabled={enabled || feed.running}
-                        onChange={(event) => setProvider(event.target.value)}
-                        className="chat-provider-select px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
-                    >
-                        <option value="mock">Mock demo</option>
-                        <option value="gemini">Gemini agents</option>
-                    </select>
-                    <button
-                        type="button"
-                        onClick={() => setEnabled(!enabled)}
-                        disabled={!enabled && (!connected || feed.running)}
-                        className="market-action-button px-3 py-1.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {enabled ? 'Pause chat' : 'Start chat'}
-                    </button>
-                    <span className="min-w-0 flex-1 text-right text-xs font-semibold">
-                        {feed.running ? 'Robots are thinking…' : enabled ? 'Listening for the next round' : 'Paused'}
+                <div className="chat-controls flex shrink-0 items-center gap-2 px-3 py-2.5">
+                    <span className="min-w-0 flex-1 text-xs font-semibold">
+                        {feed.running
+                            ? 'Robots are thinking…'
+                            : feed.mode === 'autonomous'
+                                ? 'Backend autonomy active'
+                                : 'Waiting for robot messages'}
                     </span>
                     <span
                         className={`size-2 shrink-0 ${
@@ -94,7 +53,7 @@ export default function AgentChat({ onTaskProposal, world }) {
                 >
                     {messages.length === 0 && (
                         <p className="chat-message-bubble px-5 pb-7 pt-4 text-sm text-[#46677c]">
-                            Start chat to hear the robots coordinate. Mock demo works without an API key.
+                            Robot decisions will appear here after the game starts.
                         </p>
                     )}
                     {messages.map((message) => (
@@ -112,7 +71,11 @@ export default function AgentChat({ onTaskProposal, world }) {
                             </div>
                             <p className="break-words text-sm">{message.text}</p>
                             <p className="mt-2 text-xs text-[#5b7990]">
-                                Proposed: {message.action.toLowerCase().replaceAll('_', ' ')}
+                                {message.status === 'accepted'
+                                    ? 'Accepted'
+                                    : message.status === 'waiting'
+                                        ? 'Waiting'
+                                        : 'Proposed'}: {message.action.toLowerCase().replaceAll('_', ' ')}
                                 {message.location ? ` · ${message.location}` : ''}
                                 {message.parameters?.item
                                     ? ` · ${message.parameters.quantity} ${message.parameters.item}`
