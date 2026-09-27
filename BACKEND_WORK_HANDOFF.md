@@ -44,7 +44,7 @@ Waiting points are **saved and displayed only**. Automatic waiting, parking, and
 service-point reservations are not implemented. Backend arrival/stop hardening
 from the plan is also still outstanding. This is not a completed physical round.
 
-## Latest camera-laptop evidence and current blocker
+## Latest camera-laptop evidence and next physical gate
 
 The user configured points on Joet's camera laptop and reported seeing route lines.
 Phase 3 does not move robots or connect to BLE. The latest reported message was:
@@ -72,28 +72,28 @@ editing or pulling over local calibration. Do not invent points or enable moveme
 by changing the flag from this laptop. Measurements and readiness need confirmation
 on the physical setup, especially that radii cover the full robot, not just its marker.
 
-### Current local calibration evidence
+### Current calibration evidence
 
-After pulling `8a14d30`, the camera laptop's uncommitted
-`backend/traffic_config.json` was inspected in place. It is the named-point draft,
-not the committed `43f1c52` geometry. Preserve it as hardware-owner work. Its
-current values are:
+The camera laptop's newer `backend/traffic_config.json` was inspected and passed
+`TrafficConfig.validate_destinations()`. This handoff commits that hardware-owner
+configuration so another Codex sees the same geometry. Its current values are:
 
 - frame 1920×1080; arena `[516,269,1170,772]`;
 - radii 16/13 pixels, margin 30, max speed 250 px/s and stop latency 1.1 s;
 - all four service points present;
-- homebase, lake and market waiting points present, but the farm waiting point missing;
+- all four waiting points present;
 - no obstacle rectangles; and
-- `calibrated: false`.
+- `calibrated: true`.
 
-This draft does not pass complete destination review. The service/waiting minimum
-separation is `16 + 13 + 30 = 59` pixels. The lake pair is only about 14 pixels
-apart and the market pair about 3 pixels apart. Reopen the editor, use key 6 for
-the missing farm waiting point, and reposition keys 7/8 more than 59 pixels from
-their matching service points. Confirm whether an empty obstacle list is physically
-correct. Both speed/latency values and the small measured radii still require
-physical review. Do not set `calibrated: true` until those checks pass, then repeat
-phase 1 and phase 3 before phase 4.
+The service/waiting minimum separation is `16 + 13 + 30 = 59` pixels. Measured
+pairs now clear it: farm 108.3 px, homebase 197.0 px, lake 112.3 px and market
+118.0 px. Software validation does not prove the physical measurements. Confirm
+that an empty obstacle list is intentional, both radii cover the complete chassis
+and attachments, and speed/latency are conservative measured bounds. The user was
+given the guarded phase-4 procedure, but no successful phase-4 movement result or
+logs have been reported in this conversation. The next operator must not claim a
+physical pass until testing one robot, the other robot, then a two-target queue
+with SPACE immediately available.
 
 ## Database integration status
 
@@ -165,11 +165,12 @@ Changing camera position, zoom, or resolution requires recalibration.
 
 ## Implementation process and next steps
 
-1. **Resolve the current operating issue and calibration mismatch.** Confirm the
-   actual branch, absolute config path, phase, marker IDs and BLE states. Preserve
-   local calibration. Complete and validate all waiting points, review obstacles,
-   radii, speed and stop latency, then verify both robots can execute guarded
-   clicked targets.
+1. **Physically verify the committed calibration and BLE movement.** Confirm the
+   actual branch/config path, marker IDs, headings and both BLE states. Check that
+   zero obstacles is intentional and that radii, speed and stop latency match the
+   physical setup. Repeat phase 1/3 if anything moved, then test guarded phase 4:
+   WALL-Y alone, Eeva alone, and finally two queued targets. Record logs and stop
+   behavior; do not infer success from the software validator.
 2. **Complete a backend-directed single-task slice.** Use the same complete traffic
    file on camera/backend laptops. Start hardware mode with
    `HARDWARE_TRAFFIC_CONFIG=./traffic_config.json`; copy the file if hosts differ.
@@ -207,7 +208,12 @@ For `01eaf94`: 224 unit tests ran successfully, including one skipped live Tiger
 test. The HTTP/WebSocket smoke passed gameplay, persistence history, telemetry,
 chat, CORS and lifecycle checks. No real camera, motors, Gemini or Tiger service
 were exercised on the implementation laptop. The teammate geometry commit was
-reviewed but not physically validated here. This handoff changes documentation only.
+reviewed but not physically validated there. The earlier `8a14d30` handoff changed
+documentation only; the current handoff also commits the newer traffic configuration.
+
+For the current configuration handoff, destination validation passed with all
+eight named points and the separations recorded above. This is configuration
+validation only; phase-4 movement is still awaiting reported physical evidence.
 
 Commands from backend:
 
