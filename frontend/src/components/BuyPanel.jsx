@@ -37,7 +37,7 @@ export default function BuyPanel({ disabled = false, market, onBuyItem, robots, 
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
                                 {locked ? (
-                                    <span className="rounded-full bg-stone-700 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-100">
+                                    <span className="market-stage-badge px-3 py-1 text-xs font-bold uppercase tracking-wide">
                                         Stage {item.required_stage}
                                     </span>
                                 ) : (
