@@ -32,10 +32,14 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
             step_distance=100,
         )
 
+        observed_events = {}
         for _ in range(100):
             await runner.tick()
             simulator.tick()
             simulator.tick()
+            # World snapshots retain only the latest 100 events. Collect the
+            # round's evidence before early unlock events age out of that window.
+            observed_events.update((event.id, event) for event in store.snapshot().events)
             if store.snapshot().game.status == 'COMPLETED':
                 break
             await asyncio.sleep(.002)
@@ -54,7 +58,7 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(rule.unlocked for rule in world.economy.unlocks))
         self.assertIn(
             'pumpkin_seeds',
-            [event.data['item'] for event in world.events if event.type == 'stage_unlocked'],
+            [event.data['item'] for event in observed_events.values() if event.type == 'stage_unlocked'],
         )
         self.assertTrue(all(robot.task is None for robot in world.robots))
         self.assertIn('agent_decision', [event.type for event in world.events])

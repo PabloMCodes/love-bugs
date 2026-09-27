@@ -1,7 +1,11 @@
 # Backend work handoff
 
-Updated: 2026-09-27. Active work branch: **backend**, upstream **origin/backend**.
-Continue work here; do not merge or switch implementation to main without a request.
+Updated: 2026-09-27. Active work branch: **main**, upstream **origin/main**.
+At the user's request, backend work through `d138fad` was integrated into main
+with a fast-forward merge. Continue on main unless a new branch is requested.
+Merge verification also corrected the autonomous-round test to collect unlock
+events throughout the run instead of assuming they remain in the bounded final
+snapshot. Game behavior is unchanged.
 
 ## Objective and ownership
 
@@ -227,7 +231,7 @@ Changing camera position, zoom, or resolution requires recalibration.
 
 Make each slice independently reviewable. Inspect status and pull/rebase before
 work; stop on ambiguous conflicts. Update contracts/docs/tests with shared changes.
-Commit and push completed work to origin/backend. Update this handoff with actual
+Commit and push completed work to origin/main. Update this handoff with actual
 evidence and remaining work after each slice; distinguish reported results from
 personally verified results. Do not overwrite teammate calibration or secrets.
 
@@ -251,6 +255,6 @@ Commands from backend:
 PYTHONPATH=. .venv/bin/python tests/http_smoke.py
 ```
 
-The other chat should start with `git status`, then `git pull --rebase` on backend.
+The other chat should start with `git status`, then `git pull --rebase` on main.
 If local calibration prevents a safe pull, preserve it and report the conflict;
 never reset or overwrite it to make the pull succeed.
