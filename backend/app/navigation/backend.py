@@ -2,6 +2,7 @@
 import asyncio
 from datetime import datetime, timezone
 import logging
+import math
 import time
 
 import httpx
@@ -16,15 +17,60 @@ class BackendBridge:
         self.events = []
         self.arrivals = []
         self.error = 'Waiting for backend'
+        self.pending_stop = None
+
+    def request_stop(self):
+        """Latch operator intent until acknowledged; no HTTP in the control loop."""
+        self.pending_stop = {'session_id': self.world['session_id'] if self.world else None}
+        self.arrivals.clear()
+        self.events.clear()
+        self.updated = 0
+        self.error = 'Local emergency stop: awaiting backend acknowledgement'
+
+    async def deliver_stop(self, client):
+        intent = self.pending_stop
+        if intent is None:
+            return
+        if intent['session_id'] is None:
+            response = await client.get('/world')
+            response.raise_for_status()
+            world = response.json()
+            if world['mode'] != 'hardware':
+                raise ValueError('Backend must run with GAME_MODE=hardware')
+            intent['session_id'] = world['session_id']
+        response = await client.post('/game/stop', json=intent)
+        if response.status_code == 409 and response.json().get('error', {}).get('code') == 'SESSION_MISMATCH':
+            logging.warning('Discarded emergency stop for an old backend session; local motion remains disarmed')
+        else:
+            response.raise_for_status()
+            world = response.json()
+            if (world['session_id'] != intent['session_id'] or
+                    world['game']['status'] not in ('STOPPED', 'COMPLETED') or
+                    any(not r['physical']['stopped'] or r['task'] is not None for r in world['robots'])):
+                raise ValueError('Backend did not confirm stopped game and cancelled tasks')
+            self.world = world
+            logging.info('Backend acknowledged emergency stop; start game then press A to recover')
+        if self.pending_stop is intent:
+            self.pending_stop = None
+        self.updated = 0  # Require another world poll before any new arm attempt.
 
     def current(self, now):
-        return self.world if now-self.updated < .75 else None
+        return self.world if self.pending_stop is None and now-self.updated < .75 else None
 
     def target(self, location, world):
         p = world['map']['locations'][location]
         x1,y1,x2,y2 = self.traffic.arena
         return (x1+p['x']/world['map']['width']*(x2-x1),
                 y1+p['y']/world['map']['height']*(y2-y1))
+
+    def validate_map(self, world):
+        expected = self.traffic.world_locations(world['map']['width'], world['map']['height'])
+        actual = world['map']['locations']
+        if set(actual) != set(expected) or any(
+                not math.isclose(actual[name][axis], point[axis], abs_tol=1e-6)
+                for name, point in expected.items() for axis in ('x', 'y')):
+            raise ValueError('Destination map mismatch: restart hardware backend with '
+                             'HARDWARE_TRAFFIC_CONFIG pointing to the same calibration')
 
     def capture(self, robots, traffic):
         x1,y1,x2,y2 = self.traffic.arena
@@ -43,11 +89,16 @@ class BackendBridge:
         async with httpx.AsyncClient(base_url=self.url, timeout=.5) as client:
             while True:
                 try:
+                    if self.pending_stop is not None:
+                        await self.deliver_stop(client)
+                        await asyncio.sleep(.1)
+                        continue
                     response = await client.get('/world')
                     response.raise_for_status()
                     world = response.json()
                     if world['mode'] != 'hardware':
                         raise ValueError('Backend must run with GAME_MODE=hardware')
+                    self.validate_map(world)
                     old_session = self.world and self.world['session_id']
                     if old_session != world['session_id']:
                         self.events.clear()
@@ -55,6 +106,8 @@ class BackendBridge:
                     self.world, self.updated, self.error = world, time.monotonic(), None
                     session = world['session_id']
                     for sample in self.sample:
+                        if self.pending_stop is not None:
+                            break
                         robot_id = sample['robot_id']
                         response = await client.post(f'/robots/{robot_id}/health', json={
                             'session_id': session, 'online': sample['online'], 'blocked': sample['blocked']})
@@ -65,19 +118,23 @@ class BackendBridge:
                                 'session_id': session, 'timestamp': sample['timestamp'],
                                 'pose': {**pose, 'x': pose['x']*world['map']['width'], 'y': pose['y']*world['map']['height']}})
                             response.raise_for_status()
+                    if self.pending_stop is not None:
+                        continue
                     if self.events:
                         event = self.events[0]
                         response = await client.post('/agent-chat/traffic', json={'session_id':session, **event})
                         response.raise_for_status()
-                        self.events.pop(0)
-                    if self.arrivals:
+                        if self.events and self.events[0] is event:
+                            self.events.pop(0)
+                    if self.arrivals and self.pending_stop is None:
                         arrival = self.arrivals[0]
                         if arrival['session_id'] == session:
                             response = await client.post(f"/robots/{arrival['robot_id']}/arrived",
                                 json={k:v for k,v in arrival.items() if k!='robot_id'})
                             if response.status_code != 409:
                                 response.raise_for_status()
-                        self.arrivals.pop(0)
+                        if self.arrivals and self.arrivals[0] is arrival:
+                            self.arrivals.pop(0)
                 except (httpx.HTTPError, ValueError, KeyError) as error:
                     self.updated = 0
                     message = f'{type(error).__name__}: {error}'
@@ -104,7 +161,7 @@ class TaskFollower:
 
     def update(self, robots, sample, now, world, *, arm=False):
         states = {r['id']: r for r in world['robots']} if world else {}
-        healthy = bool(world and world['game']['status'] == 'RUNNING' and all(
+        healthy = bool(self.bridge.pending_stop is None and world and world['game']['status'] == 'RUNNING' and all(
             states[r.profile.robot_id]['physical']['online'] and
             states[r.profile.robot_id]['physical']['tracking'] == 'TRACKED' and
             not states[r.profile.robot_id]['physical']['blocked'] and

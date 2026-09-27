@@ -11,6 +11,7 @@ from app.navigation.controller import MotionGate, steer
 from app.robots.client import BleController
 from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, TrafficConfig, TrafficController
 from app.navigation.backend import BackendBridge, TaskFollower
+from app.navigation.calibrate import draw_destinations
 
 WINDOW = 'Love Bugs navigation'
 COLORS = ((255, 80, 255), (255, 220, 0))
@@ -125,6 +126,8 @@ async def run_fleet(args, profiles):
     if not config.calibrated:
         logging.warning('Traffic calibration is not reviewed: all motion will remain STOPPED')
     backend_url = getattr(args, 'backend_url', None)
+    if backend_url:
+        config.validate_destinations()
     bridge = BackendBridge(backend_url, traffic.config) if backend_url else None
     bridge_task = None
     follower = TaskFollower(bridge) if bridge else None
@@ -185,9 +188,10 @@ async def run_fleet(args, profiles):
             elif key in (ord('e'), ord('E')):
                 selected = 1
             if key == ord(' '):
-                await stop_all(robots)
                 if follower:
                     follower.stop(robots)
+                    bridge.request_stop()
+                await stop_all(robots)
                 logging.info('EMERGENCY STOP: both robots disarmed')
             if worker.error:
                 raise RuntimeError(f'Camera failed: {worker.error}')
@@ -252,6 +256,7 @@ async def run_fleet(args, profiles):
                 last_log, last_state = now, state
             if sample:
                 frame = sample[1].copy()
+                draw_destinations(frame, config)
                 for index, robot in enumerate(robots):
                     target = robot.target if args.phase >= 2 else None
                     draw(frame, robot.pose if robot.geometry else None, target, robot.geometry, [], color=COLORS[index])
@@ -274,6 +279,8 @@ async def run_fleet(args, profiles):
                 cv2.imshow(WINDOW, frame)
             await asyncio.sleep(.01)
     finally:
+        if bridge and bridge.pending_stop is not None:
+            logging.warning('Exiting with backend stop unacknowledged; stop the game in the dashboard')
         if bridge_task:
             bridge_task.cancel()
             await asyncio.gather(bridge_task, return_exceptions=True)

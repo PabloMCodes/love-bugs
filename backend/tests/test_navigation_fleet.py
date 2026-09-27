@@ -239,6 +239,16 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
         for client in clients:
             client.close.assert_awaited_once()
 
+    async def test_backend_mode_requires_destinations_before_camera_or_ble(self):
+        with patch('app.navigation.fleet.TrafficConfig.load', return_value=TrafficConfig()), \
+                patch('app.navigation.fleet.CameraWorker') as camera, \
+                patch('app.navigation.fleet.connect_fleet', new_callable=AsyncMock) as connect:
+            with self.assertRaisesRegex(ValueError, 'Configure service'):
+                await run_fleet(SimpleNamespace(phase=4, camera=0, video=None,
+                                               backend_url='http://localhost:8000'), profiles())
+            camera.assert_not_called()
+            connect.assert_not_awaited()
+
     async def test_dry_phases_never_connect(self):
         for phase in (1, 2, 3):
             await self.run_ui(['w', (300, 100), 'e', (100, 300), 'a', 'q'], phase=phase)

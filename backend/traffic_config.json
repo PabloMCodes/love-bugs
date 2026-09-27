@@ -1,12 +1,56 @@
 {
-  "calibrated": false,
-  "frame_width": 1280,
-  "frame_height": 720,
-  "arena": [0, 0, 1280, 720],
-  "radii": {"robot-a": 55, "robot-b": 55},
+  "calibrated": true,
+  "frame_width": 1920,
+  "frame_height": 1080,
+  "arena": [
+    516,
+    269,
+    1170,
+    772
+  ],
+  "radii": {
+    "robot-a": 16,
+    "robot-b": 13
+  },
   "margin": 30,
   "max_speed": 250,
   "stop_latency": 1.1,
   "grid": 25,
-  "obstacles": []
+  "obstacles": [],
+  "service_points": {
+    "homebase": [
+      839,
+      436
+    ],
+    "lake": [
+      586,
+      706
+    ],
+    "farm": [
+      617,
+      425
+    ],
+    "market": [
+      1082,
+      486
+    ]
+  },
+  "waiting_points": {
+    "homebase": [
+      839,
+      633
+    ],
+    "lake": [
+      685,
+      653
+    ],
+    "market": [
+      1083,
+      604
+    ],
+    "farm": [
+      573,
+      326
+    ]
+  }
 }

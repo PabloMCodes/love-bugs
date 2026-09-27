@@ -14,6 +14,8 @@ The project is designed so the same game rules run in two modes:
 
 ## Start here
 
+- [BACKEND_WORK_HANDOFF.md](BACKEND_WORK_HANDOFF.md): current backend-branch work,
+  camera-laptop troubleshooting evidence, and the next implementation sequence.
 - [CAMERA_ORCHESTRATION_PLAN.md](CAMERA_ORCHESTRATION_PLAN.md): audited implementation
   order for connecting physical camera navigation to backend-owned agent gameplay.
 - [PROJECT_STATUS.md](PROJECT_STATUS.md): consolidated implementation history,

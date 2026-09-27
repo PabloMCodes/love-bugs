@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import cv2
@@ -8,6 +9,18 @@ import numpy as np
 
 from app.navigation.calibrate import Editor, footprint_radius, rectangle
 from app.navigation.traffic import TrafficConfig, TrafficController
+from app.navigation.backend import BackendBridge
+from app.config import Settings
+from app.main import create_app
+from fastapi.testclient import TestClient
+
+
+def destinations():
+    return TrafficConfig(arena=[100,100,1180,620],
+        service_points={'homebase':[250,250], 'farm':[500,250],
+                        'lake':[750,250], 'market':[1000,250]},
+        waiting_points={'homebase':[250,450], 'farm':[500,450],
+                        'lake':[750,450], 'market':[1000,450]})
 
 
 class CalibrationTests(unittest.TestCase):
@@ -63,3 +76,75 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(editor.config.arena,[0,0,640,480])
         self.assertEqual(editor.config.obstacles,[])
         self.assertIn('BOTH robots',editor.message)
+
+    def test_click_named_points_save_reload_and_resolution_invalidation(self):
+        editor = Editor(destinations(),1280,720)
+        editor.select('service:farm')
+        editor.mouse(cv2.EVENT_LBUTTONDOWN,550,250,0,None)
+        editor.mouse(cv2.EVENT_LBUTTONUP,550,250,0,None)
+        editor.select('waiting:farm')
+        editor.mouse(cv2.EVENT_LBUTTONDOWN,550,450,0,None)
+        self.assertEqual(editor.config.service_points['farm'],[550,250])
+        self.assertEqual(editor.config.waiting_points['farm'],[550,450])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'points.json'
+            editor.save(path,None)
+            loaded = TrafficConfig.load(path)
+            loaded.validate_destinations()
+            self.assertEqual(loaded.service_points,editor.config.service_points)
+            self.assertFalse(loaded.calibrated)
+        resized = Editor(editor.config,640,480)
+        self.assertEqual(resized.config.service_points,{})
+        self.assertEqual(resized.config.waiting_points,{})
+
+    def test_invalid_click_preserves_previous_destination(self):
+        editor = Editor(destinations(),1280,720)
+        editor.select('service:farm')
+        editor.mouse(cv2.EVENT_LBUTTONDOWN,101,101,0,None)
+        self.assertIn('clearance',editor.message)
+        self.assertEqual(editor.config.service_points['farm'],[500,250])
+
+    def test_clearance_missing_points_and_wait_separation(self):
+        geometry = destinations()
+        for point in ([101,101], [float('nan'),250], [True,250], [500]):
+            with self.assertRaises(ValueError):
+                replace(geometry,service_points={'farm':point})
+        with self.assertRaisesRegex(ValueError,'buildings'):
+            replace(geometry,obstacles=[[480,230,520,270]])
+        with self.assertRaisesRegex(ValueError,'Configure service'):
+            TrafficConfig().validate_destinations()
+        geometry.waiting_points['farm'] = [510,250]
+        with self.assertRaisesRegex(ValueError,'too close'):
+            geometry.validate_destinations()
+
+    def test_world_conversion_roundtrip_and_map_mismatch(self):
+        geometry = destinations()
+        world = {'map': {'width':100,'height':100,
+                         'locations':geometry.world_locations(100,100)}}
+        bridge = BackendBridge('http://test',geometry)
+        bridge.validate_map(world)
+        for name, point in geometry.service_points.items():
+            x,y = bridge.target(name,world)
+            self.assertAlmostEqual(x,point[0])
+            self.assertAlmostEqual(y,point[1])
+        world['map']['locations']['farm']['x'] += 1
+        with self.assertRaisesRegex(ValueError,'map mismatch'):
+            bridge.validate_map(world)
+
+    def test_hardware_backend_loads_map_and_preserves_it_on_reset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'traffic.json'
+            geometry = destinations()
+            path.write_text(json.dumps(asdict(geometry)))
+            settings = Settings(game_mode='hardware',hardware_traffic_config=str(path),
+                                database_url=None,sqlite_path=str(Path(directory)/'test.sqlite3'))
+            with TestClient(create_app(settings=settings,run_simulator=False)) as client:
+                world = client.get('/world').json()
+                self.assertEqual(world['map']['locations'],geometry.world_locations(100,100))
+                self.assertIsNone(world['robots'][0]['physical']['pose'])
+                reset = client.post('/game/reset')
+                reset.raise_for_status()
+                self.assertEqual(reset.json()['map'],world['map'])
+            path.write_text('{}')
+            with self.assertRaisesRegex(ValueError,'Configure service'):
+                create_app(settings=settings,run_simulator=False)

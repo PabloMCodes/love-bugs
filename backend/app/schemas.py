@@ -24,6 +24,10 @@ class GoalRequest(StrictModel):
     target: int = Field(ge=1)
 
 
+class GameStopRequest(StrictModel):
+    session_id: str = Field(min_length=1, max_length=100)
+
+
 class GameState(StrictModel):
     status: Literal['READY', 'RUNNING', 'STOPPED', 'COMPLETED']
     goal: Goal

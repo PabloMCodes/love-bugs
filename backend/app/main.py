@@ -41,6 +41,11 @@ def create_app(
     history = Store(config) if persistent else None
     if world_store is None:
         initial = default_world(config.game_mode)
+        if config.game_mode == 'hardware' and config.hardware_traffic_config:
+            from app.navigation.traffic import TrafficConfig
+            geometry = TrafficConfig.load(config.hardware_traffic_config)
+            initial['map']['locations'] = geometry.world_locations(
+                initial['map']['width'], initial['map']['height'])
         initial['session_id'] = str(uuid4())
         fishing_seed = config.fishing_random_seed
         if fishing_seed is None and config.game_mode == 'simulation':

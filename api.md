@@ -308,6 +308,14 @@ proposal without charging anyone and permits a new proposal.
 
 Game stop cancels unfinished tasks, disables autonomous dispatch, and requests a fleet-wide motor stop. Robot stop does the equivalent for one robot. Controllers must invalidate active movement commands so their next update cannot restart motion. Resume allows new tasks; cancelled tasks never automatically resume. Game start clears a game-level pause but must not clear a separately requested robot stop. A `200` stop response confirms backend acceptance, not proof of physical motor delivery; communication loss is still covered by the onboard watchdog.
 
+`POST /game/stop` still accepts no body for browser controls. Hardware adapters may
+send `{ "session_id": "current-session-id" }` to prevent a delayed stop from
+cancelling a replacement session. A mismatch returns `409 SESSION_MISMATCH`; the
+check and stop execute under the same world lock. Repeating a successful stop is
+idempotent. In backend-connected navigation, SPACE first latches local disarm and
+requests local motor stops, then the asynchronous bridge retries this scoped game
+stop. Pending acknowledgement blocks re-arming and discards queued arrivals.
+
 ### Assigning a task
 
 ```json
@@ -467,6 +475,14 @@ The frontend replaces its state with each newer snapshot, deduplicates feed even
 Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `fish_caught`, `gold_updated`, `market_updated`, `money_requested`, `money_request_accepted`, `money_request_rejected`, `money_transferred`, `stage_unlock_proposed`, `stage_unlock_accepted`, `stage_unlock_rejected`, `unlock_contribution`, `stage_unlocked`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
 
 ## Robotics integration boundary
+
+The camera adapter can share saved destinations with the hardware backend via
+`HARDWARE_TRAFFIC_CONFIG` at server startup. Its `service_points` are arena pixel
+coordinates converted into the existing `world.map.locations` world units; API
+payloads and schema version remain unchanged. Reset preserves this configured map.
+The adapter checks map agreement before following tasks. Waiting points remain
+local navigation configuration and are not additional game locations. See
+[camera setup](CAMERA_SETUP_GUIDE.md#named-service-and-waiting-points).
 
 These implemented routes are for localization/navigation adapters, not browser controls.
 Teammates can use equivalent in-process calls if components share a process. The

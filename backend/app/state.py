@@ -1189,8 +1189,10 @@ class WorldStore:
             self._publish(world)
             return self._world.model_copy(deep=True)
 
-    def stop_game(self) -> WorldSnapshot:
+    def stop_game(self, *, session_id: str | None = None) -> WorldSnapshot:
         with self._lock:
+            if session_id is not None and session_id != self._world.session_id:
+                raise WorldStateError('SESSION_MISMATCH', 'The stop request belongs to a different game session.')
             target_status = (
                 'COMPLETED'
                 if self._world.game.status == 'COMPLETED'

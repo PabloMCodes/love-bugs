@@ -14,10 +14,20 @@ import time
 
 import cv2
 
-from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, TrafficConfig
+from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, LOCATIONS, TrafficConfig
 from app.vision.capture import VideoSource
 
 WINDOW = 'Traffic setup'
+
+
+def draw_destinations(frame, config):
+    for kind, points, color in (('service', config.service_points, (0,255,0)),
+                                ('wait', config.waiting_points, (255,200,0))):
+        for name, point in points.items():
+            x, y = map(int, point)
+            cv2.circle(frame, (x,y), 8, color, 2)
+            cv2.putText(frame, f'{name} {kind}', (x+12,y),
+                        cv2.FONT_HERSHEY_SIMPLEX, .5, color, 2)
 
 
 def rectangle(start, end, width, height):
@@ -42,6 +52,8 @@ class Editor:
         self.config = replace(config, calibrated=False, frame_width=width, frame_height=height,
                               arena=[0, 0, width, height] if changed else config.arena.copy(),
                               obstacles=[] if changed else [box.copy() for box in config.obstacles],
+                              service_points={} if changed else {k:v.copy() for k,v in config.service_points.items()},
+                              waiting_points={} if changed else {k:v.copy() for k,v in config.waiting_points.items()},
                               radii=config.radii.copy())
         self.mode = 'building'
         self.start = self.cursor = None
@@ -52,12 +64,22 @@ class Editor:
 
     def select(self, mode):
         self.mode, self.start, self.body = mode, None, None
+        if ':' in mode:
+            self.message = 'Click clear floor for ' + mode.replace(':', ' ')
+            return
         self.message = ('Drag around the ENTIRE robot, then click its marker center'
                         if mode.startswith('robot-') else 'Drag the ' + mode + ' rectangle')
 
     def mouse(self, event, x, y, _flags, _data):
         self.cursor = (x, y)
         try:
+            if ':' in self.mode:
+                if event == cv2.EVENT_LBUTTONDOWN:
+                    kind, name = self.mode.split(':')
+                    self.config.validate_point([x,y], self.mode)
+                    getattr(self.config, kind + '_points')[name] = [x,y]
+                    self.message = f'{name} {kind} set at ({x}, {y})'
+                return
             if self.body is not None and event == cv2.EVENT_LBUTTONDOWN:
                 radius = footprint_radius(self.body, (x, y))
                 self.config.radii[self.mode] = radius
@@ -89,6 +111,8 @@ class Editor:
             raise ValueError('Finish or cancel the current selection before saving')
         # Validate a fresh object and never silently enable physical movement.
         config = TrafficConfig(**asdict(self.config))
+        if set(config.service_points) == set(LOCATIONS) and set(config.waiting_points) == set(LOCATIONS):
+            config.validate_destinations()
         current = path.read_bytes() if path.exists() else None
         if current != original:
             raise ValueError('Config changed on disk; quit and reopen to preserve those edits')
@@ -109,6 +133,7 @@ class Editor:
 
     def draw(self, frame):
         display = frame.copy()
+        draw_destinations(display, self.config)
         for index, box in enumerate([self.config.arena, *self.config.obstacles]):
             color = (0,255,255) if index == 0 else (0,80,255)
             cv2.rectangle(display, tuple(map(int, box[:2])), tuple(map(int, box[2:])), color, 2)
@@ -124,6 +149,8 @@ class Editor:
         if self.start and self.cursor:
             cv2.rectangle(display, self.start, self.cursor, (255,255,255), 1)
         lines = ['FROZEN IMAGE | A arena | B buildings | W WALL-Y body | E Eeva body',
+                 '1 homebase | 2 farm | 3 lake | 4 market (service points)',
+                 '5 homebase | 6 farm | 7 lake | 8 market (waiting points)',
                  'U undo building | S save | Q quit | choose a mode to cancel a selection',
                  f'Mode: {self.mode} | {self.message}']
         for index, text in enumerate(lines):
@@ -166,6 +193,9 @@ def run(source, path):
             if key in (ord('q'),ord('Q')) or cv2.getWindowProperty(WINDOW,cv2.WND_PROP_VISIBLE)<1:
                 return
             mode = {ord('a'):'arena',ord('b'):'building',ord('w'):'robot-a',ord('e'):'robot-b'}.get(key)
+            if ord('1') <= key <= ord('8'):
+                index = key - ord('1')
+                mode = ('service' if index < 4 else 'waiting') + ':' + LOCATIONS[index % 4]
             if mode:
                 editor.select(mode)
             elif key == ord('u') and editor.config.obstacles:

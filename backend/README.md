@@ -36,6 +36,20 @@ onboard motor watchdog belongs in that firmware.
 
 ## Runtime mode
 
+For calibrated physical destinations, set `HARDWARE_TRAFFIC_CONFIG=./traffic_config.json`
+when starting the hardware backend. Use the same saved file with navigation's
+`--traffic-config` (copy it to the backend laptop if needed). The backend loads its
+four service points into `world.map.locations` at startup, converting arena pixels
+to world units. It preserves them on game reset. Restart after changing calibration.
+Simulation ignores this setting. A configured missing/invalid/incomplete file fails
+startup; it never silently falls back. The backend can load an unreviewed file for
+map preview, but navigation still requires `calibrated=true` to move.
+
+Without this setting the backend retains its default map for existing adapters.
+The camera task-following adapter now requires all four service/waiting points and
+rejects a mismatching backend map before sending telemetry or following tasks.
+See [destination setup](../CAMERA_SETUP_GUIDE.md#named-service-and-waiting-points).
+
 Simulation is the default and keeps the current browser demo working:
 
 ```sh

@@ -164,6 +164,9 @@ class AgentConfig:
 
 @dataclass
 class Settings:
+    hardware_traffic_config: str | None = field(
+        default_factory=lambda: os.getenv('HARDWARE_TRAFFIC_CONFIG') or None,
+    )
     database_url: str | None = field(default_factory=lambda: os.getenv("DATABASE_URL") or None)
     sqlite_path: str = field(default_factory=lambda: os.getenv("SQLITE_PATH", "./lovebugs.sqlite3"))
     game_mode: str = field(default_factory=lambda: os.getenv('GAME_MODE', 'simulation'))

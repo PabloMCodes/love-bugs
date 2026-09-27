@@ -64,6 +64,12 @@ commands, grants money, or decides whether a path is safe.
 
 ## Work packages, in implementation order
 
+Implementation update: the first calibration slice now supports clickable service
+and waiting points, clearance validation, backend loading through
+`HARDWARE_TRAFFIC_CONFIG`, map agreement checks, and live destination overlays.
+Waiting-point dispatch, route-wide readiness, arrival/stop hardening, and physical
+acceptance remain outstanding. The audit below describes the original baseline.
+
 ### 1. Make game destinations match the physical arena
 
 The bridge currently maps `world.map.locations` linearly into the calibrated arena
