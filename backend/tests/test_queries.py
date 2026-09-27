@@ -10,6 +10,7 @@ from app.state import WorldStore, default_world
 class QueryRouteTests(unittest.TestCase):
     def setUp(self):
         world = default_world()
+        world['game']['stage'] = 3
         next(
             item for item in world['market']['items']
             if item['id'] == 'pumpkin_seeds'

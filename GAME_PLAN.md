@@ -104,7 +104,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Simulation | Implemented | Movement, arrival, activity timing, inventory rewards, and trading run without hardware. |
 | Individual inventory and wallets | Implemented | The market sell view exposes each robot separately. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
-| Market purchases | Partial | Wheat, carrot, and pumpkin seeds can be bought, but planting and stage locks are not implemented yet. |
+| Market purchases | Partial | Wheat starts unlocked; carrot and pumpkin unlock permanently at 100 and 150 combined gold. Planting is not implemented yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents progress and lifecycle controls; a dedicated victory presentation remains. |
@@ -195,7 +195,7 @@ reopen the frontend to see valid progress and conversation history.
 Goal: purchases create a visible decision instead of dead inventory.
 
 - [x] Replace placeholder purchases with wheat, carrot, and pumpkin seeds.
-- [ ] Enforce stage-based seed availability in the backend.
+- [x] Enforce stage-based seed availability in the backend.
 - [ ] Implement the complete seed → plant → grow → harvest → sell loop.
 - [ ] Teach both planners to compare seed cost, growth time, and expected crop value.
 - [ ] Test that purchases, planting, growth, harvesting, and sales resolve exactly once.

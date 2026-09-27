@@ -58,6 +58,7 @@ export default function App() {
                 <div className="grid min-h-80 w-full auto-rows-[20rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-3 lg:grid-rows-1 lg:auto-rows-auto">
                     <MarketPanel
                         market={world.market}
+                        game={world.game}
                         onBuyItem={buyMarketItem}
                         onSellItem={sellInventoryItem}
                         robots={world.robots}

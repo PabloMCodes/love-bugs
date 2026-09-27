@@ -24,6 +24,7 @@ class GoalRequest(StrictModel):
 class GameState(StrictModel):
     status: Literal['READY', 'RUNNING', 'STOPPED', 'COMPLETED']
     goal: Goal
+    stage: int = Field(default=1, ge=1, le=3)
 
 
 class Point(StrictModel):
@@ -156,6 +157,8 @@ class MarketItem(StrictModel):
     buy_price: int | None = Field(default=None, ge=0)
     sell_price: int | None = Field(default=None, ge=0)
     stock: int | None = Field(default=None, ge=0)
+    required_stage: int = Field(default=1, ge=1, le=3)
+    unlock_at: int | None = Field(default=None, ge=0)
 
 
 class Market(StrictModel):

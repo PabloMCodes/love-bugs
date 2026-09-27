@@ -109,6 +109,8 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
         )
         if item is None:
             raise ValueError('Unknown market item')
+        if world['game'].get('stage', 1) < item.get('required_stage', 1):
+            raise ValueError('Item is locked for the current farming stage')
         price = item['buy_price']
         if not valid_price(price):
             raise ValueError('Item is unavailable for this trade')

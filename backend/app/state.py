@@ -30,6 +30,12 @@ from app.schemas import (
 )
 
 
+STAGE_UNLOCKS = (
+    (2, 100, 'carrot_seeds', 'Carrot Seeds'),
+    (3, 150, 'pumpkin_seeds', 'Pumpkin Seeds'),
+)
+
+
 class WorldStateError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -51,6 +57,7 @@ def default_world(mode: str = 'simulation') -> dict:
         'game': {
             'status': 'READY',
             'goal': {'type': 'earn_gold', 'target': 200, 'current': 80},
+            'stage': 1,
         },
         'map': {
             'width': 100,
@@ -104,9 +111,18 @@ def default_world(mode: str = 'simulation') -> dict:
         ],
         'market': {
             'items': [
-                {'id': 'seeds', 'name': 'Wheat Seeds', 'buy_price': 5, 'stock': None},
-                {'id': 'carrot_seeds', 'name': 'Carrot Seeds', 'buy_price': 10, 'stock': None},
-                {'id': 'pumpkin_seeds', 'name': 'Pumpkin Seeds', 'buy_price': 20, 'stock': None},
+                {
+                    'id': 'seeds', 'name': 'Wheat Seeds', 'buy_price': 5,
+                    'stock': None, 'required_stage': 1, 'unlock_at': None,
+                },
+                {
+                    'id': 'carrot_seeds', 'name': 'Carrot Seeds', 'buy_price': 10,
+                    'stock': None, 'required_stage': 2, 'unlock_at': 100,
+                },
+                {
+                    'id': 'pumpkin_seeds', 'name': 'Pumpkin Seeds', 'buy_price': 20,
+                    'stock': None, 'required_stage': 3, 'unlock_at': 150,
+                },
             ],
         },
         'events': [
@@ -782,6 +798,7 @@ class WorldStore:
                             robot.game.model_dump(mode='python'),
                             self._world.market.model_dump(mode='python'),
                             request.parameters,
+                            current_stage=self._world.game.stage,
                         )
                     else:
                         quote_sale(robot.game.model_dump(mode='python'), request.parameters)
@@ -1092,7 +1109,12 @@ class WorldStore:
 
     def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
         try:
-            quote = apply_purchase(robot['game'], world['market'], task['parameters'])
+            quote = apply_purchase(
+                robot['game'],
+                world['market'],
+                task['parameters'],
+                current_stage=world['game']['stage'],
+            )
         except MarketRuleError as error:
             robot['task'] = None
             world['events'].append({
@@ -1222,6 +1244,8 @@ class WorldStore:
             },
         ])
 
+        self._unlock_stages(world, current_gold, task, robot, now)
+
         if current_gold < world['game']['goal']['target']:
             return
 
@@ -1249,6 +1273,34 @@ class WorldStore:
             'message': f'The crew reached {current_gold} gold and completed the goal.',
             'data': {},
         })
+
+    @staticmethod
+    def _unlock_stages(
+        world: dict,
+        current_gold: int,
+        task: dict,
+        robot: dict,
+        now: datetime,
+    ) -> None:
+        current_stage = world['game'].get('stage', 1)
+        for stage, threshold, item_id, item_name in STAGE_UNLOCKS:
+            if stage <= current_stage or current_gold < threshold:
+                continue
+            world['game']['stage'] = stage
+            current_stage = stage
+            world['events'].append({
+                'id': f"event-{task['id']}-stage-{stage}",
+                'timestamp': now,
+                'type': 'stage_unlocked',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f'The team unlocked Stage {stage}: {item_name}.',
+                'data': {
+                    'stage': stage,
+                    'item': item_id,
+                    'threshold': threshold,
+                },
+            })
 
     def advance_activities(self, elapsed_seconds: float) -> WorldSnapshot:
         if not math.isfinite(elapsed_seconds) or elapsed_seconds <= 0:

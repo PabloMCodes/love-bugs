@@ -121,6 +121,11 @@ decisions.
 Each crop stage has a money threshold. Reaching a threshold makes the next seed
 eligible to unlock; it does not silently purchase it.
 
+The current Repair Fund implementation uses automatic milestone unlocks as an
+intermediate step: 100 combined gold permanently unlocks carrot seeds and 150
+permanently unlocks pumpkin seeds. The cooperative proposal and contribution flow
+below remains the intended replacement once agent transaction actions are added.
+
 The cooperative unlock flow is:
 
 1. The robots' combined available money reaches the stage threshold.

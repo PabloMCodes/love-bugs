@@ -58,7 +58,13 @@ def trade_parameters(parameters: dict, action: str) -> tuple[str, int]:
     return item_id, quantity
 
 
-def quote_purchase(game: dict, market: dict, parameters: dict) -> BuyQuote:
+def quote_purchase(
+    game: dict,
+    market: dict,
+    parameters: dict,
+    *,
+    current_stage: int = 1,
+) -> BuyQuote:
     item_id, quantity = trade_parameters(parameters, 'BUY')
     item = next(
         (candidate for candidate in market['items'] if candidate['id'] == item_id),
@@ -68,6 +74,11 @@ def quote_purchase(game: dict, market: dict, parameters: dict) -> BuyQuote:
         raise MarketRuleError('NOT_FOUND', f'Unknown market item {item_id}.')
     if item['buy_price'] is None:
         raise MarketRuleError('INVALID_REQUEST', f'{item_id} cannot be purchased.')
+    if current_stage < item.get('required_stage', 1):
+        raise MarketRuleError(
+            'SEED_LOCKED',
+            f"{item['name']} unlock at farming stage {item['required_stage']}.",
+        )
 
     quote = BuyQuote(
         item_id=item_id,
@@ -84,8 +95,19 @@ def quote_purchase(game: dict, market: dict, parameters: dict) -> BuyQuote:
     return quote
 
 
-def apply_purchase(game: dict, market: dict, parameters: dict) -> BuyQuote:
-    quote = quote_purchase(game, market, parameters)
+def apply_purchase(
+    game: dict,
+    market: dict,
+    parameters: dict,
+    *,
+    current_stage: int = 1,
+) -> BuyQuote:
+    quote = quote_purchase(
+        game,
+        market,
+        parameters,
+        current_stage=current_stage,
+    )
     market_item = next(
         item for item in market['items'] if item['id'] == quote.item_id
     )

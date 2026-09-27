@@ -11,6 +11,7 @@ export default function MarketPanel({
     onSellItem,
     robots,
     buyDisabled,
+    game,
     sellDisabled,
 }) {
     const [activePanel, setActivePanel] = useState('buy');
@@ -55,6 +56,7 @@ export default function MarketPanel({
                             market={market}
                             onBuyItem={onBuyItem}
                             robots={robots}
+                            stage={game.stage}
                         />
                     ) : (
                         <SellPanel

@@ -58,12 +58,15 @@ def discussion_world(world):
         item.setdefault('sell_price', None)
         item.setdefault('buy_price', None)
         item.setdefault('stock', None)
+        item.setdefault('required_stage', 1)
+        item.setdefault('unlock_at', None)
     for robot in snapshot['robots']:
         for item_id, item in robot['game']['inventory'].items():
             if item_id not in catalog and isinstance(item, dict):
                 catalog[item_id] = {
                     'id': item_id, 'name': item.get('name', item_id),
                     'buy_price': None, 'sell_price': item.get('sell_price'), 'stock': None,
+                    'required_stage': 1, 'unlock_at': None,
                 }
     snapshot['market']['items'] = list(catalog.values())
     return snapshot

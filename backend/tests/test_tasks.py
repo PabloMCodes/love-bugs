@@ -176,13 +176,21 @@ class TaskRouteTests(unittest.TestCase):
 
     def test_buy_task_validates_market_funds_and_stock(self):
         self.client.post('/game/start')
+        locked = self.client.post('/tasks', json={
+            **self.request,
+            'request_id': 'request-buy-locked',
+            'robot_id': 'robot-a',
+            'action': 'BUY',
+            'location': 'market',
+            'parameters': {'item': 'carrot_seeds', 'quantity': 1},
+        })
         request = {
             **self.request,
             'request_id': 'request-buy-001',
             'robot_id': 'robot-b',
             'action': 'BUY',
             'location': 'market',
-            'parameters': {'item': 'pumpkin_seeds', 'quantity': 1},
+            'parameters': {'item': 'seeds', 'quantity': 1},
         }
 
         accepted = self.client.post('/tasks', json=request)
@@ -206,6 +214,7 @@ class TaskRouteTests(unittest.TestCase):
             })
 
         stocked_world = default_world()
+        stocked_world['game']['stage'] = 3
         stocked_world['robots'][1]['game']['money'] = 100
         next(
             item for item in stocked_world['market']['items']
@@ -220,6 +229,8 @@ class TaskRouteTests(unittest.TestCase):
                 'parameters': {'item': 'pumpkin_seeds', 'quantity': 2},
             })
 
+        self.assertEqual(locked.status_code, 409)
+        self.assertEqual(locked.json()['error']['code'], 'SEED_LOCKED')
         self.assertEqual(insufficient_funds.status_code, 409)
         self.assertEqual(
             insufficient_funds.json()['error']['code'],

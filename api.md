@@ -77,7 +77,8 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   "mode": "simulation",
   "game": {
     "status": "RUNNING",
-    "goal": { "type": "earn_gold", "target": 500, "current": 80 }
+    "goal": { "type": "earn_gold", "target": 500, "current": 80 },
+    "stage": 1
   },
   "map": {
     "width": 100,
@@ -144,9 +145,9 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   ],
   "market": {
     "items": [
-      { "id": "seeds", "name": "Wheat Seeds", "buy_price": 5, "sell_price": null, "stock": null },
-      { "id": "carrot_seeds", "name": "Carrot Seeds", "buy_price": 10, "sell_price": null, "stock": null },
-      { "id": "pumpkin_seeds", "name": "Pumpkin Seeds", "buy_price": 20, "sell_price": null, "stock": null }
+      { "id": "seeds", "name": "Wheat Seeds", "buy_price": 5, "sell_price": null, "stock": null, "required_stage": 1, "unlock_at": null },
+      { "id": "carrot_seeds", "name": "Carrot Seeds", "buy_price": 10, "sell_price": null, "stock": null, "required_stage": 2, "unlock_at": 100 },
+      { "id": "pumpkin_seeds", "name": "Pumpkin Seeds", "buy_price": 20, "sell_price": null, "stock": null, "required_stage": 3, "unlock_at": 150 }
     ]
   },
   "events": [
@@ -171,7 +172,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - Every endpoint returning a robot uses the canonical robot shape above. `task` is the current nonterminal task or `null`; terminal tasks remain available in task history.
 - `physical.online` describes robot communication; `tracking` independently describes localization: `TRACKED`, `STALE`, or `UNKNOWN`. Initially pose and pose timestamp are `null`, and tracking is `UNKNOWN`. A stale pose may remain for display but must not be treated as fresh control input. The hardware adapter defines and documents its freshness threshold before live driving.
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
-- The market list contains items available to buy. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
+- The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` is the combined-gold threshold that permanently advances to that stage, or `null` for initially unlocked items. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
 - `events` contains the latest 100 semantic events, oldest first. Pose samples are not feed events. Event `robot_id` and `task_id` may be `null`. `data` contains optional details; the UI can always display `message`.
 
 ## Frontend-facing HTTP API
@@ -228,7 +229,7 @@ checks replay before checking whether the robot is busy.
 
 `location` is required and validated against the action. One nonterminal task per robot; competing requests receive `409`. The game must be running and the robot available. A robot already confirmed in the required zone can skip navigation.
 
-Shop buttons submit `BUY`/`SELL` tasks for the selected robot. They do not immediately alter its wallet from anywhere on the map. Check stock, prices, funds, and inventory again when the transaction executes; apply inventory and currency changes atomically and only once. Use execution-time prices for the MVP and explain this in the shop UI. A failed validation fails the task without a partial transaction.
+Shop buttons submit `BUY`/`SELL` tasks for the selected robot. They do not immediately alter its wallet from anywhere on the map. Check stage access, stock, prices, funds, and inventory again when the transaction executes; apply inventory and currency changes atomically and only once. Use execution-time prices for the MVP and explain this in the shop UI. A locked item returns `SEED_LOCKED`; a failed execution fails the task without a partial transaction.
 
 Task lifecycle:
 
@@ -258,7 +259,7 @@ for conflicting state or unavailable funds/stock, `422` for malformed or
 schema-invalid payloads handled by FastAPI, and `503` for an unavailable required
 subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`,
 `GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`,
-`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, and
+`INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SEED_LOCKED`, and
 `PERSISTENCE_UNAVAILABLE`. Do not expose secrets or stack traces in errors.
 
 ## Live updates: WebSocket /events

@@ -178,7 +178,9 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(milo.game.inventory['crop'].quantity, 1)
         self.assertEqual(milo.game.money, 64)
         self.assertEqual(completed.game.goal.current, 104)
-        self.assertEqual(completed.events[-1].type, 'task_completed')
+        self.assertEqual(completed.game.stage, 2)
+        self.assertEqual(completed.events[-1].type, 'stage_unlocked')
+        self.assertEqual(completed.events[-1].data['item'], 'carrot_seeds')
 
         revision = completed.revision
         simulator.tick()
@@ -225,6 +227,7 @@ class SimulationRunnerTests(unittest.TestCase):
         store = WorldStore()
         initial = store.snapshot()
         self.assertEqual(initial.game.status, 'READY')
+        self.assertEqual(initial.game.stage, 1)
         self.assertEqual(initial.game.goal.current, 80)
         self.assertEqual(initial.game.goal.target, 200)
         self.assertTrue(all(robot.game.location == 'homebase' for robot in initial.robots))
@@ -272,6 +275,7 @@ class SimulationRunnerTests(unittest.TestCase):
         after_wheat = store.snapshot()
         self.assertEqual(after_wheat.game.status, 'RUNNING')
         self.assertEqual(after_wheat.game.goal.current, 152)
+        self.assertEqual(after_wheat.game.stage, 3)
         self.assertNotIn('crop', after_wheat.robots[0].game.inventory)
 
         store.assign_task(TaskRequest(
@@ -291,6 +295,10 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(
             sum(event.type == 'game_completed' for event in completed.events),
             1,
+        )
+        self.assertEqual(
+            [event.data['item'] for event in completed.events if event.type == 'stage_unlocked'],
+            ['carrot_seeds', 'pumpkin_seeds'],
         )
 
         revision = completed.revision
@@ -313,23 +321,23 @@ class SimulationRunnerTests(unittest.TestCase):
             robot_id='robot-b',
             action='BUY',
             location='market',
-            parameters={'item': 'pumpkin_seeds', 'quantity': 1},
+            parameters={'item': 'seeds', 'quantity': 1},
         ))
         simulator = SimulationRunner(store, step_distance=100)
 
         simulator.tick()
         completed = store.snapshot()
         milo = completed.robots[1]
-        seeds = milo.game.inventory['pumpkin_seeds']
+        seeds = milo.game.inventory['seeds']
         market_seeds = next(
-            item for item in completed.market.items if item.id == 'pumpkin_seeds'
+            item for item in completed.market.items if item.id == 'seeds'
         )
         self.assertIsNone(milo.task)
-        self.assertEqual(milo.game.money, 20)
+        self.assertEqual(milo.game.money, 35)
         self.assertEqual(seeds.quantity, 1)
         self.assertIsNone(seeds.sell_price)
         self.assertIsNone(market_seeds.stock)
-        self.assertEqual(completed.game.goal.current, 60)
+        self.assertEqual(completed.game.goal.current, 75)
         self.assertEqual(completed.events[-1].type, 'task_completed')
 
         revision = completed.revision
@@ -338,6 +346,7 @@ class SimulationRunnerTests(unittest.TestCase):
 
     def test_competing_purchase_rechecks_stock_at_execution(self):
         world = default_world()
+        world['game']['stage'] = 3
         next(
             item for item in world['market']['items']
             if item['id'] == 'pumpkin_seeds'

@@ -38,8 +38,11 @@ class DecisionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_decision(world, 'robot-a', decision.model_copy(update={'quantity': 3}))
         item = world['market']['items'][0]
-        item.update(buy_price=10, stock=1)
+        item.update(buy_price=10, stock=1, required_stage=2)
         buy = Decision(action='BUY', location='market', item='crop', quantity=1, reason='Buy')
+        with self.assertRaisesRegex(ValueError, 'locked'):
+            validate_decision(world, 'robot-a', buy)
+        item['required_stage'] = 1
         validate_decision(world, 'robot-a', buy)
         for updates in ({'stock': 0}, {'stock': 1, 'buy_price': 50}, {'buy_price': None}):
             item.update(updates)

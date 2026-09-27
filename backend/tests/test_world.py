@@ -22,6 +22,7 @@ class WorldRouteTests(unittest.TestCase):
             'target': 200,
             'current': 80,
         })
+        self.assertEqual(world['game']['stage'], 1)
         self.assertEqual(world['market']['items'], [
             {
                 'id': 'seeds',
@@ -29,6 +30,8 @@ class WorldRouteTests(unittest.TestCase):
                 'buy_price': 5,
                 'sell_price': None,
                 'stock': None,
+                'required_stage': 1,
+                'unlock_at': None,
             },
             {
                 'id': 'carrot_seeds',
@@ -36,6 +39,8 @@ class WorldRouteTests(unittest.TestCase):
                 'buy_price': 10,
                 'sell_price': None,
                 'stock': None,
+                'required_stage': 2,
+                'unlock_at': 100,
             },
             {
                 'id': 'pumpkin_seeds',
@@ -43,6 +48,8 @@ class WorldRouteTests(unittest.TestCase):
                 'buy_price': 20,
                 'sell_price': None,
                 'stock': None,
+                'required_stage': 3,
+                'unlock_at': 150,
             },
         ])
         self.assertEqual(world['map']['locations']['market'], {'x': 80.0, 'y': 25.0})

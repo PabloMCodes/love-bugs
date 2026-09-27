@@ -77,6 +77,9 @@ export default function GameControls({
                     <span className={`rounded-full px-2 py-1 text-xs font-bold ${status.className}`}>
                         {status.label}
                     </span>
+                    <span className="rounded-full bg-sky-200 px-2 py-1 text-xs font-bold text-sky-900">
+                        Farm Stage {game.stage ?? 1}
+                    </span>
                 </div>
                 <p className="min-w-0 text-xs text-sky-800 sm:truncate sm:text-right" aria-live="polite">
                     {status.summary}
