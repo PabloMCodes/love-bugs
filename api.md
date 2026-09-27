@@ -10,9 +10,10 @@ remain integration work and the provisional ESP32 transport is not frozen.
 
 For the practical subsystem handoff and acceptance checks, see
 [INTEGRATION.md](INTEGRATION.md). For gameplay direction, milestone scope, and
-the target demo scenario, see [GAME_PLAN.md](GAME_PLAN.md). The game plan does not
-change this contract by itself; planned contract changes still require coordinated
-updates to this document, tests, and consumers.
+the target demo scenario, see [GAME_PLAN.md](GAME_PLAN.md). The planned farming,
+fishing, and cooperative economy are recorded in [GAME_DESIGN.md](GAME_DESIGN.md).
+Neither planning document changes this contract by itself; planned contract
+changes still require coordinated updates to this document, tests, and consumers.
 
 Contract version 1 permits additive endpoints, optional response fields, and event
 types. Do not remove or rename fields, change their types or meanings, or alter an

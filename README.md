@@ -14,6 +14,8 @@ The project is designed so the same game rules run in two modes:
 
 ## Start here
 
+- [GAME_DESIGN.md](GAME_DESIGN.md): staged farming tycoon, fishing risk/reward,
+  cooperative unlocks, money transfers, map progression, and open balance decisions.
 - [GAME_PLAN.md](GAME_PLAN.md): product direction, core loop, current gaps,
   milestones, acceptance criteria, and teammate workstreams.
 - [INTEGRATION.md](INTEGRATION.md): practical handoff checklist for each subsystem.
@@ -21,7 +23,6 @@ The project is designed so the same game rules run in two modes:
 - [backend/README.md](backend/README.md): backend setup and subsystem details.
 - [frontend/README.md](frontend/README.md): dashboard setup and frontend structure.
 
-The immediate priority is a reliable end-to-end game round: start a session,
-let both robots autonomously collect and sell resources, show shared goal
-progress, and finish with an unmistakable victory state. UI polish and additional
-mechanics should support that loop rather than expand the scope prematurely.
+The current product direction is the three-stage farming and fishing tycoon in
+`GAME_DESIGN.md`. The immediate technical priority remains a reliable end-to-end
+round whose state can later support those mechanics in both simulation and hardware.
