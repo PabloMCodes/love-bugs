@@ -121,14 +121,10 @@ These are the highest-value gaps to close before adding more content:
 2. **Autonomy depends on the browser.** Closing the operator tab stops discussion
    rounds. The backend should own the autonomous scheduler; the chat should report
    decisions rather than cause them.
-3. **Agent sell validation and the canonical market model disagree.** Buyable items
-   live in `market.items`, while sellable items live in robot inventories. The
-   authoritative planner must validate `SELL` against inventory, like the task
-   service already does.
-4. **Purchases are currently cosmetic inventory.** Seeds and the tool upgrade cost
+3. **Purchases are currently cosmetic inventory.** Seeds and the tool upgrade cost
    gold but do not unlock or improve actions. Useless purchases make autonomous
    behavior look incorrect.
-5. **Balancing is still placeholder data.** The target, starting gold, yields,
+4. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
 ## Scope for the first complete demo
@@ -170,7 +166,7 @@ Goal: one understandable, deterministic simulation round.
 - [x] Choose and test one demo goal target. Start with **200 gold** as a tuning
   candidate, then adjust using measured round duration.
 - [x] Keep only wheat and salmon as collected resources for this phase.
-- [ ] Fix autonomous `SELL` validation to read the selected robot's inventory.
+- [x] Fix autonomous `SELL` validation to read the selected robot's inventory.
 - [ ] Add a compact goal HUD with game status, combined gold, target, and progress.
 - [ ] Add session-level start, stop, and reset controls without restoring manual
   robot-action buttons.

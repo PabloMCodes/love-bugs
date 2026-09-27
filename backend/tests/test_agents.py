@@ -29,7 +29,10 @@ class DecisionTests(unittest.TestCase):
     def test_inventory_formats_and_trade_validation(self):
         world = demo_world()
         decision = Decision(action='SELL', location='market', item='crop', quantity=2, reason='Earn gold')
-        for inventory in ({'crop': 2}, {'crop': {'quantity': 2, 'name': 'Wheat'}}):
+        for inventory in (
+            {'crop': 2},
+            {'crop': {'quantity': 2, 'name': 'Wheat', 'sell_price': 12}},
+        ):
             world['robots'][0]['game']['inventory'] = inventory
             validate_decision(world, 'robot-a', decision)
         with self.assertRaises(ValueError):
@@ -42,6 +45,48 @@ class DecisionTests(unittest.TestCase):
             item.update(updates)
             with self.assertRaises(ValueError):
                 validate_decision(world, 'robot-a', buy)
+
+    def test_sell_validation_uses_selected_robots_inventory(self):
+        world = demo_world()
+        world['market']['items'] = [
+            {
+                'id': 'seeds',
+                'name': 'Wheat Seeds',
+                'buy_price': 5,
+                'sell_price': None,
+                'stock': None,
+            },
+        ]
+        world['robots'][0]['game']['inventory'] = {
+            'crop': {'name': 'Wheat', 'quantity': 2, 'sell_price': 12},
+        }
+        decision = Decision(
+            action='SELL',
+            location='market',
+            item='crop',
+            quantity=2,
+            reason='Earn gold',
+        )
+
+        validate_decision(world, 'robot-a', decision)
+
+        with self.assertRaisesRegex(ValueError, 'Insufficient inventory'):
+            validate_decision(
+                world,
+                'robot-a',
+                decision.model_copy(update={'quantity': 3}),
+            )
+
+        world['robots'][0]['game']['inventory']['crop']['sell_price'] = None
+        with self.assertRaisesRegex(ValueError, 'unavailable for sale'):
+            validate_decision(world, 'robot-a', decision)
+
+        world['robots'][0]['game']['inventory'] = {}
+        world['robots'][1]['game']['inventory'] = {
+            'crop': {'name': 'Wheat', 'quantity': 2, 'sell_price': 12},
+        }
+        with self.assertRaisesRegex(ValueError, 'Insufficient inventory'):
+            validate_decision(world, 'robot-a', decision)
 
 
 class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
@@ -68,6 +113,33 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([o.status for o in outcomes], ['accepted', 'accepted'])
         self.assertIsNotNone(seen[1]['robots'][0]['task'])
         self.assertEqual(await orchestrator.tick(lambda: self.world, self.submit), [])
+
+    async def test_mock_planner_sells_inventory_absent_from_market_catalog(self):
+        self.world['market']['items'] = [
+            {
+                'id': 'seeds',
+                'name': 'Wheat Seeds',
+                'buy_price': 5,
+                'sell_price': None,
+                'stock': None,
+            },
+        ]
+        self.world['robots'][0]['game']['inventory'] = {
+            'seeds': {'name': 'Wheat Seeds', 'quantity': 1, 'sell_price': None},
+            'crop': {'name': 'Wheat', 'quantity': 3, 'sell_price': 12},
+        }
+
+        outcomes = await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'FISH'])
+        self.assertEqual(
+            self.requests[0]['parameters'],
+            {'item': 'crop', 'quantity': 3},
+        )
+        self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
 
     async def test_unavailable_robots_and_stopped_game_skip_model(self):
         class FailPlanner:

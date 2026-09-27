@@ -364,7 +364,8 @@ The frontend now reads the authoritative backend world and submits movement and
 collection tasks to the shared task service. Its local simulation remains an
 offline fallback. The standalone agent orchestrator is not yet hosted by the game
 process; the browser chat preview currently dispatches supported proposals.
-Authoritative trade prices always come from `world.market.items`.
+Authoritative buy prices come from `world.market.items`; authoritative sell prices
+come from the selected robot's inventory entry.
 
 Run agent tests (mocked model responses; no billable calls):
 

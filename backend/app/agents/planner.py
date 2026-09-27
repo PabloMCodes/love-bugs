@@ -60,9 +60,32 @@ def available(world: dict, robot: dict, *, discussion: bool = False) -> bool:
 
 
 def inventory_quantity(robot: dict, item: str) -> int:
-    # Accept the canonical numeric inventory and dev's display-rich mock inventory.
+    # Accept canonical display-rich inventory and older bare-count dev fixtures.
     value = robot['game']['inventory'].get(item, 0)
     return value.get('quantity', 0) if isinstance(value, dict) else value
+
+
+def inventory_sell_price(world: dict, robot: dict, item: str):
+    value = robot['game']['inventory'].get(item)
+    if isinstance(value, dict):
+        return value.get('sell_price')
+
+    # Older development fixtures represented inventory as bare counts and kept
+    # prices in the market list. Canonical snapshots carry sell_price on inventory.
+    market_item = next(
+        (candidate for candidate in world['market']['items'] if candidate['id'] == item),
+        None,
+    )
+    return market_item.get('sell_price') if market_item is not None else None
+
+
+def valid_price(price) -> bool:
+    return (
+        isinstance(price, (int, float))
+        and not isinstance(price, bool)
+        and math.isfinite(price)
+        and price >= 0
+    )
 
 
 def validate_decision(world: dict, robot_id: str, decision: Decision, *, discussion: bool = False) -> None:
@@ -79,19 +102,25 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
         raise ValueError('Action does not match its destination')
     if decision.action not in ('BUY', 'SELL'):
         return
-    item = next((item for item in world['market']['items'] if item['id'] == decision.item), None)
-    if item is None:
-        raise ValueError('Unknown market item')
-    price = item['buy_price' if decision.action == 'BUY' else 'sell_price']
-    if price is None or not math.isfinite(price) or price < 0:
-        raise ValueError('Item is unavailable for this trade')
     if decision.action == 'BUY':
+        item = next(
+            (item for item in world['market']['items'] if item['id'] == decision.item),
+            None,
+        )
+        if item is None:
+            raise ValueError('Unknown market item')
+        price = item['buy_price']
+        if not valid_price(price):
+            raise ValueError('Item is unavailable for this trade')
         if robot['game']['money'] < price * decision.quantity:
             raise ValueError('Insufficient gold')
         if item['stock'] is not None and item['stock'] < decision.quantity:
             raise ValueError('Insufficient stock')
-    elif inventory_quantity(robot, decision.item) < decision.quantity:
-        raise ValueError('Insufficient inventory')
+    else:
+        if inventory_quantity(robot, decision.item) < decision.quantity:
+            raise ValueError('Insufficient inventory')
+        if not valid_price(inventory_sell_price(world, robot, decision.item)):
+            raise ValueError('Item is unavailable for sale')
 
 
 class MockPlanner:
@@ -99,10 +128,10 @@ class MockPlanner:
 
     async def decide(self, world: dict, robot_id: str) -> Decision:
         robot = get_robot(world, robot_id)
-        for item in world['market']['items']:
-            quantity = inventory_quantity(robot, item['id'])
-            if quantity > 0 and item['sell_price'] is not None:
-                return Decision(action='SELL', location='market', item=item['id'],
+        for item_id in robot['game']['inventory']:
+            quantity = inventory_quantity(robot, item_id)
+            if quantity > 0 and valid_price(inventory_sell_price(world, robot, item_id)):
+                return Decision(action='SELL', location='market', item=item_id,
                                 quantity=quantity, reason='Sell inventory toward our shared gold goal.',
                                 message='I propose selling my inventory. Can you keep collecting resources?')
         index = [robot['id'] for robot in world['robots']].index(robot_id)
