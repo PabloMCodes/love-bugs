@@ -14,6 +14,8 @@ The project is designed so the same game rules run in two modes:
 
 ## Start here
 
+- [PROJECT_STATUS.md](PROJECT_STATUS.md): consolidated implementation history,
+  current scope, subsystem contracts, verification state, risks, and next goals.
 - [GAME_DESIGN.md](GAME_DESIGN.md): staged farming tycoon, fishing risk/reward,
   cooperative unlocks, money transfers, map progression, and open balance decisions.
 - [GAME_PLAN.md](GAME_PLAN.md): product direction, core loop, current gaps,
