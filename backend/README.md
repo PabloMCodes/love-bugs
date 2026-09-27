@@ -69,6 +69,31 @@ error instead of silently choosing a mode. `backend/.env.example` lists the sett
 but the server reads exported environment variables and does not load that file
 automatically.
 
+### Hardware acceptance monitor
+
+Use the read-only acceptance monitor in another terminal during the physical
+rehearsal. First verify that the hardware backend, required service points, and
+both robot input streams are ready:
+
+```sh
+cd backend
+.venv/bin/python -m app.game.acceptance --preflight-only --timeout 60
+```
+
+After resetting to a clean session, watch the complete round:
+
+```sh
+.venv/bin/python -m app.game.acceptance --timeout 180
+```
+
+The full monitor exits successfully only after both robots complete authoritative
+work; BUY, PLANT, HARVEST, and SELL have completed; both paid stage proposals were
+accepted by every robot; Stage 3 is active; the gold goal is `COMPLETED`; and no
+task failed. It reads only `GET /world` and `GET /tasks` and never starts, resets,
+or mutates the game. A successful report proves the backend-observable game loop,
+not motor direction, collision clearance, stopping distance, BLE reliability, or
+watchdog firmware. Those remain physical observations from the camera runbook.
+
 ## Game profile and physical service points
 
 The default demo rules and named service points are recorded in

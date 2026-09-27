@@ -50,3 +50,8 @@ profile for service-point coordinates, starting economy, crops, unlocks, and
 fishing. The deterministic seed-0 mock round currently completes in about 88
 simulated seconds, and unanswered cooperative requests expire so the agents can
 recover instead of waiting indefinitely.
+
+During physical rehearsal, `python -m app.game.acceptance --preflight-only`
+checks backend-visible robot input readiness, and `python -m app.game.acceptance`
+watches a clean session for the complete two-robot crop, economy, and victory
+contract. Physical motor/watchdog safety still follows the camera runbook.

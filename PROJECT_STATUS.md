@@ -92,7 +92,7 @@ Status meanings:
 | Map stage presentation | Partial | World state exposes the stage and crops; crop-specific farm/map artwork still needs to react to progression. |
 | Persistence | Implemented | SQLite default, Tiger/Timescale support, migrations, setup/check CLI, rollback, history, and restart behavior. |
 | Vision/localization | Implemented in software | ArUco detection, coordinate calibration, zones, timestamps, and pose ingestion exist; final arena calibration remains physical work. |
-| Navigation and traffic | Implemented in software | Two-robot BLE control, safety latches, boundaries, static obstacles, detours, backend bridge, and arrival reporting exist. |
+| Navigation and traffic | Implemented in software | Two-robot BLE control, safety latches, boundaries, static obstacles, detours, backend bridge, arrival reporting, and a read-only live acceptance monitor exist. |
 | Physical robot demo | Pending verification | Requires calibration, watchdog flashing, live telemetry, and the complete hardware acceptance run. |
 | Balance and pacing | Implemented for deterministic simulation | The committed seed-0 profile completes in about 88 simulated seconds; real-robot travel pacing still requires measurement. |
 
@@ -270,6 +270,10 @@ Subsystem boundaries:
   through authoritative API inputs, including duplicate-arrival protection.
 - Added a bridge transport test proving a queued physical arrival reaches the
   real backend route and executes its game effect exactly once.
+- Added `python -m app.game.acceptance` to monitor a live hardware backend. Its
+  preflight mode verifies both input streams and service points; its full mode
+  requires both robots, the crop-market actions, both cooperative stages,
+  victory, and a clean task history without failures.
 
 ### 4. Market and per-robot ownership
 
@@ -611,7 +615,7 @@ telemetry, robotics safety, vision, navigation, traffic, and HTTP integration.
 
 Verification performed against the merged `gameLogic` branch for this handoff:
 
-- **224 backend tests passed**.
+- **229 backend tests passed**.
 - **1 live Tiger credential-dependent test skipped** because
   `TEST_DATABASE_URL` was not configured.
 - **Frontend production build passed** with Vite and Node 24.
@@ -654,6 +658,8 @@ demo.
   tracking, arrival idempotency, task cancellation, and reset behavior.
 - Run the complete Repair Fund scenario first with mock autonomy and then with
   Gemini.
+- Run the read-only acceptance monitor in preflight and full-round modes, and
+  save its final PASS output alongside the manual safety observations.
 
 Exit condition: switching from simulation to hardware changes the movement
 source but not game rules, frontend behavior, inventory, economy, or victory.

@@ -249,6 +249,8 @@ Goal: replace simulated motion without changing gameplay behavior.
 - [ ] Confirm arrivals through the existing arrival endpoint.
 - [ ] Verify stop, reset, blocked, offline, and stale tracking halt motion.
 - [ ] Run the complete repair-fund scenario first with mock autonomy, then Gemini.
+- [ ] Capture `PASS Hardware game-loop acceptance` from the read-only live
+  monitor and pair it with the manual motor/watchdog safety results.
 
 Exit criterion: switching `GAME_MODE` changes the movement source but not the UI,
 task rules, inventory, market, goal, or victory behavior.

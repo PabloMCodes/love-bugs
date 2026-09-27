@@ -199,6 +199,18 @@ team's chosen private transport to reach the ESP32.
 
 ## Hardware handoff exit criteria
 
+Run the read-only checks from `backend` while the hardware backend and guarded
+navigation adapter are active:
+
+```sh
+.venv/bin/python -m app.game.acceptance --preflight-only --timeout 60
+.venv/bin/python -m app.game.acceptance --timeout 180
+```
+
+The second command requires a clean current session and fails if any task failed.
+It covers only facts available through `/world` and `/tasks`; pair it with the
+manual motor, clearance, BLE, and firmware checks below.
+
 - `GET /world` reports `mode: "hardware"`.
 - Every robot maintains fresh health and pose reports without watchdog expiry.
 - Assigned tasks cause motion only while all safety predicates remain true.

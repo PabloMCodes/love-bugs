@@ -441,6 +441,29 @@ Backend mode behavior:
 
 Do not run a second telemetry writer or BLE controller alongside this adapter.
 
+### Terminal 4: read-only acceptance monitor
+
+Before starting the round, wait for both health/localization streams and all four
+configured service points:
+
+```sh
+cd backend
+.venv/bin/python -m app.game.acceptance --preflight-only --timeout 60
+```
+
+Reset to a clean session, start the full mock-autonomy round, and monitor it with:
+
+```sh
+.venv/bin/python -m app.game.acceptance --timeout 180
+```
+
+`PASS Hardware game-loop acceptance` proves that the backend observed both robots
+complete work, the crop/market lifecycle, both cooperative stage unlocks, and
+victory without a failed task. The command is read-only. It cannot prove motor
+direction, clearance, stop distance, BLE reliability, or firmware watchdog
+behavior; record those manual observations separately before declaring the
+physical demo accepted.
+
 ## 14. Expected logs and meanings
 
 | Log/status | Meaning |
