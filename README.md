@@ -1,6 +1,6 @@
 # Love Bugs
 
-Love Bugs is a cooperative robotics game in which Wall-y and Eeve make
+Love Bugs is a cooperative robotics game in which Wall-y and Eeva make
 high-level decisions, move through a shared physical or simulated world, collect
 resources, trade at a market, and work toward one crew goal.
 

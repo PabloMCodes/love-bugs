@@ -14,7 +14,7 @@ not consume backend tasks or publish poses yet. Do not run it alongside another
 motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
 
 The immediate milestone is Phase 1 of the game plan: a complete autonomous
-simulation round in which Wall-y and Eeve start at home, collect different
+simulation round in which Wall-y and Eeva start at home, collect different
 resources, sell their own inventory, advance the shared repair fund, and trigger
 one clear victory state. Teammate integrations should preserve that scenario in
 hardware mode instead of introducing a second game loop.

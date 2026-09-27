@@ -15,7 +15,7 @@ planned work.
 
 ## One-sentence game
 
-Wall-y and Eeve are autonomous robot partners who divide work across a shared
+Wall-y and Eeva are autonomous robot partners who divide work across a shared
 world, gather resources, sell them at the market, and save enough gold to repair
 their home.
 
@@ -29,7 +29,7 @@ The first cohesive scenario is **The Repair Fund**:
 
 1. A new session begins with both robots at `homebase` and the game in `READY`.
 2. The game starts and autonomous planning becomes active.
-3. Wall-y primarily harvests wheat at the `farm`; Eeve primarily catches salmon at
+3. Wall-y primarily harvests wheat at the `farm`; Eeva primarily catches salmon at
    the `lake`. Either robot may take another valid task when coordination requires it.
 4. Each robot owns its inventory and wallet. Items never teleport between robots.
 5. A robot carrying sellable resources travels to the `market` and sells them.
@@ -71,7 +71,7 @@ the choice between deterministic mock autonomy and Gemini autonomy.
 
 - The backend is authoritative for game status, tasks, inventory, wallets,
   prices, activity rewards, and victory.
-- `robot-a` and `robot-b` are stable integration IDs. Wall-y and Eeve are display
+- `robot-a` and `robot-b` are stable integration IDs. Wall-y and Eeva are display
   names and must not be used for routing.
 - Every robot has its own wallet and inventory. The shared goal is derived from
   the combined wallet balance.
@@ -90,7 +90,7 @@ the choice between deterministic mock autonomy and Gemini autonomy.
 | Stable ID | Name | Initial specialty | Reason |
 | --- | --- | --- | --- |
 | `robot-a` | Wall-y | Wheat at the farm | Higher-yield resource loop makes its contribution easy to read. |
-| `robot-b` | Eeve | Salmon at the lake | A distinct route makes parallel work and coordination visible. |
+| `robot-b` | Eeva | Salmon at the lake | A distinct route makes parallel work and coordination visible. |
 
 Specialties guide the deterministic mock planner and the Gemini prompt; they are
 not hard restrictions in the task API. This keeps recovery possible if a robot is
@@ -128,7 +128,7 @@ These are the highest-value gaps to close before adding more content:
 
 ### Included
 
-- Two autonomous robots: Wall-y and Eeve.
+- Two autonomous robots: Wall-y and Eeva.
 - Four locations: homebase, farm, lake, and market.
 - Two collection actions: wheat harvesting and salmon fishing.
 - Per-robot inventory and wallets.
@@ -255,7 +255,7 @@ The first complete milestone must pass this script:
 
 1. Reset into a new simulation session and confirm both robots are at homebase.
 2. Start the game with deterministic mock autonomy.
-3. Observe different collection assignments for Wall-y and Eeve.
+3. Observe different collection assignments for Wall-y and Eeva.
 4. Observe simulated movement, confirmed arrival, active progress, and one reward
    per completed activity.
 5. Confirm each reward enters only the acting robot's inventory.
@@ -276,7 +276,7 @@ come from the real adapters instead of `SimulationRunner`.
 | --- | --- | --- |
 | Primary objective | Combined wallet reaches repair-fund target | A different goal is implemented end to end |
 | Demo target | 200 gold candidate | Measured round is outside 60–120 seconds |
-| Robot roles | Wall-y farms; Eeve fishes | Recovery or balancing needs dynamic reassignment |
+| Robot roles | Wall-y farms; Eeva fishes | Recovery or balancing needs dynamic reassignment |
 | Reliable demo provider | Deterministic mock planner | Gemini behavior passes repeated rehearsals |
 | Upgrade effect | +1 collected resource per activity | Economy testing shows a clearer alternative |
 | Timer/loss state | Deferred | Hardware loop is reliable with time margin |

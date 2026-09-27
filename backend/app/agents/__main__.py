@@ -23,7 +23,7 @@ def demo_world():
                     'physical': {'online': True, 'stopped': False, 'blocked': False,
                                  'tracking': 'TRACKED', 'pose': {'x': 50, 'y': 50, 'heading': 0}},
                     'game': {'location': 'homebase', 'money': 40, 'inventory': {}}, 'task': None}
-                   for robot_id, name in [('robot-a', 'Wall-y'), ('robot-b', 'Eeve')]],
+                   for robot_id, name in [('robot-a', 'Wall-y'), ('robot-b', 'Eeva')]],
         'market': {'items': [{'id': 'crop', 'name': 'Wheat', 'buy_price': None, 'sell_price': 12, 'stock': None},
                              {'id': 'fish', 'name': 'Fish', 'buy_price': None, 'sell_price': 18, 'stock': None}]},
     }

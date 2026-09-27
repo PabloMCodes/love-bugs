@@ -44,7 +44,7 @@ export const mockWorldState = {
         },
         {
             id: 'robot-b',
-            name: 'Eeve',
+            name: 'Eeva',
             physical: {
                 online: true,
                 pose: { x: 50, y: 30, heading: 180 },
@@ -91,7 +91,7 @@ export const mockWorldState = {
             type: 'game_ready',
             robot_id: null,
             task_id: null,
-            message: 'Wall-y and Eeve are at homebase, ready to begin.',
+            message: 'Wall-y and Eeva are at homebase, ready to begin.',
             data: {},
         },
     ],

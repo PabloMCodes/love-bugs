@@ -84,7 +84,7 @@ def default_world(mode: str = 'simulation') -> dict:
             },
             {
                 'id': 'robot-b',
-                'name': 'Eeve',
+                'name': 'Eeva',
                 'physical': {
                     'online': True,
                     'pose': {'x': 50, 'y': 30, 'heading': 180},
@@ -116,7 +116,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 'type': 'game_ready',
                 'robot_id': None,
                 'task_id': None,
-                'message': 'Wall-y and Eeve are at homebase, ready to begin.',
+                'message': 'Wall-y and Eeva are at homebase, ready to begin.',
                 'data': {},
             },
         ],

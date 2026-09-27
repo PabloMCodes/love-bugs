@@ -124,7 +124,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
     },
     {
       "id": "robot-b",
-      "name": "Eeve",
+      "name": "Eeva",
       "physical": {
         "online": true,
         "pose": { "x": 50, "y": 50, "heading": 0 },
@@ -371,7 +371,7 @@ Initially scripted task requests can exercise this scenario; autonomous agent de
 
 Recommended order: canonical world fixture → `GET /world` and `/events` → frontend rendering → task lifecycle with simulated motion → inventory and market → hardware adapters → autonomous decisions → cooperation. Components can be built concurrently against these contracts; this order assigns no people or ownership.
 
-Keep these decisions open: frontend/backend frameworks, agent provider, process boundaries, robot transport, camera and marker choice, calibration and arena dimensions, game balancing, co-op mechanics beyond the repair-fund loop, optional camera feeds, deployment/authentication, and additional sponsor integrations. The current robot names are Wall-y and Eeve. Before adding any externally exposed deployment or changing shared formats, agree on the necessary contract updates together.
+Keep these decisions open: frontend/backend frameworks, agent provider, process boundaries, robot transport, camera and marker choice, calibration and arena dimensions, game balancing, co-op mechanics beyond the repair-fund loop, optional camera feeds, deployment/authentication, and additional sponsor integrations. The current robot names are Wall-y and Eeva. Before adding any externally exposed deployment or changing shared formats, agree on the necessary contract updates together.
 
 ## Agent conversation and discussion preview
 
@@ -395,7 +395,7 @@ A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussio
   "timestamp": "2026-09-26T18:00:00+00:00",
   "robot_id": "robot-a",
   "name": "Wall-y",
-  "text": "I propose harvesting at the farm. Eeve, can you cover the lake?",
+  "text": "I propose harvesting at the farm. Eeva, can you cover the lake?",
   "action": "HARVEST",
   "location": "farm",
   "parameters": {},
