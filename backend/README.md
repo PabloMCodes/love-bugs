@@ -362,10 +362,25 @@ must mark stale camera poses as `STALE` before allowing physical tasks.
 
 The frontend now reads the authoritative backend world and submits movement and
 collection tasks to the shared task service. Its local simulation remains an
-offline fallback. The standalone agent orchestrator is not yet hosted by the game
-process; the browser chat preview currently dispatches supported proposals.
+offline fallback. The game process can host one autonomous orchestrator; the
+browser discussion preview remains available when backend autonomy is disabled.
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
+
+Enable deterministic backend-owned play with:
+
+```sh
+AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock GAME_MODE=simulation \
+  .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+curl -X POST http://localhost:8000/game/start
+```
+
+Use `AUTONOMY_PROVIDER=gemini` with an exported `GOOGLE_API_KEY` for Gemini.
+Autonomy is disabled by default. When enabled, planning runs only while the game
+is `RUNNING`, accepted decisions appear in the shared conversation feed, and
+`POST /agent-chat/round` returns `409` so a browser cannot start a second planner.
+Stop, completion, or reset prevents new task dispatch; a new session clears the
+orchestrator's cooldown and conversation state.
 
 Run agent tests (mocked model responses; no billable calls):
 

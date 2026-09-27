@@ -106,8 +106,8 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Individual inventory and wallets | Implemented | The market sell view exposes each robot separately. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
 | Market purchases | Partial | Items can be bought, but seeds and tool upgrades do not affect gameplay yet. |
-| Autonomous decisions | Partial | Planners and an orchestrator exist, but the authoritative backend does not host the orchestrator yet. |
-| Robot conversation | Partial | The browser starts discussion rounds and dispatches proposals; it is not yet a backend-owned autonomous loop. |
+| Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
+| Robot conversation | Partial | Backend autonomy publishes accepted decisions; the optional browser discussion preview still exists. |
 | Goal presentation | Partial | Goal state exists, but the current dashboard does not clearly present progress, start/reset, or victory. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
 | Persistence/history | Implemented | Accepted transitions and pose history persist through SQLite or Tiger Data. |
@@ -118,13 +118,10 @@ These are the highest-value gaps to close before adding more content:
 
 1. **The round does not explain itself.** The UI needs a visible objective,
    current/target gold, game status, and a clear completion state.
-2. **Autonomy depends on the browser.** Closing the operator tab stops discussion
-   rounds. The backend should own the autonomous scheduler; the chat should report
-   decisions rather than cause them.
-3. **Purchases are currently cosmetic inventory.** Seeds and the tool upgrade cost
+2. **Purchases are currently cosmetic inventory.** Seeds and the tool upgrade cost
    gold but do not unlock or improve actions. Useless purchases make autonomous
    behavior look incorrect.
-4. **Balancing is still placeholder data.** The target, starting gold, yields,
+3. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
 ## Scope for the first complete demo
@@ -181,15 +178,15 @@ individual robot tasks.
 
 Goal: the game continues when no browser is open.
 
-- [ ] Host one `AgentOrchestrator` in the backend lifecycle.
-- [ ] Tie planning to `RUNNING`; stop it for `READY`, `STOPPED`, and `COMPLETED`.
-- [ ] Add explicit configuration for autonomy enabled/disabled and provider
+- [x] Host one `AgentOrchestrator` in the backend lifecycle.
+- [x] Tie planning to `RUNNING`; stop it for `READY`, `STOPPED`, and `COMPLETED`.
+- [x] Add explicit configuration for autonomy enabled/disabled and provider
   (`mock` or `gemini`) without exposing API credentials to the browser.
-- [ ] Submit autonomous work through the existing authoritative task service.
-- [ ] Publish accepted/waiting decisions to the shared conversation feed.
+- [x] Submit autonomous work through the existing authoritative task service.
+- [x] Publish accepted/waiting decisions to the shared conversation feed.
 - [ ] Make the frontend conversation panel a spectator/control surface, not the
   owner of round timing.
-- [ ] Ensure only one orchestrator can dispatch for a session.
+- [x] Ensure only one orchestrator can dispatch for a session.
 
 Exit criterion: start the backend and the game, close every browser, wait, and
 reopen the frontend to see valid progress and conversation history.

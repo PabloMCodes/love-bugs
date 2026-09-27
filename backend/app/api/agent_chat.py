@@ -70,22 +70,33 @@ def discussion_world(world):
 
 
 class DiscussionService:
-    def __init__(self, config=None):
+    def __init__(
+        self,
+        config=None,
+        *,
+        chat=None,
+        autonomous=False,
+        provider='mock',
+    ):
         self.config = config or AgentConfig.from_env()
-        self.chat = AgentChat()
+        self.chat = chat or AgentChat()
         self.lock = asyncio.Lock()
         self.planners = {'mock': MockPlanner()}
         self.next_round = 0
-        self.provider = 'mock'
+        self.provider = provider
+        self.mode = 'autonomous' if autonomous else 'discussion'
+        self.rounds_enabled = not autonomous
         self.running = False
         self.error = None
 
     def snapshot(self):
         return {**self.chat.snapshot(), 'provider': self.provider,
-                'running': self.running, 'error': self.error, 'mode': 'discussion',
+                'running': self.running, 'error': self.error, 'mode': self.mode,
                 'interval_seconds': self.config.interval_seconds}
 
     async def discuss(self, request):
+        if not self.rounds_enabled:
+            raise HTTPException(409, 'Backend autonomy already owns task planning')
         validate_world(request.world)
         if self.lock.locked():
             raise HTTPException(409, 'A discussion round is already running')

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.config import Settings
+from app.config import AgentConfig, Settings
 from app.main import create_app
 
 
@@ -20,11 +20,25 @@ class RuntimeModeTests(unittest.TestCase):
         )
 
     def test_settings_load_and_validate_game_mode(self):
-        with patch.dict('os.environ', {'GAME_MODE': ' HARDWARE '}):
-            self.assertEqual(Settings().game_mode, 'hardware')
+        with patch.dict('os.environ', {
+            'GAME_MODE': ' HARDWARE ',
+            'AUTONOMY_ENABLED': 'true',
+            'AUTONOMY_PROVIDER': ' GEMINI ',
+        }):
+            settings = Settings()
+            self.assertEqual(settings.game_mode, 'hardware')
+            self.assertTrue(settings.autonomy_enabled)
+            self.assertEqual(settings.autonomy_provider, 'gemini')
 
         with self.assertRaisesRegex(ValueError, 'GAME_MODE'):
             Settings(game_mode='unsupported')
+        with self.assertRaisesRegex(ValueError, 'AUTONOMY_ENABLED'):
+            Settings(autonomy_enabled='true')
+        with self.assertRaisesRegex(ValueError, 'AUTONOMY_PROVIDER'):
+            Settings(autonomy_provider='unsupported')
+        with patch.dict('os.environ', {'AUTONOMY_ENABLED': 'sometimes'}):
+            with self.assertRaisesRegex(ValueError, 'AUTONOMY_ENABLED'):
+                Settings()
         with self.assertRaisesRegex(ValueError, 'Telemetry'):
             Settings(health_timeout_seconds=0)
 
@@ -48,6 +62,65 @@ class RuntimeModeTests(unittest.TestCase):
             with TestClient(app):
                 self.assertFalse(app.state.simulator_enabled)
                 self.assertFalse(app.state.game_loop_enabled)
+                self.assertFalse(app.state.autonomy_enabled)
+
+    def test_backend_mock_autonomy_assigns_tasks_without_chat_round(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Settings(
+                database_url=None,
+                sqlite_path=str(Path(directory) / 'autonomy.sqlite3'),
+                game_mode='simulation',
+                autonomy_enabled=True,
+                autonomy_provider='mock',
+            )
+            app = create_app(
+                settings=settings,
+                agent_config=AgentConfig(
+                    interval_seconds=.01,
+                    timeout_seconds=1,
+                ),
+            )
+            with TestClient(app) as client:
+                self.assertTrue(app.state.autonomy_enabled)
+                self.assertIsNotNone(app.state.orchestrator)
+                self.assertEqual(
+                    client.get('/agent-chat').json()['mode'],
+                    'autonomous',
+                )
+
+                client.post('/game/start').raise_for_status()
+                deadline = time.monotonic() + 1
+                while time.monotonic() < deadline:
+                    tasks = client.get('/tasks').json()['tasks']
+                    conversation = client.get('/agent-chat').json()
+                    if len(tasks) >= 2 and len(conversation['messages']) >= 2:
+                        break
+                    time.sleep(.01)
+                else:
+                    self.fail('Backend autonomy did not assign tasks')
+
+                self.assertEqual(
+                    {task['action'] for task in tasks[:2]},
+                    {'HARVEST', 'FISH'},
+                )
+                self.assertTrue(
+                    all(message['status'] == 'accepted'
+                        for message in conversation['messages'][:2])
+                )
+                rejected = client.post('/agent-chat/round', json={
+                    'provider': 'mock',
+                    'world': client.get('/world').json(),
+                })
+                self.assertEqual(rejected.status_code, 409)
+
+                stopped = client.post('/game/stop').json()
+                self.assertEqual(stopped['game']['status'], 'STOPPED')
+                task_count = len(client.get('/tasks').json()['tasks'])
+                time.sleep(.05)
+                self.assertEqual(
+                    len(client.get('/tasks').json()['tasks']),
+                    task_count,
+                )
 
     def test_hardware_mode_waits_for_real_telemetry_and_never_simulates(self):
         with tempfile.TemporaryDirectory() as directory:

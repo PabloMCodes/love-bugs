@@ -710,7 +710,12 @@ class WorldStore:
         })
         return task['id']
 
-    def assign_task(self, request: TaskRequest) -> RobotTask:
+    def assign_task(
+        self,
+        request: TaskRequest,
+        *,
+        agent_decision: bool = False,
+    ) -> RobotTask:
         with self._lock:
             previous = self._task_requests.get(request.request_id)
             if previous:
@@ -813,6 +818,21 @@ class WorldStore:
             robot_data['task'] = task.model_dump(mode='python')
             world['revision'] = next_revision
             world['updated_at'] = now
+            if agent_decision:
+                world['events'].append({
+                    'id': f'event-{task.id}-agent-decision',
+                    'timestamp': now,
+                    'type': 'agent_decision',
+                    'robot_id': robot.id,
+                    'task_id': task.id,
+                    'message': f'{robot.name} decided to {request.action.lower()}: {task.reason}',
+                    'data': {
+                        'action': request.action,
+                        'location': request.location,
+                        'parameters': request.parameters,
+                        'reason': task.reason,
+                    },
+                })
             world['events'].append({
                 'id': f'event-{task.id}-assigned',
                 'timestamp': now,
@@ -844,6 +864,20 @@ class WorldStore:
                 task.model_copy(deep=True),
             )
             return task.model_copy(deep=True)
+
+    def assign_task_for_session(
+        self,
+        session_id: str,
+        request: TaskRequest,
+    ) -> RobotTask:
+        """Atomically reject stale autonomous work before normal task validation."""
+        with self._lock:
+            if session_id != self._world.session_id:
+                raise WorldStateError(
+                    'SESSION_MISMATCH',
+                    'The task request belongs to a different game session.',
+                )
+            return self.assign_task(request, agent_decision=True)
 
     def assign_move_task(self, request: TaskRequest) -> RobotTask:
         """Compatibility alias for callers created before activity tasks existed."""

@@ -373,9 +373,9 @@ Recommended order: canonical world fixture → `GET /world` and `/events` → fr
 
 Keep these decisions open: frontend/backend frameworks, agent provider, process boundaries, robot transport, camera and marker choice, calibration and arena dimensions, game balancing, co-op mechanics beyond the repair-fund loop, optional camera feeds, deployment/authentication, and additional sponsor integrations. The current robot names are Wall-y and Eve. Before adding any externally exposed deployment or changing shared formats, agree on the necessary contract updates together.
 
-## Agent conversation preview
+## Agent conversation and discussion preview
 
-The local chat preview is separate from the canonical world WebSocket. The
+The conversation feed is separate from the canonical world WebSocket. The
 frontend supplies its current snapshot for a **discussion-only** round. These
 routes do not execute tasks themselves; the frontend may submit supported
 proposals separately through `POST /tasks` while chat is enabled.
@@ -426,3 +426,9 @@ The canonical game error envelope and `/events` protocol are unchanged.
 The preview copies the supplied market catalog, defaults missing price fields to
 null, and appends sale items from the frontend's inventory objects if absent.
 This is a display/simulation adapter only; it never authorizes real transactions.
+
+When backend autonomy is enabled, the same GET and WebSocket routes expose
+accepted or waiting orchestrator messages with `mode: "autonomous"`. In that mode
+the backend owns task submission and `POST /agent-chat/round` returns `409` to
+prevent a competing browser planner. Starting the game remains an explicit
+`POST /game/start` action. Closing every browser does not stop backend planning.

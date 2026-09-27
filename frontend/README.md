@@ -61,3 +61,8 @@ Set `VITE_API_BASE_URL` in a local `.env` if the backend is elsewhere; restart V
 afterward. The default is `http://localhost:8000`. Allow the frontend's exact origin
 through backend `FRONTEND_ORIGINS` if Vite runs on a different port. Use one browser
 as the chat operator; other spectators only need to open the page.
+
+When the backend starts with `AUTONOMY_ENABLED=true`, it owns planning and the
+conversation WebSocket becomes a spectator feed of accepted decisions. Do not
+start the browser discussion loop in that mode. Start the game through
+`POST /game/start`; the backend continues playing if every browser closes.

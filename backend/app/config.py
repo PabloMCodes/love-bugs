@@ -7,6 +7,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+def environment_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ('1', 'true', 'yes', 'on'):
+        return True
+    if normalized in ('0', 'false', 'no', 'off'):
+        return False
+    raise ValueError(f'{name} must be true or false')
+
+
 @dataclass(frozen=True)
 class Zone:
     name: str
@@ -131,11 +143,22 @@ class Settings:
     telemetry_check_interval_seconds: float = field(
         default_factory=lambda: float(os.getenv('TELEMETRY_CHECK_INTERVAL_SECONDS', '.25')),
     )
+    autonomy_enabled: bool = field(
+        default_factory=lambda: environment_bool('AUTONOMY_ENABLED'),
+    )
+    autonomy_provider: str = field(
+        default_factory=lambda: os.getenv('AUTONOMY_PROVIDER', 'mock'),
+    )
 
     def __post_init__(self):
         self.game_mode = self.game_mode.strip().lower()
+        self.autonomy_provider = self.autonomy_provider.strip().lower()
         if self.game_mode not in ('simulation', 'hardware'):
             raise ValueError('GAME_MODE must be either simulation or hardware')
+        if type(self.autonomy_enabled) is not bool:
+            raise ValueError('AUTONOMY_ENABLED must be true or false')
+        if self.autonomy_provider not in ('mock', 'gemini'):
+            raise ValueError('AUTONOMY_PROVIDER must be either mock or gemini')
         timeout_values = (
             self.health_timeout_seconds,
             self.pose_timeout_seconds,
