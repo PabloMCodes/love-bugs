@@ -17,11 +17,11 @@ The autonomous simulation baseline is implemented and tested: Wall-y and Eeva ca
 start at home, collect different resources, sell their own inventory, advance
 permanent farming stages, and complete the shared gold goal without a browser.
 
-The immediate application milestone is Phase 3 of the game plan: add authoritative
-shared farm plots and complete the wheat seed → plant → grow → harvest → sell slice.
-The existing Crop Queue is UI scaffolding only; integrations must not treat its
-browser display as authoritative state. Hardware work should continue preserving
-the current task and safety contracts while the farm schema is coordinated.
+The immediate application milestone is Phase 3 of the game plan: use the new
+schema-version-2 shared farm plots to complete the wheat seed → plant → grow →
+harvest → sell slice. The Crop Queue derives its display from `world.farm` and is
+never authoritative itself. Hardware work should continue preserving the current
+task and safety contracts while planting is added.
 
 ## Shared setup
 
@@ -101,9 +101,9 @@ backend is running. Payload meaning and lifecycle rules live in [api.md](api.md)
 - Send commands over HTTP; the world WebSocket is server-to-client only.
 - Render the returned robot list and market data instead of assuming fixed names,
   counts, balances, stock, or prices.
-- Treat the current Crop Queue as a placeholder until `api.md` defines farm plots.
-  When plots arrive, render backend timestamps and states rather than running an
-  authoritative browser-only growth timer.
+- Render the Crop Queue from `world.farm.plots`; omit `EMPTY` plots, show `READY`
+  plots first, then order `GROWING` plots by `ready_at`. Never run an authoritative
+  browser-only growth timer.
 - The Market UI is purchase-only. Robot sales still execute through validated
   tasks and appear as transient parchment notifications from world events.
 - Show connection loss and reconnect with bounded backoff. Fetch `GET /world` at

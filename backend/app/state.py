@@ -49,7 +49,7 @@ def default_world(mode: str = 'simulation') -> dict:
     now = datetime.now(timezone.utc)
 
     world = {
-        'schema_version': 1,
+        'schema_version': 2,
         'session_id': 'demo-session-001',
         'revision': 1,
         'updated_at': now,
@@ -123,6 +123,30 @@ def default_world(mode: str = 'simulation') -> dict:
                     'id': 'pumpkin_seeds', 'name': 'Pumpkin Seeds', 'buy_price': 20,
                     'stock': None, 'required_stage': 3, 'unlock_at': 150,
                 },
+            ],
+        },
+        'farm': {
+            'crops': [
+                {
+                    'id': 'wheat',
+                    'name': 'Wheat',
+                    'seed_item_id': 'seeds',
+                    'grow_seconds': 8,
+                    'harvest_quantity': 3,
+                    'sell_price': 12,
+                    'required_stage': 1,
+                },
+            ],
+            'plots': [
+                {
+                    'id': f'plot-{plot_number}',
+                    'status': 'EMPTY',
+                    'crop_id': None,
+                    'planted_by': None,
+                    'planted_at': None,
+                    'ready_at': None,
+                }
+                for plot_number in range(1, 4)
             ],
         },
         'events': [

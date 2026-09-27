@@ -26,11 +26,11 @@ The project is designed so the same game rules run in two modes:
 The current baseline already completes a backend-owned autonomous simulation round:
 robots collect, travel, sell their own inventory, advance permanent farming stages,
 and complete the shared gold goal. The dashboard now includes a purchase-only seed
-market, a Crop Queue shell, transaction notifications, live robot conversation,
-and session controls.
+market, an authoritative Crop Queue backed by three shared farm plots, transaction
+notifications, live robot conversation, and session controls.
 
-The immediate product goal is the first authoritative crop lifecycle: shared farm
-plots, a validated `PLANT` action, timestamped growth, plot-aware harvesting, and
-live Crop Queue entries. Until that contract is implemented, purchased seeds remain
-inventory and the existing `HARVEST` action still grants wheat without consuming a
-seed. See `GAME_PLAN.md` for the implementation sequence.
+The immediate product goal is to complete the first authoritative crop lifecycle:
+a validated `PLANT` action, timestamped growth, and plot-aware harvesting. The
+world and Crop Queue now share the version 2 farm contract, but purchased seeds
+still remain inventory and the existing `HARVEST` action still grants wheat
+without consuming a seed. See `GAME_PLAN.md` for the implementation sequence.

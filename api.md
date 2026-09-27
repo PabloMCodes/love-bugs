@@ -70,7 +70,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "session_id": "session-001",
   "revision": 12,
   "updated_at": "2026-09-25T14:00:00.000Z",
@@ -150,6 +150,16 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       { "id": "pumpkin_seeds", "name": "Pumpkin Seeds", "buy_price": 20, "sell_price": null, "stock": null, "required_stage": 3, "unlock_at": 150 }
     ]
   },
+  "farm": {
+    "crops": [
+      { "id": "wheat", "name": "Wheat", "seed_item_id": "seeds", "grow_seconds": 8, "harvest_quantity": 3, "sell_price": 12, "required_stage": 1 }
+    ],
+    "plots": [
+      { "id": "plot-1", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null },
+      { "id": "plot-2", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null },
+      { "id": "plot-3", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null }
+    ]
+  },
   "events": [
     {
       "id": "event-001",
@@ -173,6 +183,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - `physical.online` describes robot communication; `tracking` independently describes localization: `TRACKED`, `STALE`, or `UNKNOWN`. Initially pose and pose timestamp are `null`, and tracking is `UNKNOWN`. A stale pose may remain for display but must not be treated as fresh control input. The hardware adapter defines and documents its freshness threshold before live driving.
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
 - The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` is the combined-gold threshold that permanently advances to that stage, or `null` for initially unlocked items. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
+- `farm.crops` is the authoritative crop catalog. `farm.plots` contains three shared plots; nonempty plots reference a crop and planter by stable ID and carry backend-owned timestamps.
 - `events` contains the latest 100 semantic events, oldest first. Pose samples are not feed events. Event `robot_id` and `task_id` may be `null`. `data` contains optional details; the UI can always display `message`.
 
 ## Frontend-facing HTTP API
@@ -246,13 +257,16 @@ ASSIGNED → NAVIGATING → ACTIVE → COMPLETED
 
 Navigation may be skipped when already at the destination. Movement-only tasks complete on arrival without an activity timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measures activity completion, not distance traveled: it stays zero during navigation, advances during an activity, and is one on completion. Terminal failure includes `error: { "code": "...", "message": "..." }`; otherwise error is `null`. Cancellation or failure never grants the completion reward. Goal completion sets the game to `COMPLETED`, cancels remaining work, and stops dispatch and movement.
 
-Planting and growth cycles are not part of MVP contract version 1. The current
-`HARVEST` action is a simple timed collection without seed consumption, and the
-frontend Crop Queue is not authoritative. The next planned coordinated contract
-extension adds farm plots and `PLANT`; it must update `schema_version` if the world
-shape changes incompatibly, plus this document, schemas, tests, examples, planners,
-and frontend consumers in the same change. Internal `WAIT` behavior still defers
-task submission.
+Contract version 2 adds `farm.crops` and three shared `farm.plots`. Empty plots
+contain null crop metadata. A nonempty plot has status `GROWING` or `READY` and
+must include `crop_id`, `planted_by`, `planted_at`, and `ready_at`. Clients derive
+the visible queue from these records: omit empty plots, show ready plots first,
+then sort growing plots by `ready_at`.
+
+The `PLANT` action and growth transitions are not implemented yet, so version 2
+plots currently remain empty. `HARVEST` is still the version 1-style timed
+collection that grants wheat without seed consumption. Internal `WAIT` behavior
+still defers task submission.
 
 ### Errors
 
@@ -283,7 +297,7 @@ For the MVP, use complete snapshots rather than requiring clients to assemble st
 {
   "type": "world_snapshot",
   "data": {
-    "schema_version": 1,
+    "schema_version": 2,
     "session_id": "session-001",
     "revision": 12
   }

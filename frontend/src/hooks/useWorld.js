@@ -29,7 +29,10 @@ function isWorldSnapshot(value) {
         && value.game
         && value.map
         && Array.isArray(value.robots)
-        && value.market,
+        && value.market
+        && value.farm
+        && Array.isArray(value.farm.crops)
+        && Array.isArray(value.farm.plots),
     );
 }
 

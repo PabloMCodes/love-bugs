@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
@@ -165,6 +165,50 @@ class Market(StrictModel):
     items: list[MarketItem]
 
 
+class CropDefinition(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    seed_item_id: str = Field(min_length=1)
+    grow_seconds: float = Field(gt=0)
+    harvest_quantity: int = Field(ge=1)
+    sell_price: int = Field(ge=0)
+    required_stage: int = Field(default=1, ge=1, le=3)
+
+
+class FarmPlot(StrictModel):
+    id: str = Field(min_length=1)
+    status: Literal['EMPTY', 'GROWING', 'READY']
+    crop_id: str | None = None
+    planted_by: str | None = None
+    planted_at: AwareDatetime | None = None
+    ready_at: AwareDatetime | None = None
+
+    @model_validator(mode='after')
+    def validate_crop_state(self):
+        crop_fields = (
+            self.crop_id,
+            self.planted_by,
+            self.planted_at,
+            self.ready_at,
+        )
+        if self.status == 'EMPTY' and any(value is not None for value in crop_fields):
+            raise ValueError('empty plots cannot contain crop state')
+        if self.status != 'EMPTY' and any(value is None for value in crop_fields):
+            raise ValueError('growing and ready plots require complete crop state')
+        if (
+            self.planted_at is not None
+            and self.ready_at is not None
+            and self.ready_at <= self.planted_at
+        ):
+            raise ValueError('ready_at must be later than planted_at')
+        return self
+
+
+class Farm(StrictModel):
+    crops: list[CropDefinition]
+    plots: list[FarmPlot]
+
+
 class WorldEvent(StrictModel):
     id: str
     timestamp: datetime
@@ -185,4 +229,5 @@ class WorldSnapshot(StrictModel):
     map: WorldMap
     robots: list[Robot]
     market: Market
+    farm: Farm
     events: list[WorldEvent]

@@ -18,12 +18,13 @@ Gemini autonomy can move, harvest wheat directly, fish, sell robot-owned invento
 advance the combined-gold goal, unlock seed stages automatically, and complete a
 round without a browser. The market sells all three seed types and enforces stage
 locks. The frontend has a purchase-only market, market transaction notifications,
-and a full-height Crop Queue shell.
+and a full-height Crop Queue driven by canonical farm state.
 
-The queue is not connected to game state yet. The canonical world has no `farm`
-or plot records, `PLANT` is not a valid task, and `HARVEST` still creates wheat
-without consuming a seed. Those limitations define the next implementation goal;
-the intended cooperative unlock and transfer mechanics remain later phases.
+Schema version 2 now includes the wheat crop definition and three shared farm
+plots. The queue derives its ordering from those plots. `PLANT` is not a valid task
+yet, so plots remain empty, and `HARVEST` still creates wheat without consuming a
+seed. Completing that lifecycle is the next implementation goal; the intended
+cooperative unlock and transfer mechanics remain later phases.
 
 ## Game fantasy
 
@@ -134,10 +135,11 @@ first complete wheat simulation pass.
 ### Crop Queue implementation goal
 
 The Crop Queue is a view of authoritative plots, not a second queue stored in the
-browser. The backend world should expose each plot's stable ID, state (`EMPTY`,
-`GROWING`, or `READY`), crop type, planter, planted timestamp, and ready timestamp.
-The frontend should omit empty plots from the active queue, show ready crops first,
-then sort growing crops by `ready_at`.
+browser. The backend world exposes each plot's stable ID, state (`EMPTY`, `GROWING`,
+or `READY`), crop type, planter, planted timestamp, and ready timestamp. The
+frontend omits empty plots from the active queue, shows ready crops first, then
+sorts growing crops by `ready_at`. Until `PLANT` exists, all three plots remain
+`EMPTY`.
 
 The first vertical slice is deliberately wheat-only:
 
@@ -431,13 +433,11 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 No implementation begins merely because it appears in this document. When the
 team is ready, the safest order is:
 
-1. Add authoritative crop definitions and three shared farm plots to world state.
-2. Implement the wheat buy → plant → grow → harvest → sell slice deterministically.
-3. Connect the existing Crop Queue UI to farm plots and backend timestamps.
-4. Generalize the validated lifecycle to carrot and pumpkin.
-5. Add map stage rendering and richer farm plot state.
-6. Implement seeded fishing duration and reward tiers.
-7. Add money request/transfer transactions.
-8. Add cooperative unlock proposal, agreement, contributions, and stage changes.
-9. Expand mock autonomy, then Gemini prompts, against the same validated actions.
-10. Run the complete loop in simulation before connecting it to physical motion.
+1. Implement the wheat buy → plant → grow → harvest → sell slice deterministically.
+2. Generalize the validated lifecycle to carrot and pumpkin.
+3. Add map stage rendering and richer farm plot state.
+4. Implement seeded fishing duration and reward tiers.
+5. Add money request/transfer transactions.
+6. Add cooperative unlock proposal, agreement, contributions, and stage changes.
+7. Expand mock autonomy, then Gemini prompts, against the same validated actions.
+8. Run the complete loop in simulation before connecting it to physical motion.

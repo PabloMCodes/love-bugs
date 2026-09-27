@@ -1,5 +1,5 @@
 export const mockWorldState = {
-    schema_version: 1,
+    schema_version: 2,
     session_id: 'demo-session-001',
     revision: 1,
     updated_at: '2026-09-26T13:00:00.000Z',
@@ -90,6 +90,27 @@ export const mockWorldState = {
                 unlock_at: 150,
             },
         ],
+    },
+    farm: {
+        crops: [
+            {
+                id: 'wheat',
+                name: 'Wheat',
+                seed_item_id: 'seeds',
+                grow_seconds: 8,
+                harvest_quantity: 3,
+                sell_price: 12,
+                required_stage: 1,
+            },
+        ],
+        plots: [1, 2, 3].map((plotNumber) => ({
+            id: `plot-${plotNumber}`,
+            status: 'EMPTY',
+            crop_id: null,
+            planted_by: null,
+            planted_at: null,
+            ready_at: null,
+        })),
     },
     events: [
         {

@@ -49,7 +49,7 @@ export default function App() {
                 </div>
 
                 <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(13rem,0.75fr)_minmax(0,3fr)_minmax(16rem,1fr)]">
-                    <CropPanel />
+                    <CropPanel farm={world.farm} robots={world.robots} />
 
                     <div className="flex min-h-0 flex-col gap-4">
                         <RobotPanel robots={world.robots} />

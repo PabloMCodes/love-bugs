@@ -367,11 +367,12 @@ shared task service. The frontend conversation panel is a read-only spectator fe
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
 
-The visible Crop Queue is currently a frontend shell. There is no `farm` field in
-the canonical world, no `PLANT` action, and no crop-growth timer. The current
-`HARVEST` activity grants wheat directly. The next backend milestone is one
-coordinated wheat lifecycle with shared plots, timestamped readiness, plot-aware
-harvesting, events, API documentation, and exactly-once tests.
+Canonical schema version 2 now exposes `farm.crops` and three shared `farm.plots`.
+The visible Crop Queue derives its entries from those records. There is still no
+`PLANT` action or crop-growth transition, so every plot starts empty and the
+current `HARVEST` activity grants wheat directly. The next backend milestone is
+the coordinated wheat lifecycle with timestamped readiness, plot-aware harvesting,
+events, and exactly-once tests.
 
 Enable deterministic backend-owned play with:
 

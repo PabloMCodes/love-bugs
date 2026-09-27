@@ -1,5 +1,29 @@
-// Reserve the farm-status queue for authoritative crop plots and growth timers.
-export default function CropPanel() {
+// Render the backend-owned farm plots as a queue without owning crop state locally.
+function displayTime(timestamp) {
+    if (!timestamp) {
+        return null;
+    }
+
+    return new Intl.DateTimeFormat([], {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+    }).format(new Date(timestamp));
+}
+
+export default function CropPanel({ farm, robots }) {
+    const cropNames = new Map(farm.crops.map((crop) => [crop.id, crop.name]));
+    const robotNames = new Map(robots.map((robot) => [robot.id, robot.name]));
+    const activePlots = farm.plots
+        .filter((plot) => plot.status !== 'EMPTY')
+        .sort((first, second) => {
+            if (first.status !== second.status) {
+                return first.status === 'READY' ? -1 : 1;
+            }
+            return (first.ready_at ?? '').localeCompare(second.ready_at ?? '');
+        });
+    const emptyPlotCount = farm.plots.length - activePlots.length;
+
     return (
         <section className="flex h-full min-h-0 w-full flex-col">
             <h2 className="section-title mb-3 text-lg font-semibold">Crop Queue</h2>
@@ -8,18 +32,51 @@ export default function CropPanel() {
                 <div className="mb-3 flex shrink-0 items-center justify-between gap-3 text-amber-50">
                     <span className="text-xs font-bold uppercase tracking-wide">Planting order</span>
                     <span className="market-stage-badge px-2 py-1 text-[10px] font-bold uppercase tracking-wide">
-                        0 active
+                        {activePlots.length} active
                     </span>
                 </div>
 
-                <div className="market-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
-                    <div className="market-parchment-card p-4 text-[#422313]">
-                        <h3 className="font-semibold">Queue empty</h3>
-                        <p className="mt-1 text-xs text-[#805431]">
-                            Planted crops will appear here in the order they are growing.
-                        </p>
-                    </div>
+                <div className="market-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+                    {activePlots.length === 0 ? (
+                        <div className="market-parchment-card p-4 text-[#422313]">
+                            <h3 className="font-semibold">Queue empty</h3>
+                            <p className="mt-1 text-xs text-[#805431]">
+                                {emptyPlotCount} plots are ready for planting.
+                            </p>
+                        </div>
+                    ) : activePlots.map((plot) => (
+                        <article
+                            className="market-parchment-card p-4 text-[#422313]"
+                            key={plot.id}
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <h3 className="font-semibold">
+                                        {cropNames.get(plot.crop_id) ?? plot.crop_id}
+                                    </h3>
+                                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#805431]">
+                                        {plot.id.replace('-', ' ')}
+                                    </p>
+                                </div>
+                                <span className="market-stage-badge px-2 py-1 text-[10px] font-bold uppercase tracking-wide">
+                                    {plot.status}
+                                </span>
+                            </div>
+                            <p className="mt-3 text-xs text-[#805431]">
+                                Planted by {robotNames.get(plot.planted_by) ?? plot.planted_by}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-[#63391f]">
+                                {plot.status === 'READY'
+                                    ? 'Ready to harvest'
+                                    : `Ready at ${displayTime(plot.ready_at)}`}
+                            </p>
+                        </article>
+                    ))}
                 </div>
+
+                <p className="mt-3 shrink-0 text-center text-[10px] font-bold uppercase tracking-wide text-amber-50">
+                    {emptyPlotCount} of {farm.plots.length} plots available
+                </p>
             </div>
         </section>
     );
