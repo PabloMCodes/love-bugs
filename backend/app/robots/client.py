@@ -24,20 +24,23 @@ class BleController:
         self.fault = True
         logging.error('BLE disconnected: motion disabled. Firmware must stop motors on link loss.')
 
-    async def connect(self):
+    async def connect(self, *, device=None):
         if not self.config.ble_device or not self.config.ble_characteristic:
             raise ValueError('Set ble_device and ble_characteristic from the working BLE script first')
         if self.client_factory is None:
             from bleak import BleakClient, BleakScanner
             self.client_factory, self.scanner = BleakClient, BleakScanner
         wanted = self.config.ble_device
-        logging.info('BLE connecting to %r (%s)', wanted,
-                     'direct identifier' if self.config.ble_direct_address else 'discovery')
-        if self.config.ble_direct_address:
-            device = wanted
+        if device is not None:
+            logging.info('BLE connecting to %r (pre-resolved as %s)', wanted, device.address)
         else:
-            devices = await self.scanner.discover(timeout=5)
-            device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
+            logging.info('BLE connecting to %r (%s)', wanted,
+                         'direct identifier' if self.config.ble_direct_address else 'discovery')
+            if self.config.ble_direct_address:
+                device = wanted
+            else:
+                devices = await self.scanner.discover(timeout=5)
+                device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
         if device is None:
             raise RuntimeError(f'BLE device {wanted!r} not found')
         self.client = self.client_factory(device, disconnected_callback=self._disconnected)

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import numpy as np
 
 from app.config import NavigationConfig, NavigationRobot, load_navigation_robots
-from app.navigation.fleet import RobotControl, run_fleet, stop_all
+from app.navigation.fleet import RobotControl, discover_fleet_devices, run_fleet, stop_all
 from app.navigation.__main__ import CameraWorker
 from app.robots.client import BleController
 from test_vision import frame_with_markers
@@ -53,7 +53,8 @@ class FleetStateTests(unittest.TestCase):
         path = Path(__file__).resolve().parents[1] / 'navigation_robots.json'
         loaded = load_navigation_robots(path)
         self.assertEqual([p.config.marker_id for p in loaded], [0, 1])
-        self.assertTrue(all(p.config.ble_direct_address for p in loaded))
+        self.assertEqual([p.config.ble_device for p in loaded], ['WALL-Y', 'Eeva'])
+        self.assertTrue(all(not p.config.ble_direct_address for p in loaded))
         self.assertTrue(all(not p.config.ble_write_response for p in loaded))
         original = json.loads(path.read_text())
         for field in ('marker_id', 'ble_device'):
@@ -93,6 +94,22 @@ class FleetStateTests(unittest.TestCase):
 
 
 class FleetBleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_single_scan_resolves_both_names(self):
+        devices = [SimpleNamespace(name='WALL-Y', address='wall-uuid'),
+                   SimpleNamespace(name='Eeva', address='eeva-uuid')]
+        scanner = SimpleNamespace(discover=AsyncMock(return_value=devices))
+        resolved = await discover_fleet_devices(profiles(), scanner=scanner)
+        scanner.discover.assert_awaited_once_with(timeout=10)
+        self.assertIs(resolved['robot-a'], devices[0])
+        self.assertIs(resolved['robot-b'], devices[1])
+
+    async def test_fleet_scan_reports_missing_robot_and_visible_devices(self):
+        scanner = SimpleNamespace(discover=AsyncMock(return_value=[
+            SimpleNamespace(name='WALL-Y', address='wall-uuid'),
+        ]))
+        with self.assertRaisesRegex(RuntimeError, "Eeva.*Visible devices.*WALL-Y"):
+            await discover_fleet_devices(profiles(), scanner=scanner)
+
     async def test_direct_identifiers_and_unacknowledged_writes(self):
         client = SimpleNamespace(is_connected=True, connect=AsyncMock(),
                                  write_gatt_char=AsyncMock(), disconnect=AsyncMock())
@@ -127,6 +144,9 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
             clients[1].connect.side_effect = RuntimeError('second connection failed')
         with patch('app.navigation.fleet.CameraWorker', return_value=worker), \
                 patch('app.navigation.fleet.BleController', side_effect=clients) as factory, \
+                patch('app.navigation.fleet.discover_fleet_devices', new_callable=AsyncMock,
+                      return_value={'robot-a': SimpleNamespace(address='wall-uuid'),
+                                    'robot-b': SimpleNamespace(address='eeva-uuid')}) as discover, \
                 patch('app.navigation.fleet.cv2') as cv, \
                 patch('app.navigation.fleet.draw'):
             cv.EVENT_LBUTTONDOWN = 1
@@ -148,6 +168,13 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
                 await run_fleet(SimpleNamespace(phase=phase, video=None, camera=0), profiles())
             if phase < 4:
                 factory.assert_not_called()
+                discover.assert_not_awaited()
+            else:
+                discover.assert_awaited_once()
+                clients[0].connect.assert_awaited_once()
+                clients[1].connect.assert_awaited_once()
+                self.assertEqual(clients[0].connect.await_args.kwargs['device'].address, 'wall-uuid')
+                self.assertEqual(clients[1].connect.await_args.kwargs['device'].address, 'eeva-uuid')
         return clients
 
     async def test_ui_routes_clicks_arms_independently_and_stops_both(self):

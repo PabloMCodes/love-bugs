@@ -91,10 +91,14 @@ BLE reference: [Bleak client](https://bleak.readthedocs.io/en/latest/api/client.
 
 Use `--robots-config navigation_robots.json` to enable independent WALL-Y/Eeva
 control. Existing commands without this option still run the single-robot mode.
-The profiles use the supplied working device IDs and `response=False` writes:
+The profiles use unique advertised names and `response=False` writes:
 
-- WALL-Y (`robot-a`): `571428DD-3B56-FF4E-54BA-A73448E06B73`
-- Eeva (`robot-b`): `71B05F81-AE15-C863-43FD-B8A0D4E0C920`
+- WALL-Y (`robot-a`): `WALL-Y`
+- Eeva (`robot-b`): `Eeva`
+
+Phase 4 performs one 10-second scan, resolves both names to the current Mac's
+`BLEDevice` objects, and only then connects sequentially. This avoids storing
+machine-specific macOS UUIDs and avoids Bleak's implicit per-client discovery.
 
 **Before driving**, set each profile's actual `marker_id`, calibrated
 `heading_offset_degrees`, and `invert_turns`. The sample assumes IDs 0 and 1 and
@@ -123,11 +127,11 @@ ends the entire session and attempts stop/cleanup on both connections. If the
 second connection fails, the first is also stopped and disconnected. Restart to
 reconnect. No automatic re-arming occurs.
 
-Device identifiers can differ between Macs. If a supplied ID cannot connect on
-the camera laptop, replace it with that laptop's working identifier. Alternatively,
-set `ble_direct_address` to false and `ble_device` to the exact, unique advertised
-name for discovery. Direct-address mode follows the user's working dual-robot
-script; name-discovery mode preserves the original single-robot behavior.
+Device identifiers differ between Macs, so the checked-in fleet configuration
+uses `ble_direct_address: false` and each robot's exact, unique advertised name.
+If a robot is not found, verify that it is powered, advertising under that name,
+and disconnected from other controllers. Direct-address mode remains available
+for diagnostics, but a configured identifier must belong to the current Mac.
 
 This is simultaneous independent point-to-point driving, **not collision
 avoidance**. Use clear, separated paths. It remains separate from backend task

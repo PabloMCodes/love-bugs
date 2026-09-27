@@ -66,6 +66,33 @@ class RobotControl:
                                  self.ble.connected if self.ble else False)
 
 
+async def discover_fleet_devices(profiles, *, scanner=None):
+    """Resolve every configured robot in one scan before opening either link."""
+    if scanner is None:
+        from bleak import BleakScanner
+        scanner = BleakScanner
+    logging.info('Scanning once for %s', ', '.join(profile.name for profile in profiles))
+    discovered = await scanner.discover(timeout=10)
+    resolved = {}
+    for profile in profiles:
+        wanted = profile.config.ble_device
+        if profile.config.ble_direct_address:
+            device = next((item for item in discovered if item.address == wanted), None)
+        else:
+            device = next((item for item in discovered if item.name == wanted), None)
+        if device is None:
+            visible = ', '.join(
+                f'{item.name or "unnamed"} ({item.address})' for item in discovered
+            ) or 'none'
+            raise RuntimeError(
+                f'BLE device {wanted!r} for {profile.name} was not found in the fleet scan. '
+                f'Visible devices: {visible}'
+            )
+        resolved[profile.robot_id] = device
+        logging.info('Resolved %s to %s', profile.name, device.address)
+    return resolved
+
+
 async def stop_all(robots):
     for robot in robots:
         robot.gate.stop()
@@ -92,11 +119,14 @@ async def run_fleet(args, profiles):
 
     cv2.setMouseCallback(WINDOW, click)
     try:
+        # Resolve both peripherals before connecting. Passing BLEDevice objects
+        # avoids Bleak's implicit per-client scans, which are fragile on macOS.
+        devices = await discover_fleet_devices(profiles) if args.phase == 4 else {}
         # Connect sequentially as in the supplied working script. Neither moves.
         for robot in robots:
             if robot.ble:
                 logging.info('Connecting to %s', robot.profile.name)
-                await robot.ble.connect()
+                await robot.ble.connect(device=devices[robot.profile.robot_id])
         worker.thread.start()
         while True:
             key = cv2.waitKey(1) & 0xFF

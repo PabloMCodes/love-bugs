@@ -5,8 +5,8 @@
     "marker_id": 0,
     "heading_offset_degrees": 0,
     "invert_turns": false,
-    "ble_device": "571428DD-3B56-FF4E-54BA-A73448E06B73",
-    "ble_direct_address": true,
+    "ble_device": "WALL-Y",
+    "ble_direct_address": false,
     "ble_characteristic": "abcdefab-1234-5678-1234-abcdefabcdef",
     "ble_write_response": false
   },
@@ -16,8 +16,8 @@
     "marker_id": 1,
     "heading_offset_degrees": 0,
     "invert_turns": false,
-    "ble_device": "71B05F81-AE15-C863-43FD-B8A0D4E0C920",
-    "ble_direct_address": true,
+    "ble_device": "Eeva",
+    "ble_direct_address": false,
     "ble_characteristic": "abcdefab-1234-5678-1234-abcdefabcdef",
     "ble_write_response": false
   }
