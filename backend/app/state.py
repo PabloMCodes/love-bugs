@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import math
+from random import Random
 from threading import RLock
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ from app.game.market import (
     quote_purchase,
     quote_sale,
 )
+from app.game.fishing import default_fishing, resolve_fishing_attempt
 from app.game.tasks import activity_for
 from app.schemas import (
     ArrivalReport,
@@ -58,7 +60,7 @@ def default_world(mode: str = 'simulation') -> dict:
     now = datetime.now(timezone.utc)
 
     world = {
-        'schema_version': 3,
+        'schema_version': 4,
         'session_id': 'demo-session-001',
         'revision': 1,
         'updated_at': now,
@@ -176,6 +178,7 @@ def default_world(mode: str = 'simulation') -> dict:
                 for plot_number in range(1, 4)
             ],
         },
+        'fishing': default_fishing(),
         'economy': {
             'unlocks': [
                 {
@@ -231,10 +234,16 @@ def default_world(mode: str = 'simulation') -> dict:
 
 
 class WorldStore:
-    def __init__(self, world: dict | WorldSnapshot | None = None):
+    def __init__(
+        self,
+        world: dict | WorldSnapshot | None = None,
+        *,
+        fishing_rng=None,
+    ):
         self._lock = RLock()
         initial_world = default_world() if world is None else world
         self._world = WorldSnapshot.model_validate(initial_world)
+        self._fishing_rng = fishing_rng if fishing_rng is not None else Random()
         self._initial_world = self._world.model_copy(deep=True)
         self._tasks: dict[str, RobotTask] = {
             robot.task.id: robot.task.model_copy(deep=True)
@@ -1501,6 +1510,12 @@ class WorldStore:
 
             now = datetime.now(timezone.utc)
             next_revision = self._world.revision + 1
+            task_parameters = dict(request.parameters)
+            if request.action == 'FISH':
+                task_parameters = resolve_fishing_attempt(
+                    self._world.fishing.model_dump(mode='python'),
+                    self._fishing_rng,
+                ).task_parameters()
             task = RobotTask(
                 id=f'task-{next_revision}',
                 robot_id=robot.id,
@@ -1508,7 +1523,7 @@ class WorldStore:
                 location=request.location,
                 status='ASSIGNED',
                 progress=0,
-                parameters=request.parameters,
+                parameters=task_parameters,
                 reason=request.reason or (
                     'Return to homebase.'
                     if request.action == 'RETURN_HOME'
@@ -1574,7 +1589,11 @@ class WorldStore:
                         )
                     )
                 ),
-                'data': {},
+                'data': (
+                    {'duration_seconds': task.parameters['duration_seconds']}
+                    if request.action == 'FISH'
+                    else {}
+                ),
             })
             world['events'] = world['events'][-100:]
             self._publish(world)
@@ -1808,7 +1827,11 @@ class WorldStore:
                 'robot_id': robot['id'],
                 'task_id': task['id'],
                 'message': f"{robot['name']} started {activity.label}.",
-                'data': {},
+                'data': (
+                    {'duration_seconds': task['parameters']['duration_seconds']}
+                    if task['action'] == 'FISH'
+                    else {}
+                ),
             })
 
     def _complete_planting(
@@ -1952,6 +1975,67 @@ class WorldStore:
                 'task_id': task['id'],
                 'message': f"{robot['name']} completed harvesting {quote.crop_name}.",
                 'data': {},
+            },
+        ])
+
+    def _complete_fishing(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        now: datetime,
+    ) -> None:
+        catch = task['parameters']['catch']
+        inventory = robot['game']['inventory']
+        current_item = inventory.get(catch['item_id'])
+        total_quantity = (
+            current_item['quantity'] if current_item is not None else 0
+        ) + 1
+        inventory[catch['item_id']] = {
+            'name': catch['item_name'],
+            'quantity': total_quantity,
+            'sell_price': catch['sell_price'],
+        }
+        robot['task'] = None
+        outcome = {
+            'item': catch['item_id'],
+            'tier': catch['tier'],
+            'quantity': 1,
+            'sell_price': catch['sell_price'],
+        }
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} caught 1 {catch['item_name']}.",
+                'data': {
+                    **outcome,
+                    'total_quantity': total_quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-caught",
+                'timestamp': now,
+                'type': 'fish_caught',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': (
+                    f"{robot['name']} landed a {catch['item_name']} "
+                    f"worth {catch['sell_price']} gold."
+                ),
+                'data': outcome,
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed fishing.",
+                'data': outcome,
             },
         ])
 
@@ -2174,9 +2258,14 @@ class WorldStore:
                 if activity is None or robot['game']['location'] != activity.location:
                     continue
 
+                duration_seconds = (
+                    task['parameters']['duration_seconds']
+                    if task['action'] == 'FISH'
+                    else activity.duration_seconds
+                )
                 progress = min(
                     1,
-                    task['progress'] + elapsed_seconds / activity.duration_seconds,
+                    task['progress'] + elapsed_seconds / duration_seconds,
                 )
                 task['progress'] = progress
                 changed = True
@@ -2186,6 +2275,10 @@ class WorldStore:
 
                 if task['action'] == 'HARVEST':
                     self._complete_harvest(world, robot, task, now)
+                    continue
+
+                if task['action'] == 'FISH':
+                    self._complete_fishing(world, robot, task, now)
                     continue
 
                 inventory = robot['game']['inventory']

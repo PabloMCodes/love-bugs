@@ -1,5 +1,5 @@
 export const mockWorldState = {
-    schema_version: 3,
+    schema_version: 4,
     session_id: 'demo-session-001',
     revision: 1,
     updated_at: '2026-09-26T13:00:00.000Z',
@@ -129,6 +129,15 @@ export const mockWorldState = {
             planted_at: null,
             ready_at: null,
         })),
+    },
+    fishing: {
+        min_duration_seconds: 5,
+        max_duration_seconds: 15,
+        tiers: [
+            { id: 'common_fish', name: 'Common Fish', sell_price: 1, probability: 0.7 },
+            { id: 'uncommon_fish', name: 'Uncommon Fish', sell_price: 5, probability: 0.25 },
+            { id: 'rare_fish', name: 'Extremely Rare Fish', sell_price: 15, probability: 0.05 },
+        ],
     },
     economy: {
         unlocks: [

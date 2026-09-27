@@ -51,7 +51,7 @@ Choose complementary work
   ↓
 Buy seed, plant, or travel to lake
   ↓
-Grow and harvest wheat / catch salmon
+Grow and harvest crops / catch tiered fish
   ↓
 Carry resources to market
   ↓
@@ -102,14 +102,15 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Canonical world and live snapshots | Implemented | `GET /world` and WebSocket `/events` publish full authoritative state. |
-| Task lifecycle | Implemented | Move, return home, harvest, fish, buy, sell, and plant are validated and tracked. |
+| Task lifecycle | Implemented | Move, return home, harvest, tiered fish, buy, sell, and plant are validated and tracked. |
 | Simulation | Implemented | Movement, arrival, activity timing, inventory rewards, and trading run without hardware. |
 | Individual inventory and wallets | Implemented | The robot tracker exposes each robot's separate wallet and inventory. |
 | Shared gold goal | Implemented | Combined wallet balance completes the `earn_gold` goal only after Stage 3 is active. |
 | Market purchases | Implemented | The purchase-only market sells all three seeds; later seeds become eligible at 100 and 150 combined gold, then require a paid cooperative unlock. Purchases and sales create transient parchment notifications. |
 | Crop lifecycle | Implemented | Wheat, Carrots, and Pumpkins share authoritative buy, plant, growth, plot-aware harvest, and sale rules. |
 | Cooperative economy | Implemented | Retry-safe transfers, money requests, proposal responses, and two-robot stage contributions are backend-authoritative. |
-| Autonomous decisions | Implemented | Mock and Gemini autonomy can coordinate tasks, money, and stage proposals through one validated command contract. |
+| Fishing risk/reward | Implemented | Each attempt fixes a seeded 5–15 second duration and a 70/25/5 fish tier exactly once. |
+| Autonomous decisions | Implemented | Mock and Gemini autonomy can compare farming with fishing, coordinate tasks, request exact seed shortfalls, and manage stage proposals through one validated command contract. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
@@ -133,7 +134,7 @@ These are the highest-value gaps to close before adding more content:
 
 - Two autonomous robots: Wall-y and Eeva.
 - Four locations: homebase, farm, lake, and market.
-- Two collection paths: three-stage crop farming and salmon fishing.
+- Two collection paths: three-stage crop farming and three-tier fishing.
 - Per-robot inventory and wallets.
 - A shared gold target and a visible victory state.
 - Deterministic mock autonomy for reliable demos.
@@ -151,9 +152,9 @@ These are the highest-value gaps to close before adding more content:
 - Camera video inside the dashboard.
 - Multiplayer or remote public deployment.
 
-The crop lifecycle and cooperative economy are reliable in simulation. Richer
-fishing, economy/victory presentation, and hardware rehearsal are the active remaining
-milestones; the broader expansion stays deferred.
+The crop lifecycle, cooperative economy, and tiered fishing are reliable in
+simulation. Economy/victory presentation, balancing, and hardware rehearsal are
+the active remaining milestones; the broader expansion stays deferred.
 
 ## Roadmap
 
@@ -165,7 +166,7 @@ Goal: one understandable, deterministic simulation round.
   sellable inventory.
 - [x] Choose and test one demo goal target. Start with **200 gold** as a tuning
   candidate, then adjust using measured round duration.
-- [x] Keep only wheat and salmon as collected resources for this phase.
+- [x] Keep crops and tiered fish as the two collected resource families.
 - [x] Fix autonomous `SELL` validation to read the selected robot's inventory.
 - [x] Add a compact Farm Stage HUD with combined gold, target, and progress.
 - [x] Add session-level start, stop, and reset controls without restoring manual
@@ -223,6 +224,15 @@ purchase contributes to a complete farming loop instead of dead inventory.
 - [x] Teach mock and Gemini autonomy the cooperative economy actions.
 - [x] Require Stage 3 as well as the final gold target for victory.
 - [ ] Render pending proposals, requests, and completed contributions in the dashboard.
+
+### Fishing strategy
+
+- [x] Resolve a random 5–15 second duration once when a fishing task is assigned.
+- [x] Add common, uncommon, and extremely rare fish at 70%, 25%, and 5%.
+- [x] Persist the resolved task parameters so retries cannot reroll or pay twice.
+- [x] Seed simulation outcomes for repeatable demos and tests.
+- [x] Make mock autonomy compare expected fishing return with crop profit rate.
+- [x] Request the exact wallet shortfall when a better seed purchase needs help.
 
 ### Phase 5 — Hardware rehearsal
 

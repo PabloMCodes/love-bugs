@@ -26,14 +26,15 @@ class PersistenceTests(unittest.TestCase):
                        'location': 'lake', 'reason': 'Collect fish together.'}
             task = client.post('/tasks', json=request)
             self.assertEqual(task.status_code, 202)
+            catch_id = task.json()['parameters']['catch']['item_id']
             revision = client.get('/world').json()['revision']
             self.assertEqual(client.post('/tasks', json=request).json(), task.json())
             self.assertEqual(client.get('/world').json()['revision'], revision)
-            for _ in range(40):
+            for _ in range(80):
                 app.state.simulator.tick()
             final = client.get('/world').json()
             self.assertIsNone(final['robots'][0]['task'])
-            self.assertEqual(final['robots'][0]['game']['inventory']['fish']['quantity'], 1)
+            self.assertEqual(final['robots'][0]['game']['inventory'][catch_id]['quantity'], 1)
             self.assertEqual(Store(self.settings).world(sid), final)
             events = client.get('/events').json()['events']
             self.assertEqual(events, final['events'])

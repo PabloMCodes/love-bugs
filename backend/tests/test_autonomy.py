@@ -58,12 +58,12 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(all(robot.task is None for robot in world.robots))
         self.assertIn('agent_decision', [event.type for event in world.events])
-        self.assertTrue(
-            all(
-                message['status'] == 'accepted'
-                for message in orchestrator.chat.snapshot()['messages']
-            )
-        )
+        message_statuses = {
+            message['status']
+            for message in orchestrator.chat.snapshot()['messages']
+        }
+        self.assertIn('accepted', message_statuses)
+        self.assertLessEqual(message_statuses, {'accepted', 'waiting'})
 
     async def test_runner_rejects_old_session_without_assigning_task(self):
         store = WorldStore()

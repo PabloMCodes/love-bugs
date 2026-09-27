@@ -21,12 +21,14 @@ start at home, collect different resources, sell their own inventory, agree on
 paid permanent farming stages, and complete the shared gold goal without a browser.
 
 Phase 3's seed → plant → grow → harvest → sell slice is complete for Wheat,
-Carrots, and Pumpkins against the schema-version-3 shared farm and economy state. Mock autonomy
+Carrots, and Pumpkins against the schema-version-4 shared farm, fishing, and economy state. Mock autonomy
 compares unlocked crop returns and avoids duplicate plot claims or excess seed
 purchases. The Crop Queue derives its display and live countdown from `world.farm`
 and is never authoritative itself. Hardware
 work should preserve the task and safety contracts: `PLANT` mutates a plot on
 arrival, and `HARVEST` clears a ready plot only after its activity completes.
+`FISH` accepts no client parameters; the backend fixes its duration and catch at
+assignment and stores both in the canonical task.
 
 ## Shared setup
 
@@ -161,6 +163,9 @@ team's chosen private transport to reach the ESP32.
 - Submit `HARVEST` at `farm` with exactly `plot_id`. The plot must be `READY` at
   assignment and completion; a competing winner causes `PLOT_NOT_READY` without a
   duplicate reward.
+- Submit `FISH` at `lake` with empty parameters. Observe the returned task's
+  resolved `duration_seconds` and `catch`; never generate or reroll them in an
+  adapter.
 - Generate one stable `request_id` per intended task and reuse it only when retrying
   that identical request. Apply the same rule to economy commands. A retry returns
   the same canonical result without charging or transferring twice.

@@ -67,6 +67,13 @@ error instead of silently choosing a mode. `backend/.env.example` lists the sett
 but the server reads exported environment variables and does not load that file
 automatically.
 
+Fishing rules are exposed in schema version 4 under `world.fishing`. A `FISH`
+request has empty parameters; assignment fixes a random 5–15 second duration and
+common (70%, 1 gold), uncommon (25%, 5 gold), or extremely rare (5%, 15 gold)
+catch in the returned task parameters. Set `FISHING_RANDOM_SEED` for a repeatable
+sequence. Simulation defaults to seed `0`; hardware uses system randomness when
+the variable is unset.
+
 ## Configure the game goal
 
 Set the shared gold target before starting the game:
@@ -371,9 +378,9 @@ shared task service. The frontend conversation panel is a read-only spectator fe
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
 
-Canonical schema version 3 exposes Wheat, Carrot, and Pumpkin definitions in
+Canonical schema version 4 exposes Wheat, Carrot, and Pumpkin definitions in
 `farm.crops`, three shared `farm.plots`, and cooperative transaction history in
-`economy`. `PLANT` atomically consumes one owned
+`economy`, plus duration and tier rules in `fishing`. `PLANT` atomically consumes one owned
 seed on arrival and creates a
 timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
 duplicate the crop or consume the losing seed. The backend game loop transitions

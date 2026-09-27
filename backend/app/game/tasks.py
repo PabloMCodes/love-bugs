@@ -26,11 +26,11 @@ ACTIVITIES = {
     ),
     'FISH': ActivityDefinition(
         location='lake',
-        duration_seconds=2.5,
-        item_id='fish',
-        item_name='Salmon',
+        duration_seconds=10,
+        item_id='common_fish',
+        item_name='Common Fish',
         quantity=1,
-        sell_price=18,
+        sell_price=1,
         label='fishing',
     ),
 }

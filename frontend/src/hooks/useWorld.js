@@ -21,6 +21,28 @@ function createRequestId() {
         ?? `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function resolveMockFishing(world) {
+    const rules = world.fishing;
+    const pseudoRandom = ((world.revision * 9301 + 49297) % 233280) / 233280;
+    const durationRandom = ((world.revision * 233 + 97) % 997) / 997;
+    let cumulative = 0;
+    const catchTier = rules.tiers.find((tier) => {
+        cumulative += tier.probability;
+        return pseudoRandom < cumulative;
+    }) ?? rules.tiers.at(-1);
+    return {
+        duration_seconds: rules.min_duration_seconds + (
+            rules.max_duration_seconds - rules.min_duration_seconds
+        ) * durationRandom,
+        catch: {
+            item_id: catchTier.id,
+            item_name: catchTier.name,
+            sell_price: catchTier.sell_price,
+            tier: catchTier.id,
+        },
+    };
+}
+
 function isWorldSnapshot(value) {
     return Boolean(
         value
@@ -33,6 +55,8 @@ function isWorldSnapshot(value) {
         && value.farm
         && Array.isArray(value.farm.crops)
         && Array.isArray(value.farm.plots)
+        && value.fishing
+        && Array.isArray(value.fishing.tiers)
         && value.economy
         && Array.isArray(value.economy.unlocks)
         && Array.isArray(value.economy.unlock_proposals)
@@ -334,11 +358,15 @@ export function useWorld() {
                     const activityTask = getTaskDefinition(robot.task?.action);
 
                     if (robot.task?.status === 'ACTIVE' && activityTask?.type === 'activity') {
+                        const durationMilliseconds = (
+                            robot.task.parameters?.duration_seconds * 1000
+                            || activityTask.durationMilliseconds
+                        );
                         const progress = Math.min(
                             1,
                             robot.task.progress + (
                                 simulationTickMilliseconds
-                                / activityTask.durationMilliseconds
+                                / durationMilliseconds
                             ),
                         );
 
@@ -352,12 +380,19 @@ export function useWorld() {
                             };
                         }
 
-                        const currentItem = (
-                            robot.game.inventory[activityTask.reward.itemId]
-                        );
+                        const resolvedCatch = robot.task.parameters?.catch;
+                        const reward = resolvedCatch
+                            ? {
+                                itemId: resolvedCatch.item_id,
+                                name: resolvedCatch.item_name,
+                                quantity: 1,
+                                sellPrice: resolvedCatch.sell_price,
+                            }
+                            : activityTask.reward;
+                        const currentItem = robot.game.inventory[reward.itemId];
                         const itemQuantity = (
                             currentItem?.quantity ?? 0
-                        ) + activityTask.reward.quantity;
+                        ) + reward.quantity;
 
                         simulationEvents.push(
                             {
@@ -366,13 +401,27 @@ export function useWorld() {
                                 type: 'inventory_updated',
                                 robot_id: robot.id,
                                 task_id: robot.task.id,
-                                message: `${robot.name} collected ${activityTask.reward.quantity} ${activityTask.reward.name}.`,
+                                message: `${robot.name} collected ${reward.quantity} ${reward.name}.`,
                                 data: {
-                                    item: activityTask.reward.itemId,
-                                    quantity: activityTask.reward.quantity,
+                                    item: reward.itemId,
+                                    quantity: reward.quantity,
                                     total_quantity: itemQuantity,
                                 },
                             },
+                            ...(resolvedCatch ? [{
+                                id: `event-${robot.task.id}-caught`,
+                                timestamp: updatedAt,
+                                type: 'fish_caught',
+                                robot_id: robot.id,
+                                task_id: robot.task.id,
+                                message: `${robot.name} landed a ${reward.name} worth ${reward.sellPrice} gold.`,
+                                data: {
+                                    item: reward.itemId,
+                                    tier: resolvedCatch.tier,
+                                    quantity: reward.quantity,
+                                    sell_price: reward.sellPrice,
+                                },
+                            }] : []),
                             {
                                 id: `event-${robot.task.id}-completed`,
                                 timestamp: updatedAt,
@@ -390,10 +439,10 @@ export function useWorld() {
                                 ...robot.game,
                                 inventory: {
                                     ...robot.game.inventory,
-                                    [activityTask.reward.itemId]: {
-                                        name: currentItem?.name ?? activityTask.reward.name,
+                                    [reward.itemId]: {
+                                        name: currentItem?.name ?? reward.name,
                                         quantity: itemQuantity,
-                                        sell_price: currentItem?.sell_price ?? activityTask.reward.sellPrice,
+                                        sell_price: currentItem?.sell_price ?? reward.sellPrice,
                                     },
                                 },
                             },
@@ -570,6 +619,9 @@ export function useWorld() {
         setWorld((currentWorld) => {
             const updatedAt = new Date().toISOString();
             const taskId = `task-${currentWorld.revision + 1}`;
+            const resolvedParameters = action === taskCatalog.FISH.action
+                ? resolveMockFishing(currentWorld)
+                : parameters;
             let assignedRobot = null;
             let beginsWithTravel = false;
 
@@ -610,7 +662,7 @@ export function useWorld() {
                         location: taskDefinition.requiredLocation,
                         status: needsTravel ? 'NAVIGATING' : 'ACTIVE',
                         progress: 0,
-                        parameters,
+                        parameters: resolvedParameters,
                         reason: `${taskDefinition.label} to earn resources.`,
                         error: null,
                     },

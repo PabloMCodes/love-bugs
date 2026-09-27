@@ -37,7 +37,7 @@ npm exec --yes --package=node@24 -- npm run dev
 - `src/hooks/useWorld.js`: current snapshot and session/revision handling.
 - `src/api/`: HTTP requests and the live WebSocket connection.
 
-Use the stable schema-version-3 world model and endpoints in [api.md](../api.md), and follow
+Use the stable schema-version-4 world model and endpoints in [api.md](../api.md), and follow
 the frontend section of the [integration checklist](../INTEGRATION.md). The shared
 objective and UI milestones are tracked in [GAME_PLAN.md](../GAME_PLAN.md). The backend
 owns game rules, prices, rewards, and task completion. The browser talks only to
@@ -60,9 +60,10 @@ and the wider World Map share the lower center row.
   manual scrolling away from the bottom pauses auto-follow.
 - **Game controls:** start, stop, reset, Farm Stage, and combined-gold progress.
 
-The version-3 snapshot also carries cooperative unlock proposals, money requests,
-and transfers under `world.economy`. These are authoritative and available for a
-future economy panel; the browser must not infer unlocks from wallet totals.
+The version-4 snapshot carries cooperative unlock proposals, money requests, and
+transfers under `world.economy`, plus the authoritative fishing duration and tier
+catalog under `world.fishing`. These are authoritative and available for UI and
+planning; the browser must not infer unlocks or choose fishing outcomes itself.
 
 The browser animates Wheat, Carrot, and Pumpkin progress from timestamps but never
 decides that a crop is ready. The next frontend crop milestone is crop-specific

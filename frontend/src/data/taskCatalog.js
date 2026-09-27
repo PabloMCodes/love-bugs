@@ -24,12 +24,12 @@ export const taskCatalog = Object.freeze({
         label: 'Catch Fish',
         type: 'activity',
         requiredLocation: 'lake',
-        durationMilliseconds: 2500,
+        durationMilliseconds: 10000,
         reward: {
-            itemId: 'fish',
-            name: 'Salmon',
+            itemId: 'common_fish',
+            name: 'Common Fish',
             quantity: 1,
-            sellPrice: 18,
+            sellPrice: 1,
         },
     },
     BUY: {

@@ -242,6 +242,7 @@ class RuntimeModeTests(unittest.TestCase):
                     'location': 'lake',
                     'parameters': {},
                 }).json()
+                catch_id = task['parameters']['catch']['item_id']
                 client.post('/robots/robot-a/arrived', json={
                     'session_id': session_id,
                     'task_id': task['id'],
@@ -249,15 +250,15 @@ class RuntimeModeTests(unittest.TestCase):
                 }).raise_for_status()
 
                 before = client.get('/world').json()['robots'][0]
-                for _ in range(10):
+                for _ in range(61):
                     app.state.simulator.tick()
                 completed = client.get('/world').json()['robots'][0]
 
                 self.assertEqual(before['task']['status'], 'ACTIVE')
                 self.assertIsNone(completed['task'])
                 self.assertEqual(
-                    completed['game']['inventory']['fish']['quantity'],
-                    before['game']['inventory'].get('fish', {}).get('quantity', 0) + 1,
+                    completed['game']['inventory'][catch_id]['quantity'],
+                    before['game']['inventory'].get(catch_id, {}).get('quantity', 0) + 1,
                 )
                 self.assertEqual(
                     completed['physical']['pose'],

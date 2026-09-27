@@ -182,6 +182,13 @@ class Settings:
     autonomy_provider: str = field(
         default_factory=lambda: os.getenv('AUTONOMY_PROVIDER', 'mock'),
     )
+    fishing_random_seed: int | None = field(
+        default_factory=lambda: (
+            int(os.environ['FISHING_RANDOM_SEED'])
+            if os.getenv('FISHING_RANDOM_SEED') not in (None, '')
+            else None
+        ),
+    )
 
     def __post_init__(self):
         self.game_mode = self.game_mode.strip().lower()
@@ -192,6 +199,8 @@ class Settings:
             raise ValueError('AUTONOMY_ENABLED must be true or false')
         if self.autonomy_provider not in ('mock', 'gemini'):
             raise ValueError('AUTONOMY_PROVIDER must be either mock or gemini')
+        if self.fishing_random_seed is not None and type(self.fishing_random_seed) is not int:
+            raise ValueError('FISHING_RANDOM_SEED must be an integer')
         timeout_values = (
             self.health_timeout_seconds,
             self.pose_timeout_seconds,

@@ -32,6 +32,8 @@ notifications, live robot conversation, and session controls.
 The authoritative three-crop lifecycle now runs end to end without browser input:
 planners compare unlocked Wheat, Carrot, and Pumpkin returns, buy only enough seed
 for open capacity, claim distinct plots, plant, wait or fish during growth, harvest
-the selected plot once, and sell the crop. The Crop Queue displays every crop with
-live progress from backend timestamps. See `GAME_PLAN.md` for the remaining
-fishing, hardware, economy UI, and presentation work.
+the selected plot once, and sell the crop. Fishing now fixes a seeded 5–15 second
+duration and one of three reward tiers exactly once per task; planners compare its
+expected return with farming and can request exact seed shortfalls. The Crop Queue
+displays every crop with live progress from backend timestamps. See `GAME_PLAN.md`
+for the remaining hardware, balancing, economy UI, and presentation work.

@@ -117,7 +117,7 @@ class SimulationRunnerTests(unittest.TestCase):
     def test_fishing_starts_at_lake_and_rewards_inventory_once(self):
         store = WorldStore()
         store.start_game()
-        store.assign_task(TaskRequest(
+        task = store.assign_task(TaskRequest(
             request_id='simulation-fish-001',
             robot_id='robot-a',
             action='FISH',
@@ -134,21 +134,24 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(started.task.status, 'ACTIVE')
         self.assertEqual(started.task.progress, 0)
 
-        simulator.tick()
+        duration = task.parameters['duration_seconds']
+        catch = task.parameters['catch']
+        store.advance_activities(duration / 10)
         self.assertAlmostEqual(store.snapshot().robots[0].task.progress, .1)
-
-        for _ in range(9):
-            simulator.tick()
+        store.advance_activities(duration * .9)
 
         completed = store.snapshot()
         billy = completed.robots[0]
         self.assertIsNone(billy.task)
-        self.assertEqual(billy.game.inventory['fish'].quantity, 1)
-        self.assertEqual(completed.events[-2].type, 'inventory_updated')
+        self.assertEqual(billy.game.inventory[catch['item_id']].quantity, 1)
+        self.assertEqual(completed.events[-2].type, 'fish_caught')
         self.assertEqual(completed.events[-1].type, 'task_completed')
 
         simulator.tick()
-        self.assertEqual(store.snapshot().robots[0].game.inventory['fish'].quantity, 1)
+        self.assertEqual(
+            store.snapshot().robots[0].game.inventory[catch['item_id']].quantity,
+            1,
+        )
 
     def test_harvest_travels_to_farm_before_activity(self):
         world = default_world()
@@ -537,6 +540,16 @@ class SimulationRunnerTests(unittest.TestCase):
 
     def test_clean_round_collects_sells_and_completes_shared_goal_once(self):
         world = default_world()
+        world['fishing'] = {
+            'min_duration_seconds': 2.5,
+            'max_duration_seconds': 2.5,
+            'tiers': [{
+                'id': 'fish',
+                'name': 'Salmon',
+                'sell_price': 18,
+                'probability': 1,
+            }],
+        }
         world['game']['goal']['target'] = 115
         ready_plot_ids = [
             ready_wheat_plot(world, plot_index)

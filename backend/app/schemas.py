@@ -290,6 +290,29 @@ class Farm(StrictModel):
     plots: list[FarmPlot]
 
 
+class FishTierDefinition(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    sell_price: int = Field(ge=0)
+    probability: float = Field(gt=0, le=1)
+
+
+class FishingRules(StrictModel):
+    min_duration_seconds: float = Field(gt=0)
+    max_duration_seconds: float = Field(gt=0)
+    tiers: list[FishTierDefinition] = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def validate_fishing_rules(self):
+        if self.max_duration_seconds < self.min_duration_seconds:
+            raise ValueError('maximum fishing duration cannot be below the minimum')
+        if abs(sum(tier.probability for tier in self.tiers) - 1) > 1e-9:
+            raise ValueError('fishing tier probabilities must total 1')
+        if len({tier.id for tier in self.tiers}) != len(self.tiers):
+            raise ValueError('fishing tier IDs must be unique')
+        return self
+
+
 class WorldEvent(StrictModel):
     id: str
     timestamp: datetime
@@ -311,5 +334,6 @@ class WorldSnapshot(StrictModel):
     robots: list[Robot]
     market: Market
     farm: Farm
+    fishing: FishingRules
     economy: EconomyState
     events: list[WorldEvent]

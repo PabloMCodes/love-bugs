@@ -6,6 +6,8 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.game.fishing import DEFAULT_FISHING, expected_fishing_gold_per_second
+
 
 class Decision(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -553,6 +555,9 @@ class MockPlanner:
             key=crop_priority,
             reverse=True,
         )
+        fishing_rate = expected_fishing_gold_per_second(
+            world.get('fishing', DEFAULT_FISHING),
+        )
         if empty_plots:
             owned_crop = next(
                 (
@@ -601,43 +606,61 @@ class MockPlanner:
                 for seed_id in seed_ids
             )
             if available_seeds < len(empty_plots):
-                crop_to_buy = next(
-                    (
-                        crop for crop in crops
-                        if crop['seed_item_id'] in market_by_id
-                        and valid_price(
-                            market_by_id[crop['seed_item_id']].get('buy_price')
-                        )
-                        and stage >= market_by_id[crop['seed_item_id']].get(
-                            'required_stage',
-                            1,
-                        )
-                        and crop.get('harvest_quantity', 0)
-                        * crop.get('sell_price', 0)
-                        > market_by_id[crop['seed_item_id']]['buy_price']
-                        and robot['game']['money']
-                        >= market_by_id[crop['seed_item_id']]['buy_price']
-                        and (
-                            market_by_id[crop['seed_item_id']].get('stock') is None
-                            or market_by_id[crop['seed_item_id']]['stock']
-                            > pending_buys[crop['seed_item_id']]
-                        )
-                    ),
-                    None,
-                )
-                if crop_to_buy is not None:
-                    seed = market_by_id[crop_to_buy['seed_item_id']]
-                    return Decision(
-                        action='BUY',
-                        location='market',
-                        item=seed['id'],
-                        quantity=1,
-                        message=(
-                            f"{reply}I propose buying {seed['name']} "
-                            'for an empty plot.'
-                        ),
-                        reason='Buy one seed for available farm capacity.',
+                buyable_crops = (
+                    crop for crop in crops
+                    if crop['seed_item_id'] in market_by_id
+                    and valid_price(
+                        market_by_id[crop['seed_item_id']].get('buy_price')
                     )
+                    and stage >= market_by_id[crop['seed_item_id']].get(
+                        'required_stage',
+                        1,
+                    )
+                    and crop.get('harvest_quantity', 0)
+                    * crop.get('sell_price', 0)
+                    > market_by_id[crop['seed_item_id']]['buy_price']
+                    and crop_priority(crop)[0] > fishing_rate
+                    and (
+                        market_by_id[crop['seed_item_id']].get('stock') is None
+                        or market_by_id[crop['seed_item_id']]['stock']
+                        > pending_buys[crop['seed_item_id']]
+                    )
+                )
+                for crop_to_buy in buyable_crops:
+                    seed = market_by_id[crop_to_buy['seed_item_id']]
+                    if robot['game']['money'] >= seed['buy_price']:
+                        return Decision(
+                            action='BUY',
+                            location='market',
+                            item=seed['id'],
+                            quantity=1,
+                            message=f"I’ll buy {seed['name']} for an empty plot.",
+                            reason=(
+                                f"Buy the crop with a better expected return than "
+                                f"fishing ({crop_priority(crop_to_buy)[0]:.2f} vs "
+                                f"{fishing_rate:.2f} gold per second)."
+                            ),
+                        )
+                    shortfall = seed['buy_price'] - robot['game']['money']
+                    donor = next(
+                        (
+                            candidate for candidate in world['robots']
+                            if candidate['id'] != robot_id
+                            and candidate['game']['money'] >= shortfall
+                        ),
+                        None,
+                    )
+                    if donor is not None:
+                        return Decision(
+                            action='REQUEST_MONEY',
+                            recipient_id=donor['id'],
+                            amount=shortfall,
+                            message=(
+                                f"Could you send me {shortfall} gold for "
+                                f"{seed['name']}?"
+                            ),
+                            reason=f"Request enough gold to buy {seed['name']} for an empty plot.",
+                        )
         peer = next(
             (
                 message for message in reversed(heard)
@@ -652,5 +675,8 @@ class MockPlanner:
             action='FISH',
             location='lake',
             message=message,
-            reason='Collect fish while waiting for a ready farm plot.',
+            reason=(
+                f'Fish at an expected {fishing_rate:.2f} gold per second while '
+                'no better affordable crop action is available.'
+            ),
         )

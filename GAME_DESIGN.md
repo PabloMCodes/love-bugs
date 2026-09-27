@@ -1,11 +1,11 @@
 # Love Bugs tycoon game design
 
-Status: **partially implemented; three-crop lifecycle complete, cooperative progression planned**.
+Status: **core game logic implemented; presentation, balancing, and hardware rehearsal remain**.
 
 This document records the intended mechanics and the boundary between implemented
 gameplay and planned expansion. It is the product reference for farming progression,
-fishing, money, cooperation, and map changes. Exact prices, timers, probabilities,
-and unlock thresholds remain balancing decisions until they are measured in simulation.
+fishing, money, cooperation, and map changes. Current values are working defaults
+that remain subject to measured balance passes.
 
 The existing API and implementation are described in [api.md](api.md). Planned
 mechanics in this document do not change that stable contract until the related
@@ -13,20 +13,23 @@ schema, endpoints, tests, examples, and consumers are updated together.
 
 ## Current implementation checkpoint
 
-The backend supports a reliable autonomous resource loop and the complete
-three-crop lifecycle. The market sells all three seed types and enforces stage
+The backend supports a reliable autonomous resource loop, the complete three-crop
+lifecycle, cooperative stage progression, money requests/transfers, and
+multi-tier fishing. The market sells all three seed types and enforces stage
 locks. The frontend has a purchase-only market, market transaction notifications,
 and a full-height Crop Queue driven by canonical farm state.
 
-Schema version 2 includes Wheat, Carrot, and Pumpkin definitions and three shared
+Schema version 4 includes Wheat, Carrot, and Pumpkin definitions and three shared
 farm plots. `PLANT` consumes one owned seed at the farm and atomically creates a
 timestamped `GROWING` plot, which the queue renders. The backend game loop changes
 elapsed plots to `READY` exactly once and publishes `crop_ready`. `HARVEST` requires
 a selected ready plot, grants its configured crop once, publishes `crop_harvested`, and
 returns the plot to `EMPTY`. Mock autonomy maintains the queue by buying only for
 unreserved empty capacity, planting owned seeds into distinct plots, harvesting
-ready crops, and selling the result. Gemini uses the same validated decisions and
-coordination contract. Cooperative unlock and transfer mechanics remain later phases.
+ready crops, and selling the result. Fishing resolves a seeded 5–15 second timer
+and one of three reward tiers exactly once at assignment. Mock autonomy compares
+expected fishing income with crop profit rate and can request an exact seed-funding
+shortfall. Gemini receives the same validated state and decision contract.
 
 ## Game fantasy
 
@@ -250,14 +253,16 @@ the lake during all three stages and has no unlocks or upgrades.
 
 | Tier | Sale value | Frequency |
 | --- | ---: | --- |
-| Common fish | $1 | Most likely |
-| Uncommon fish | $5 | Less likely |
-| Extremely rare fish | $15 | Rare |
+| Common fish | $1 | 70% |
+| Uncommon fish | $5 | 25% |
+| Extremely rare fish | $15 | 5% |
 
-The exact probabilities are not decided. They should make fishing feel exciting
-without making it the obvious best strategy. Tests and reliable demos need an
-injectable or seeded random-number source; production play may use true runtime
-randomness.
+The working distribution has an expected value of 2.7 gold per attempt, or 0.27
+gold per second at the mean 10-second duration. Tests and simulation use an
+injectable/seeded random source; hardware play uses runtime randomness unless a
+seed is explicitly configured. Duration and tier are resolved and stored when the
+task is assigned, so travel, reconnects, retries, and cancellation cannot reroll
+or duplicate the result.
 
 Fishing never becomes faster and its reward table never improves when farming
 stages unlock. Its strategic role changes naturally: it may be attractive early,
@@ -343,15 +348,14 @@ The following values must be balanced later:
 - Starting money per robot.
 - Seed costs and crop sale values.
 - Grow times and farm plot count.
-- Fishing-tier probabilities.
+- Fishing-tier probabilities after measured playtesting.
 
 Unlock costs and the final target should be achievable through multiple viable
 strategies rather than one scripted sequence.
 
 ## Authoritative state the design will need
 
-These fields now live in the canonical version-3 world schema, except for the
-planned fishing-tier state:
+These fields now live in the canonical version-4 world schema:
 
 - Current stage and unlocked seed IDs.
 - Stage thresholds, costs, and final target.
@@ -427,7 +431,7 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 - Final farm plot count and whether playtesting justifies planter-only harvesting.
 - Proposal timeout and cancellation behavior.
 - Whether earlier seeds remain available after later stages unlock.
-- Fish-tier probabilities.
+- Final fishing-tier probabilities after measured playtesting.
 - Proposal and money-request history retention beyond the current game session.
 - Whether harvested crops need a short completed-history section in the queue.
 
@@ -438,5 +442,5 @@ team is ready, the safest order is:
 
 1. Add map stage rendering and crop-specific farm presentation.
 2. Render cooperative proposals, requests, and transfers in the dashboard.
-3. Implement seeded fishing duration and reward tiers.
+3. Tune the implemented fishing distribution against full-round simulation data.
 4. Tune the complete autonomous loop in simulation before connecting physical motion.

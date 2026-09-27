@@ -15,7 +15,7 @@ class WorldRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         world = response.json()
-        self.assertEqual(world['schema_version'], 3)
+        self.assertEqual(world['schema_version'], 4)
         self.assertEqual([robot['id'] for robot in world['robots']], ['robot-a', 'robot-b'])
         self.assertTrue(all(robot['game']['location'] == 'homebase' for robot in world['robots']))
         self.assertTrue(all(robot['game']['inventory'] == {} for robot in world['robots']))
@@ -95,6 +95,30 @@ class WorldRouteTests(unittest.TestCase):
             }
             for plot_number in range(1, 4)
         ])
+        self.assertEqual(world['fishing'], {
+            'min_duration_seconds': 5.0,
+            'max_duration_seconds': 15.0,
+            'tiers': [
+                {
+                    'id': 'common_fish',
+                    'name': 'Common Fish',
+                    'sell_price': 1,
+                    'probability': .7,
+                },
+                {
+                    'id': 'uncommon_fish',
+                    'name': 'Uncommon Fish',
+                    'sell_price': 5,
+                    'probability': .25,
+                },
+                {
+                    'id': 'rare_fish',
+                    'name': 'Extremely Rare Fish',
+                    'sell_price': 15,
+                    'probability': .05,
+                },
+            ],
+        })
         self.assertEqual(world['economy'], {
             'unlocks': [
                 {

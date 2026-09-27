@@ -348,6 +348,44 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             ['BUY', 'FISH'],
         )
 
+    async def test_mock_planner_requests_exact_seed_shortfall(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        world['robots'][0]['game']['money'] = 2
+        world['robots'][1]['game']['money'] = 40
+        world['game']['goal']['current'] = 42
+
+        decision = await MockPlanner().decide(world, 'robot-a')
+
+        self.assertEqual(decision.action, 'REQUEST_MONEY')
+        self.assertEqual(decision.recipient_id, 'robot-b')
+        self.assertEqual(decision.amount, 3)
+        self.assertIn('Wheat Seeds', decision.reason)
+
+    async def test_mock_planner_fishes_when_crop_return_is_worse(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        world['farm']['crops'][0]['harvest_quantity'] = 1
+        world['farm']['crops'][0]['sell_price'] = 1
+
+        decision = await MockPlanner().decide(world, 'robot-a')
+
+        self.assertEqual(decision.action, 'FISH')
+        self.assertIn('expected', decision.reason)
+
+    async def test_mock_planner_uses_affordable_crop_when_best_crop_cannot_be_funded(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        world['game']['stage'] = 3
+        world['robots'][0]['game']['money'] = 5
+        world['robots'][1]['game']['money'] = 0
+        world['game']['goal']['current'] = 5
+
+        decision = await MockPlanner().decide(world, 'robot-a')
+
+        self.assertEqual(decision.action, 'BUY')
+        self.assertEqual(decision.item, 'seeds')
+
     async def test_unavailable_robots_and_stopped_game_skip_model(self):
         class FailPlanner:
             async def decide(inner, *args):

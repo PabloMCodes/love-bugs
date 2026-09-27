@@ -52,7 +52,10 @@ class GeminiPlanner:
                     'PROPOSE_UNLOCK, RESPOND_UNLOCK, TRANSFER_MONEY, REQUEST_MONEY, '
                     'RESPOND_MONEY, or WAIT. '
                     'Tasks handle travel automatically. Do not issue motor commands. '
-                    'FISH collects fish without another item. HARVEST requires the '
+                    'FISH uses fishing.min_duration_seconds, max_duration_seconds, and '
+                    'the tier probabilities/sale values. Compare its expected return and '
+                    'uncertainty with available crops; the backend resolves one duration '
+                    'and tier exactly once. FISH takes no parameters. HARVEST requires the '
                     'plot_id of a READY plot from farm.plots; never harvest an EMPTY '
                     'or GROWING plot. '
                     'PLANT requires the item ID of an owned seed and the plot_id of an '
@@ -72,6 +75,8 @@ class GeminiPlanner:
                     'and accepted. Use economy.money_requests for REQUEST_MONEY and '
                     'RESPOND_MONEY; direct TRANSFER_MONEY and REQUEST_MONEY require recipient_id '
                     'and amount. Only the named recipient may respond to a money request. '
+                    'If a profitable seed is blocked only by your wallet and a teammate can '
+                    'cover the exact shortfall, REQUEST_MONEY for that concrete purchase. '
                     'Inventory entries may be counts or objects with quantity. '
                     'WAIT means defer, with null location/item/quantity/plot_id. '
                     'Trades require item and positive integer quantity. HARVEST requires '
@@ -125,6 +130,7 @@ class GeminiPlanner:
                 'robots',
                 'market',
                 'farm',
+                'fishing',
                 'economy',
             )
         }

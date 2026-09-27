@@ -70,7 +70,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "session_id": "session-001",
   "revision": 12,
   "updated_at": "2026-09-25T14:00:00.000Z",
@@ -162,6 +162,15 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       { "id": "plot-3", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null }
     ]
   },
+  "fishing": {
+    "min_duration_seconds": 5,
+    "max_duration_seconds": 15,
+    "tiers": [
+      { "id": "common_fish", "name": "Common Fish", "sell_price": 1, "probability": 0.70 },
+      { "id": "uncommon_fish", "name": "Uncommon Fish", "sell_price": 5, "probability": 0.25 },
+      { "id": "rare_fish", "name": "Extremely Rare Fish", "sell_price": 15, "probability": 0.05 }
+    ]
+  },
   "economy": {
     "unlocks": [
       { "stage": 2, "item_id": "carrot_seeds", "item_name": "Carrot Seeds", "eligibility_gold": 100, "cost": 30, "unlocked": false },
@@ -195,6 +204,8 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
 - The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` mirrors the eligibility threshold for display and does not advance the stage by itself. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
 - `farm.crops` is the authoritative crop catalog. `farm.plots` contains three shared plots; nonempty plots reference a crop and planter by stable ID and carry backend-owned timestamps.
+- `fishing` is the authoritative attempt-duration and reward catalog. Tier
+  probabilities total 1; clients render these values but never choose a reward.
 - `economy.unlocks` defines the eligibility and paid cost for each later stage.
   Proposal, money-request, and transfer arrays retain the current session's
   canonical transaction history. Clients must not infer an unlock from gold alone.
@@ -320,7 +331,7 @@ checks replay before checking whether the robot is busy.
 | --- | --- | --- | --- |
 | `MOVE_TO` | Any configured location | `{}` | Confirmed arrival |
 | `HARVEST` | `farm` | `plot_id` | Arrival plus backend activity timer; empties one ready plot and grants its crop |
-| `FISH` | `lake` | `{}` | Arrival plus backend activity timer; adds fish |
+| `FISH` | `lake` | `{}` | Arrival plus one resolved 5–15 second timer; grants one resolved fish tier |
 | `BUY` | `market` | `item`, `quantity` | Arrival plus validated transaction |
 | `SELL` | `market` | `item`, `quantity` | Arrival plus validated transaction |
 | `PLANT` | `farm` | `item`, `plot_id` | Arrival plus validated seed consumption; creates a `GROWING` plot |
@@ -355,6 +366,28 @@ and atomically returning the plot to `EMPTY`. If another robot harvests it first
 the losing task fails with `PLOT_NOT_READY` and receives no inventory. Cancellation
 keeps the plot ready, and retrying the same completed request cannot grant it twice.
 
+`FISH` accepts no parameters from clients. When the task is first assigned, the
+backend resolves one duration and one catch from `world.fishing` and stores them
+in the canonical task parameters:
+
+```json
+{
+  "duration_seconds": 7.314,
+  "catch": {
+    "item_id": "uncommon_fish",
+    "item_name": "Uncommon Fish",
+    "sell_price": 5,
+    "tier": "uncommon_fish"
+  }
+}
+```
+
+That result is fixed before travel begins. Reconnects and identical `request_id`
+retries return the same task and cannot reroll or duplicate its catch. Completion
+adds one tier-specific inventory item and publishes `fish_caught`. Set
+`FISHING_RANDOM_SEED` to an integer for a repeatable sequence; simulation defaults
+to seed `0`, while hardware uses system randomness when the setting is absent.
+
 Task lifecycle:
 
 ```text
@@ -371,7 +404,8 @@ Cancellation or failure never grants the completion reward. Goal completion
 requires both the target combined gold and Stage 3, then sets the game to
 `COMPLETED`, cancels remaining work, and stops dispatch and movement.
 
-Contract version 3 adds `economy` to version 2's `farm.crops` and three shared
+Contract version 4 adds the authoritative `fishing` catalog and resolved fishing
+task parameters to version 3's `economy`, `farm.crops`, and three shared
 `farm.plots`. Empty plots
 contain null crop metadata. A nonempty plot has status `GROWING` or `READY` and
 must include `crop_id`, `planted_by`, `planted_at`, and `ready_at`. Clients derive
@@ -419,7 +453,7 @@ For the MVP, use complete snapshots rather than requiring clients to assemble st
 {
   "type": "world_snapshot",
   "data": {
-    "schema_version": 3,
+    "schema_version": 4,
     "session_id": "session-001",
     "revision": 12
   }
@@ -430,7 +464,7 @@ The abbreviated `data` above must contain the **entire canonical world object** 
 
 The frontend replaces its state with each newer snapshot, deduplicates feed events by `(session_id, event.id)`, and discards lower/equal revisions within a session. Only the current socket connection may apply updates. A different session clears old tasks, events, and revision tracking. On reconnect, the server sends current state; replay of every missed event is not required. Display disconnection and retry with bounded backoff, for example 1, 2, 4, then 5 seconds. A REST snapshot used at startup follows the same revision checks and must not overwrite newer socket state.
 
-Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `gold_updated`, `market_updated`, `money_requested`, `money_request_accepted`, `money_request_rejected`, `money_transferred`, `stage_unlock_proposed`, `stage_unlock_accepted`, `stage_unlock_rejected`, `unlock_contribution`, `stage_unlocked`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
+Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `fish_caught`, `gold_updated`, `market_updated`, `money_requested`, `money_request_accepted`, `money_request_rejected`, `money_transferred`, `stage_unlock_proposed`, `stage_unlock_accepted`, `stage_unlock_rejected`, `unlock_contribution`, `stage_unlocked`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
 
 ## Robotics integration boundary
 

@@ -51,7 +51,7 @@ def main():
                     assert client.post('/game/start').status_code == 200
 
                     def task_done(robot_id):
-                        for _ in range(150):
+                        for _ in range(250):
                             current = client.get('/world').json()
                             robot = next(r for r in current['robots'] if r['id'] == robot_id)
                             if robot['task'] is None:
@@ -109,8 +109,10 @@ def main():
                         assert client.get('/world').json()['revision'] == revision
                         assert task_done('robot-b')['game']['money'] == expected
                     request = {'request_id': 'fish', 'robot_id': 'robot-a', 'action': 'FISH', 'location': 'lake'}
-                    assert client.post('/tasks', json=request).status_code == 202
-                    assert task_done('robot-a')['game']['inventory']['fish']['quantity'] == 1
+                    fishing_task = client.post('/tasks', json=request)
+                    assert fishing_task.status_code == 202
+                    catch_id = fishing_task.json()['parameters']['catch']['item_id']
+                    assert task_done('robot-a')['game']['inventory'][catch_id]['quantity'] == 1
                     request = {'request_id': 'return-home', 'robot_id': 'robot-a',
                                'action': 'RETURN_HOME', 'location': 'homebase'}
                     assert client.post('/tasks', json=request).status_code == 202
