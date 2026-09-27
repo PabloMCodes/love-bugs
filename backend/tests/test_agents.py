@@ -79,6 +79,14 @@ class DecisionTests(unittest.TestCase):
 
     def test_inventory_formats_and_trade_validation(self):
         world = demo_world()
+        world['market']['items'] = [{
+            'id': 'crop',
+            'name': 'Wheat',
+            'buy_price': 10,
+            'sell_price': 12,
+            'stock': 1,
+            'required_stage': 1,
+        }]
         decision = Decision(action='SELL', location='market', item='crop', quantity=2, reason='Earn gold')
         for inventory in (
             {'crop': 2},
@@ -163,7 +171,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
                 return await super().decide(world, robot_id)
         orchestrator = AgentOrchestrator(Planner())
         outcomes = await orchestrator.tick(lambda: self.world, self.submit)
-        self.assertEqual([r['action'] for r in self.requests], ['FISH', 'FISH'])
+        self.assertEqual([r['action'] for r in self.requests], ['BUY', 'BUY'])
         self.assertEqual([o.status for o in outcomes], ['accepted', 'accepted'])
         self.assertIsNotNone(seen[1]['robots'][0]['task'])
         self.assertEqual(await orchestrator.tick(lambda: self.world, self.submit), [])
@@ -188,7 +196,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             self.submit,
         )
 
-        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'FISH'])
+        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'BUY'])
         self.assertEqual(
             self.requests[0]['parameters'],
             {'item': 'crop', 'quantity': 3},
@@ -234,6 +242,23 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
+
+    async def test_mock_planner_prefers_best_unlocked_crop_return(self):
+        for stage, expected_seed in (
+            (1, 'seeds'),
+            (2, 'carrot_seeds'),
+            (3, 'pumpkin_seeds'),
+        ):
+            with self.subTest(stage=stage):
+                world = default_world()
+                world['game']['status'] = 'RUNNING'
+                world['game']['stage'] = stage
+
+                decision = await MockPlanner().decide(world, 'robot-a')
+
+                self.assertEqual(decision.action, 'BUY')
+                self.assertEqual(decision.item, expected_seed)
+                self.assertEqual(decision.quantity, 1)
 
     async def test_mock_planner_claims_distinct_empty_plots(self):
         self.world = default_world()

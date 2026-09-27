@@ -152,7 +152,9 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   },
   "farm": {
     "crops": [
-      { "id": "wheat", "name": "Wheat", "seed_item_id": "seeds", "grow_seconds": 8, "harvest_quantity": 3, "sell_price": 12, "required_stage": 1 }
+      { "id": "wheat", "name": "Wheat", "seed_item_id": "seeds", "grow_seconds": 8, "harvest_quantity": 3, "sell_price": 12, "required_stage": 1 },
+      { "id": "carrot", "name": "Carrots", "seed_item_id": "carrot_seeds", "grow_seconds": 12, "harvest_quantity": 3, "sell_price": 20, "required_stage": 2 },
+      { "id": "pumpkin", "name": "Pumpkins", "seed_item_id": "pumpkin_seeds", "grow_seconds": 18, "harvest_quantity": 3, "sell_price": 32, "required_stage": 3 }
     ],
     "plots": [
       { "id": "plot-1", "status": "READY", "crop_id": "wheat", "planted_by": "robot-a", "planted_at": "2026-09-25T13:59:45.000Z", "ready_at": "2026-09-25T13:59:53.000Z" },
@@ -242,9 +244,10 @@ checks replay before checking whether the robot is busy.
 `location` is required and validated against the action. One nonterminal task per robot; competing requests receive `409`. The game must be running and the robot available. A robot already confirmed in the required zone can skip navigation.
 
 The shipped Market UI submits `BUY` tasks only. Autonomous agents can submit
-`BUY`, `PLANT`, `HARVEST`, and `SELL` to maintain the wheat crop loop. The mock
-planner accounts for owned seeds, pending purchases, and claimed plots before
-buying or planting. Successful purchases and sales appear as transient frontend
+`BUY`, `PLANT`, `HARVEST`, and `SELL` to maintain the crop loop. The mock planner
+compares unlocked crops by net return per growth second and accounts for owned
+seeds, pending purchases, and claimed plots before buying or planting. Successful
+purchases and sales appear as transient frontend
 notifications derived from authoritative world events. A task does not immediately
 alter a wallet from anywhere on the map.
 Check stage access, stock, prices, funds, and inventory again when the transaction
@@ -252,8 +255,9 @@ executes; apply inventory and currency changes atomically and only once. Use
 execution-time prices for the MVP. A locked item returns `SEED_LOCKED`; a failed
 execution fails the task without a partial transaction.
 
-`PLANT` always consumes exactly one seed and accepts exactly
-`{ "item": "seeds", "plot_id": "plot-1" }` for the current wheat slice. Assignment
+`PLANT` always consumes exactly one seed and accepts exactly `item` and `plot_id`,
+for example `{ "item": "carrot_seeds", "plot_id": "plot-1" }`. The item must map
+to an authoritative crop definition unlocked for the current stage. Assignment
 checks that the acting robot owns the seed and the plot is empty. Arrival repeats
 those checks atomically before removing the seed and setting `crop_id`,
 `planted_by`, `planted_at`, `ready_at`, and status `GROWING`. If another robot
@@ -417,7 +421,7 @@ Build a simulator behind the same backend interface. It supplies pose, arrival, 
 Suggested first demo scenario:
 
 1. Seed two robots at home with a small wallet; game starts in `READY`.
-2. Buy Wheat Seeds, plant an empty plot, and wait for backend-owned readiness.
+2. Buy an unlocked seed, plant an empty plot, and wait for backend-owned readiness.
 3. Harvest that ready plot while the second robot fishes.
 4. Simulate changing positions and confirmed arrivals.
 5. Advance backend activity progress and grant each resource once.
@@ -426,7 +430,9 @@ Suggested first demo scenario:
 8. Disconnect/reconnect the browser and confirm that the next snapshot restores current state.
 9. Stop during navigation or activity and confirm that no cancelled task grants a reward.
 
-Initially scripted task requests can exercise this scenario; autonomous agent decisions replace those requests later. Simulation is a development tool, while the final physical demo still requires genuine navigation and arrival.
+Scripted task requests and autonomous agent decisions both exercise this scenario.
+Simulation is a development tool, while the final physical demo still requires
+genuine navigation and arrival.
 
 ## Implementation order and open choices
 

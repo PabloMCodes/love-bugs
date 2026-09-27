@@ -55,15 +55,35 @@ class WorldRouteTests(unittest.TestCase):
             },
         ])
         self.assertEqual(world['map']['locations']['market'], {'x': 80.0, 'y': 25.0})
-        self.assertEqual(world['farm']['crops'], [{
-            'id': 'wheat',
-            'name': 'Wheat',
-            'seed_item_id': 'seeds',
-            'grow_seconds': 8.0,
-            'harvest_quantity': 3,
-            'sell_price': 12,
-            'required_stage': 1,
-        }])
+        self.assertEqual(world['farm']['crops'], [
+            {
+                'id': 'wheat',
+                'name': 'Wheat',
+                'seed_item_id': 'seeds',
+                'grow_seconds': 8.0,
+                'harvest_quantity': 3,
+                'sell_price': 12,
+                'required_stage': 1,
+            },
+            {
+                'id': 'carrot',
+                'name': 'Carrots',
+                'seed_item_id': 'carrot_seeds',
+                'grow_seconds': 12.0,
+                'harvest_quantity': 3,
+                'sell_price': 20,
+                'required_stage': 2,
+            },
+            {
+                'id': 'pumpkin',
+                'name': 'Pumpkins',
+                'seed_item_id': 'pumpkin_seeds',
+                'grow_seconds': 18.0,
+                'harvest_quantity': 3,
+                'sell_price': 32,
+                'required_stage': 3,
+            },
+        ])
         self.assertEqual(world['farm']['plots'], [
             {
                 'id': f'plot-{plot_number}',

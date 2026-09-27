@@ -367,16 +367,17 @@ shared task service. The frontend conversation panel is a read-only spectator fe
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
 
-Canonical schema version 2 exposes `farm.crops` and three shared `farm.plots`.
-`PLANT` atomically consumes one owned Wheat Seed on arrival and creates a
+Canonical schema version 2 exposes Wheat, Carrot, and Pumpkin definitions in
+`farm.crops` and three shared `farm.plots`. `PLANT` atomically consumes one owned
+seed on arrival and creates a
 timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
 duplicate the crop or consume the losing seed. The backend game loop transitions
 due plots to `READY` exactly once in simulation and hardware modes, even without a
 browser. `HARVEST` requires a `READY` plot ID, rechecks it at completion, grants the
-defined crop exactly once, and returns the plot to `EMPTY`. Mock autonomy buys only
-for unreserved empty capacity, assigns distinct plots, and runs this complete loop
-without a browser. Gemini decisions support the same `PLANT` and `HARVEST` contract.
-The next backend milestone is generalizing the proven lifecycle to later crops.
+defined crop exactly once, and returns the plot to `EMPTY`. Mock autonomy compares
+net return per growth second, buys only for unreserved empty capacity, assigns
+distinct plots, and runs the complete loop without a browser. Gemini decisions
+support the same `PLANT` and `HARVEST` contract. Final crop values remain tunable.
 
 Enable deterministic backend-owned play with:
 

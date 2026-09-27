@@ -60,9 +60,9 @@ and the wider World Map share the lower center row.
   manual scrolling away from the bottom pauses auto-follow.
 - **Game controls:** start, stop, reset, Farm Stage, and combined-gold progress.
 
-The browser animates crop progress from timestamps but never decides that a crop
-is ready. The next frontend crop milestone is later-crop artwork after carrot and
-pumpkin definitions and balance values are finalized.
+The browser animates Wheat, Carrot, and Pumpkin progress from timestamps but never
+decides that a crop is ready. The next frontend crop milestone is crop-specific
+farm artwork and map changes for each unlocked stage.
 
 ## Robot conversation
 

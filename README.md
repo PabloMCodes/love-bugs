@@ -29,9 +29,9 @@ and complete the shared gold goal. The dashboard now includes a purchase-only se
 market, an authoritative Crop Queue backed by three shared farm plots, transaction
 notifications, live robot conversation, and session controls.
 
-The authoritative wheat lifecycle now runs end to end without browser input:
-planners buy only enough seed for open capacity, claim distinct plots, plant,
-wait or fish during growth, harvest the selected plot once, and sell the Wheat.
-The Crop Queue displays live growth progress from backend timestamps. The next
-product goal is reusing this lifecycle for carrots and pumpkins. See `GAME_PLAN.md`
-for the implementation sequence.
+The authoritative three-crop lifecycle now runs end to end without browser input:
+planners compare unlocked Wheat, Carrot, and Pumpkin returns, buy only enough seed
+for open capacity, claim distinct plots, plant, wait or fish during growth, harvest
+the selected plot once, and sell the crop. The Crop Queue displays every crop with
+live progress from backend timestamps. See `GAME_PLAN.md` for the remaining stage,
+fishing, hardware, and presentation work.

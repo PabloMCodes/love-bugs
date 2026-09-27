@@ -8,7 +8,7 @@ export const taskCatalog = Object.freeze({
     },
     HARVEST: {
         action: 'HARVEST',
-        label: 'Harvest Wheat',
+        label: 'Harvest Crop',
         type: 'activity',
         requiredLocation: 'farm',
         durationMilliseconds: 2500,

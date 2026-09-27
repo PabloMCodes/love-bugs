@@ -209,6 +209,38 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(accepted.json()['action'], 'PLANT')
         self.assertEqual(accepted.json()['parameters'], base_request['parameters'])
 
+    def test_later_crop_planting_requires_its_farm_stage(self):
+        world = default_world()
+        world['robots'][0]['game']['inventory']['carrot_seeds'] = {
+            'name': 'Carrot Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        request = {
+            **self.request,
+            'request_id': 'request-plant-carrot-locked',
+            'action': 'PLANT',
+            'location': 'farm',
+            'parameters': {'item': 'carrot_seeds', 'plot_id': 'plot-1'},
+        }
+
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            locked = client.post('/tasks', json=request)
+
+        self.assertEqual(locked.status_code, 409)
+        self.assertEqual(locked.json()['error']['code'], 'SEED_LOCKED')
+
+        world['game']['stage'] = 2
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            accepted = client.post('/tasks', json={
+                **request,
+                'request_id': 'request-plant-carrot-unlocked',
+            })
+
+        self.assertEqual(accepted.status_code, 202)
+
     def test_sell_task_validates_inventory_and_parameters(self):
         world = default_world()
         world['robots'][1]['game']['inventory']['crop'] = {

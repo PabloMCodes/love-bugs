@@ -143,6 +143,24 @@ def default_world(mode: str = 'simulation') -> dict:
                     'sell_price': 12,
                     'required_stage': 1,
                 },
+                {
+                    'id': 'carrot',
+                    'name': 'Carrots',
+                    'seed_item_id': 'carrot_seeds',
+                    'grow_seconds': 12,
+                    'harvest_quantity': 3,
+                    'sell_price': 20,
+                    'required_stage': 2,
+                },
+                {
+                    'id': 'pumpkin',
+                    'name': 'Pumpkins',
+                    'seed_item_id': 'pumpkin_seeds',
+                    'grow_seconds': 18,
+                    'harvest_quantity': 3,
+                    'sell_price': 32,
+                    'required_stage': 3,
+                },
             ],
             'plots': [
                 {

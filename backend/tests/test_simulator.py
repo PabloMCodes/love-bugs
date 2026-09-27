@@ -276,6 +276,74 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(reset.farm.plots[0].status, 'EMPTY')
         self.assertEqual(reset.robots[0].game.inventory['seeds'].quantity, 2)
 
+    def test_later_crops_complete_plant_grow_harvest_sell_lifecycle(self):
+        for crop_id, seed_id, stage, grow_seconds, sell_price in (
+            ('carrot', 'carrot_seeds', 2, 12, 20),
+            ('pumpkin', 'pumpkin_seeds', 3, 18, 32),
+        ):
+            with self.subTest(crop_id=crop_id):
+                world = default_world()
+                world['game']['stage'] = stage
+                world['robots'][0]['game']['inventory'][seed_id] = {
+                    'name': f'{crop_id.title()} Seeds',
+                    'quantity': 1,
+                    'sell_price': None,
+                }
+                store = WorldStore(world)
+                store.start_game()
+                simulator = SimulationRunner(
+                    store,
+                    interval_seconds=2.5,
+                    step_distance=100,
+                )
+                store.assign_task(TaskRequest(
+                    request_id=f'plant-{crop_id}',
+                    robot_id='robot-a',
+                    action='PLANT',
+                    location='farm',
+                    parameters={'item': seed_id, 'plot_id': 'plot-1'},
+                ))
+
+                simulator.tick()
+
+                planted = store.snapshot().farm.plots[0]
+                self.assertEqual(planted.status, 'GROWING')
+                self.assertEqual(planted.crop_id, crop_id)
+                self.assertEqual(
+                    planted.ready_at - planted.planted_at,
+                    timedelta(seconds=grow_seconds),
+                )
+
+                store.advance_crop_growth(planted.ready_at)
+                store.assign_task(TaskRequest(
+                    request_id=f'harvest-{crop_id}',
+                    robot_id='robot-a',
+                    action='HARVEST',
+                    location='farm',
+                    parameters={'plot_id': 'plot-1'},
+                ))
+                simulator.tick()
+                simulator.tick()
+
+                harvested = store.snapshot()
+                crop = harvested.robots[0].game.inventory[crop_id]
+                self.assertEqual(crop.quantity, 3)
+                self.assertEqual(crop.sell_price, sell_price)
+                self.assertEqual(harvested.farm.plots[0].status, 'EMPTY')
+
+                store.assign_task(TaskRequest(
+                    request_id=f'sell-{crop_id}',
+                    robot_id='robot-a',
+                    action='SELL',
+                    location='market',
+                    parameters={'item': crop_id, 'quantity': 3},
+                ))
+                simulator.tick()
+
+                sold = store.snapshot().robots[0]
+                self.assertNotIn(crop_id, sold.game.inventory)
+                self.assertEqual(sold.game.money, 40 + 3 * sell_price)
+
     def test_competing_plant_rechecks_plot_before_consuming_seed(self):
         world = default_world()
         for robot in world['robots']:

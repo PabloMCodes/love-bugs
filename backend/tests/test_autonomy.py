@@ -12,7 +12,8 @@ from app.state import WorldStateError, WorldStore, default_world
 class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_mock_autonomy_completes_round_without_browser(self):
         world = default_world()
-        world['farm']['crops'][0]['grow_seconds'] = .01
+        for crop in world['farm']['crops']:
+            crop['grow_seconds'] = .01
         store = WorldStore(world)
         store.start_game()
         orchestrator = AgentOrchestrator(

@@ -1,6 +1,6 @@
 # Love Bugs tycoon game design
 
-Status: **partially implemented; wheat lifecycle complete, broader progression planned**.
+Status: **partially implemented; three-crop lifecycle complete, cooperative progression planned**.
 
 This document records the intended mechanics and the boundary between implemented
 gameplay and planned expansion. It is the product reference for farming progression,
@@ -13,16 +13,16 @@ schema, endpoints, tests, examples, and consumers are updated together.
 
 ## Current implementation checkpoint
 
-The backend supports a reliable autonomous resource loop and the complete wheat
-crop lifecycle. The market sells all three seed types and enforces stage
+The backend supports a reliable autonomous resource loop and the complete
+three-crop lifecycle. The market sells all three seed types and enforces stage
 locks. The frontend has a purchase-only market, market transaction notifications,
 and a full-height Crop Queue driven by canonical farm state.
 
-Schema version 2 includes the wheat crop definition and three shared farm plots.
-`PLANT` consumes one owned Wheat Seed at the farm and atomically creates a
+Schema version 2 includes Wheat, Carrot, and Pumpkin definitions and three shared
+farm plots. `PLANT` consumes one owned seed at the farm and atomically creates a
 timestamped `GROWING` plot, which the queue renders. The backend game loop changes
 elapsed plots to `READY` exactly once and publishes `crop_ready`. `HARVEST` requires
-a selected ready plot, grants its Wheat once, publishes `crop_harvested`, and
+a selected ready plot, grants its configured crop once, publishes `crop_harvested`, and
 returns the plot to `EMPTY`. Mock autonomy maintains the queue by buying only for
 unreserved empty capacity, planting owned seeds into distinct plots, harvesting
 ready crops, and selling the result. Gemini uses the same validated decisions and
@@ -74,9 +74,9 @@ The seed catalog contains exactly three progression items:
 
 | Stage | Seed | Speed | Seed cost | Crop value | Availability |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Wheat seeds | Quick | 5 gold candidate | Low | Unlocked when the round begins |
-| 2 | Carrot seeds | Medium | 10 gold candidate | Medium | Unlocked through the first cooperative progression purchase |
-| 3 | Pumpkin seeds | Slow | 20 gold candidate | High | Unlocked through the second cooperative progression purchase |
+| 1 | Wheat seeds | 8 seconds | 5 gold | 3 × 12 gold | Unlocked when the round begins |
+| 2 | Carrot seeds | 12 seconds | 10 gold | 3 × 20 gold | Unlocked at 100 combined gold for now |
+| 3 | Pumpkin seeds | 18 seconds | 20 gold | 3 × 32 gold | Unlocked at 150 combined gold for now |
 
 The qualitative relationship is a firm design rule:
 
@@ -86,10 +86,10 @@ wheat seed cost < carrot seed cost < pumpkin seed cost
 wheat sale value < carrot sale value < pumpkin sale value
 ```
 
-These seed prices are initial simulation candidates, not final balance. Crop sale
-values and growth times are still open. Final numbers should ensure that every crop
-has a positive return and a longer crop produces a meaningfully larger sale,
-without making earlier crops immediately useless.
+These are explicit simulation candidates, not final balance. They ensure every crop
+has a positive return, longer crops produce a larger sale, and the planner can
+compare net profit per growth second. Earlier crops remain available for faster
+turnaround even after later stages unlock.
 
 ### Crop lifecycle
 
@@ -144,17 +144,18 @@ sorts growing crops by `ready_at`. Growing cards derive a live countdown and
 progress bar from `planted_at` and `ready_at`; they never advance backend state.
 A successful `PLANT` task creates those growing entries from backend state.
 
-The first vertical slice is deliberately wheat-only:
+The lifecycle was proven with Wheat, then generalized to every crop definition:
 
-1. Buy one Wheat Seed through the existing market transaction.
+1. Buy one unlocked seed through the existing market transaction.
 2. Submit `PLANT` at the farm with a seed item and empty plot ID.
 3. Atomically consume one seed and create one `GROWING` plot.
 4. Transition it once to `READY` from backend-owned time and publish an event.
-5. Submit plot-aware `HARVEST`, grant Wheat once, and return the plot to `EMPTY`.
-6. Sell the harvested Wheat through the existing market transaction.
+5. Submit plot-aware `HARVEST`, grant the configured crop once, and return the
+   plot to `EMPTY`.
+6. Sell the harvested crop through the existing market transaction.
 
-This sequence now passes cancellation, retry, reset, reconnect, and live HTTP smoke
-tests. Carrot and pumpkin can reuse these rules with different timings and values.
+This sequence now passes cancellation, retry, reset, reconnect, live HTTP smoke,
+and data-driven Carrot/Pumpkin lifecycle tests.
 
 ## Stage progression
 
@@ -420,7 +421,7 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 
 ## Open decisions before later phases
 
-- Exact seed costs, grow times, and crop sale values.
+- Final tuning of seed costs, grow times, and crop sale values.
 - Stage eligibility thresholds, cooperative unlock costs, and final target.
 - Final farm plot count and whether playtesting justifies planter-only harvesting.
 - Whether both robots must contribute a positive amount to an unlock.
@@ -436,10 +437,8 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 No implementation begins merely because it appears in this document. When the
 team is ready, the safest order is:
 
-1. Generalize the validated lifecycle to carrot and pumpkin.
-2. Expand both planners to compare crop value, growth time, and progression.
-3. Add map stage rendering and richer farm plot presentation.
-4. Implement seeded fishing duration and reward tiers.
-5. Add money request/transfer transactions.
-6. Add cooperative unlock proposal, agreement, contributions, and stage changes.
-7. Tune the complete autonomous loop in simulation before connecting physical motion.
+1. Add map stage rendering and crop-specific farm presentation.
+2. Implement seeded fishing duration and reward tiers.
+3. Add money request/transfer transactions.
+4. Add cooperative unlock proposal, agreement, contributions, and stage changes.
+5. Tune the complete autonomous loop in simulation before connecting physical motion.

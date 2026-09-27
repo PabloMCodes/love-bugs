@@ -260,15 +260,37 @@ class MockPlanner:
             if plot['status'] == 'EMPTY' and plot['id'] not in plant_claims
         ]
         stage = world['game'].get('stage', 1)
+        market_by_id = {
+            item['id']: item
+            for item in world.get('market', {}).get('items', [])
+        }
         crops = [
             crop for crop in world.get('farm', {}).get('crops', [])
             if stage >= crop.get('required_stage', 1)
         ]
+
+        def crop_priority(crop: dict) -> tuple[float, int, int]:
+            market_item = market_by_id.get(crop['seed_item_id'], {})
+            seed_price = market_item.get('buy_price')
+            gross_value = (
+                crop.get('harvest_quantity', 0)
+                * crop.get('sell_price', 0)
+            )
+            profit = (
+                gross_value - seed_price
+                if valid_price(seed_price)
+                else gross_value
+            )
+            grow_seconds = crop.get('grow_seconds', 0)
+            profit_rate = (
+                profit / grow_seconds
+                if isinstance(grow_seconds, (int, float)) and grow_seconds > 0
+                else 0
+            )
+            return profit_rate, profit, crop.get('required_stage', 1)
+
         crops.sort(
-            key=lambda crop: (
-                crop.get('required_stage', 1),
-                crop.get('harvest_quantity', 0) * crop.get('sell_price', 0),
-            ),
+            key=crop_priority,
             reverse=True,
         )
         if empty_plots:
@@ -319,10 +341,6 @@ class MockPlanner:
                 for seed_id in seed_ids
             )
             if available_seeds < len(empty_plots):
-                market_by_id = {
-                    item['id']: item
-                    for item in world.get('market', {}).get('items', [])
-                }
                 crop_to_buy = next(
                     (
                         crop for crop in crops
@@ -355,7 +373,7 @@ class MockPlanner:
                         item=seed['id'],
                         quantity=1,
                         message=(
-                            f"{reply}I propose buying one {seed['name']} "
+                            f"{reply}I propose buying {seed['name']} "
                             'for an empty plot.'
                         ),
                         reason='Buy one seed for available farm capacity.',

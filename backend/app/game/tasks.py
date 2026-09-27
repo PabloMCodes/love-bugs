@@ -22,7 +22,7 @@ ACTIVITIES = {
         item_name='Wheat',
         quantity=3,
         sell_price=12,
-        label='harvesting wheat',
+        label='harvesting a crop',
     ),
     'FISH': ActivityDefinition(
         location='lake',
