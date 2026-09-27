@@ -1,13 +1,16 @@
 """Validated models for the canonical world snapshot."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
+
+
+ContributionAmount = Annotated[int, Field(strict=True, gt=0)]
 
 
 class Goal(StrictModel):
@@ -25,6 +28,84 @@ class GameState(StrictModel):
     status: Literal['READY', 'RUNNING', 'STOPPED', 'COMPLETED']
     goal: Goal
     stage: int = Field(default=1, ge=1, le=3)
+
+
+class StageUnlockRule(StrictModel):
+    stage: int = Field(ge=2, le=3)
+    item_id: str = Field(min_length=1)
+    item_name: str = Field(min_length=1)
+    eligibility_gold: int = Field(ge=0)
+    cost: int = Field(ge=1)
+    unlocked: bool
+
+
+class StageUnlockProposal(StrictModel):
+    id: str
+    stage: int = Field(ge=2, le=3)
+    proposer_id: str
+    contributions: dict[str, ContributionAmount]
+    accepted_by: list[str]
+    status: Literal['PENDING', 'COMPLETED', 'REJECTED']
+    created_at: AwareDatetime
+    resolved_at: AwareDatetime | None = None
+
+
+class MoneyRequestState(StrictModel):
+    id: str
+    requester_id: str
+    recipient_id: str
+    amount: int = Field(ge=1)
+    purpose: str
+    status: Literal['PENDING', 'ACCEPTED', 'REJECTED']
+    created_at: AwareDatetime
+    resolved_at: AwareDatetime | None = None
+    transfer_id: str | None = None
+
+
+class MoneyTransfer(StrictModel):
+    id: str
+    sender_id: str
+    recipient_id: str
+    amount: int = Field(ge=1)
+    purpose: str
+    created_at: AwareDatetime
+    money_request_id: str | None = None
+
+
+class EconomyState(StrictModel):
+    unlocks: list[StageUnlockRule]
+    unlock_proposals: list[StageUnlockProposal]
+    money_requests: list[MoneyRequestState]
+    transfers: list[MoneyTransfer]
+
+
+class EconomyRequest(StrictModel):
+    request_id: str = Field(min_length=1, max_length=100)
+
+
+class MoneyTransferRequest(EconomyRequest):
+    sender_id: str = Field(min_length=1, max_length=100)
+    recipient_id: str = Field(min_length=1, max_length=100)
+    amount: int = Field(strict=True, ge=1)
+    purpose: str = Field(min_length=1, max_length=300)
+
+
+class MoneyRequestCreate(EconomyRequest):
+    requester_id: str = Field(min_length=1, max_length=100)
+    recipient_id: str = Field(min_length=1, max_length=100)
+    amount: int = Field(strict=True, ge=1)
+    purpose: str = Field(min_length=1, max_length=300)
+
+
+class EconomyResponseRequest(EconomyRequest):
+    robot_id: str = Field(min_length=1, max_length=100)
+    accepted: bool = Field(strict=True)
+
+
+class StageUnlockProposalRequest(EconomyRequest):
+    proposer_id: str = Field(min_length=1, max_length=100)
+    stage: int = Field(strict=True, ge=2, le=3)
+    contributions: dict[str, ContributionAmount]
 
 
 class Point(StrictModel):
@@ -230,4 +311,5 @@ class WorldSnapshot(StrictModel):
     robots: list[Robot]
     market: Market
     farm: Farm
+    economy: EconomyState
     events: list[WorldEvent]

@@ -7,14 +7,22 @@ from app.schemas import (
     AcceptedResponse,
     ArrivalReport,
     BlockedReport,
+    EconomyResponseRequest,
+    EconomyState,
     Goal,
     GoalRequest,
     HealthReport,
     Market,
+    MoneyRequestCreate,
+    MoneyRequestState,
+    MoneyTransfer,
+    MoneyTransferRequest,
     PoseReport,
     Robot,
     RobotsResponse,
     RobotTask,
+    StageUnlockProposal,
+    StageUnlockProposalRequest,
     TaskRequest,
     TasksResponse,
     WorldSnapshot,
@@ -41,6 +49,14 @@ ERROR_STATUS_CODES = {
     'PLOT_OCCUPIED': 409,
     'PLOT_NOT_READY': 409,
     'SESSION_MISMATCH': 409,
+    'REQUEST_PENDING': 409,
+    'REQUEST_RESOLVED': 409,
+    'NOT_AUTHORIZED': 403,
+    'INVALID_STAGE': 409,
+    'STAGE_UNLOCKED': 409,
+    'STAGE_NOT_ELIGIBLE': 409,
+    'PROPOSAL_PENDING': 409,
+    'PROPOSAL_RESOLVED': 409,
 }
 
 
@@ -73,6 +89,67 @@ def create_world_router(store: WorldStore) -> APIRouter:
     @router.get('/market', response_model=Market)
     def market() -> Market:
         return store.market()
+
+    @router.get('/economy', response_model=EconomyState)
+    def economy() -> EconomyState:
+        return store.economy()
+
+    @router.post('/economy/transfers', response_model=MoneyTransfer, status_code=201)
+    def transfer_money(request: MoneyTransferRequest) -> MoneyTransfer:
+        try:
+            return store.transfer_money(request)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post(
+        '/economy/money-requests',
+        response_model=MoneyRequestState,
+        status_code=201,
+    )
+    def create_money_request(request: MoneyRequestCreate) -> MoneyRequestState:
+        try:
+            return store.create_money_request(request)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post(
+        '/economy/money-requests/{money_request_id}/respond',
+        response_model=MoneyRequestState,
+    )
+    def respond_money_request(
+        money_request_id: str,
+        request: EconomyResponseRequest,
+    ) -> MoneyRequestState:
+        try:
+            return store.respond_money_request(money_request_id, request)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post(
+        '/economy/unlock-proposals',
+        response_model=StageUnlockProposal,
+        status_code=201,
+    )
+    def propose_stage_unlock(
+        request: StageUnlockProposalRequest,
+    ) -> StageUnlockProposal:
+        try:
+            return store.propose_stage_unlock(request)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
+
+    @router.post(
+        '/economy/unlock-proposals/{proposal_id}/respond',
+        response_model=StageUnlockProposal,
+    )
+    def respond_stage_unlock(
+        proposal_id: str,
+        request: EconomyResponseRequest,
+    ) -> StageUnlockProposal:
+        try:
+            return store.respond_stage_unlock(proposal_id, request)
+        except WorldStateError as error:
+            raise translate_world_error(error) from error
 
     @router.get('/tasks', response_model=TasksResponse)
     def tasks() -> TasksResponse:

@@ -1,5 +1,5 @@
 export const mockWorldState = {
-    schema_version: 2,
+    schema_version: 3,
     session_id: 'demo-session-001',
     revision: 1,
     updated_at: '2026-09-26T13:00:00.000Z',
@@ -129,6 +129,29 @@ export const mockWorldState = {
             planted_at: null,
             ready_at: null,
         })),
+    },
+    economy: {
+        unlocks: [
+            {
+                stage: 2,
+                item_id: 'carrot_seeds',
+                item_name: 'Carrot Seeds',
+                eligibility_gold: 100,
+                cost: 30,
+                unlocked: false,
+            },
+            {
+                stage: 3,
+                item_id: 'pumpkin_seeds',
+                item_name: 'Pumpkin Seeds',
+                eligibility_gold: 150,
+                cost: 60,
+                unlocked: false,
+            },
+        ],
+        unlock_proposals: [],
+        money_requests: [],
+        transfers: [],
     },
     events: [
         {

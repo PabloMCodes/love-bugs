@@ -150,6 +150,23 @@ class DecisionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Insufficient inventory'):
             validate_decision(world, 'robot-a', decision)
 
+    def test_economy_decisions_require_their_own_parameters(self):
+        for values in (
+            {'action': 'PROPOSE_UNLOCK', 'stage': 2},
+            {'action': 'RESPOND_UNLOCK', 'proposal_id': 'proposal-1'},
+            {'action': 'TRANSFER_MONEY', 'recipient_id': 'robot-b'},
+            {'action': 'REQUEST_MONEY', 'amount': 5},
+            {'action': 'RESPOND_MONEY', 'money_request_id': 'request-1'},
+            {
+                'action': 'TRANSFER_MONEY',
+                'recipient_id': 'robot-b',
+                'amount': 5,
+                'location': 'market',
+            },
+        ):
+            with self.subTest(values=values), self.assertRaises(ValidationError):
+                Decision(reason='Coordinate the economy', **values)
+
 
 class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -259,6 +276,35 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(decision.action, 'BUY')
                 self.assertEqual(decision.item, expected_seed)
                 self.assertEqual(decision.quantity, 1)
+
+    async def test_mock_planner_proposes_and_accepts_stage_unlock(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+        self.world['robots'][0]['game']['money'] = 60
+        self.world['robots'][1]['game']['money'] = 50
+        self.world['game']['goal']['current'] = 110
+
+        proposed = await MockPlanner().decide(self.world, 'robot-a')
+
+        self.assertEqual(proposed.action, 'PROPOSE_UNLOCK')
+        self.assertEqual(proposed.stage, 2)
+        self.assertEqual(sum(proposed.contributions.values()), 30)
+        self.world['economy']['unlock_proposals'].append({
+            'id': 'proposal-1',
+            'stage': 2,
+            'proposer_id': 'robot-a',
+            'contributions': proposed.contributions,
+            'accepted_by': ['robot-a'],
+            'status': 'PENDING',
+            'created_at': '2026-09-27T12:00:00Z',
+            'resolved_at': None,
+        })
+
+        response = await MockPlanner().decide(self.world, 'robot-b')
+
+        self.assertEqual(response.action, 'RESPOND_UNLOCK')
+        self.assertEqual(response.proposal_id, 'proposal-1')
+        self.assertTrue(response.accepted)
 
     async def test_mock_planner_claims_distinct_empty_plots(self):
         self.world = default_world()

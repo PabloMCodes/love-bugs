@@ -125,6 +125,26 @@ class AgentOrchestrator:
                         'item': decision.item,
                         'plot_id': decision.plot_id,
                     }
+                elif decision.action == 'PROPOSE_UNLOCK':
+                    parameters = {
+                        'stage': decision.stage,
+                        'contributions': decision.contributions,
+                    }
+                elif decision.action == 'RESPOND_UNLOCK':
+                    parameters = {
+                        'proposal_id': decision.proposal_id,
+                        'accepted': decision.accepted,
+                    }
+                elif decision.action in ('TRANSFER_MONEY', 'REQUEST_MONEY'):
+                    parameters = {
+                        'recipient_id': decision.recipient_id,
+                        'amount': decision.amount,
+                    }
+                elif decision.action == 'RESPOND_MONEY':
+                    parameters = {
+                        'money_request_id': decision.money_request_id,
+                        'accepted': decision.accepted,
+                    }
                 else:
                     parameters = {}
                 request = {'request_id': uuid4().hex, 'robot_id': robot_id,

@@ -14,11 +14,11 @@ not consume backend tasks or publish poses yet. Do not run it alongside another
 motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
 
 The autonomous simulation baseline is implemented and tested: Wall-y and Eeva can
-start at home, collect different resources, sell their own inventory, advance
-permanent farming stages, and complete the shared gold goal without a browser.
+start at home, collect different resources, sell their own inventory, agree on
+paid permanent farming stages, and complete the shared gold goal without a browser.
 
 Phase 3's seed → plant → grow → harvest → sell slice is complete for Wheat,
-Carrots, and Pumpkins against the schema-version-2 shared farm plots. Mock autonomy
+Carrots, and Pumpkins against the schema-version-3 shared farm and economy state. Mock autonomy
 compares unlocked crop returns and avoids duplicate plot claims or excess seed
 purchases. The Crop Queue derives its display and live countdown from `world.farm`
 and is never authoritative itself. Hardware
@@ -89,7 +89,7 @@ credential-dependent TimescaleDB test is expected to skip when
 | Localization | `POST /robots/{id}/pose` |
 | Navigation | World snapshots containing active tasks, `POST /robots/{id}/arrived`, and `POST /robots/{id}/blocked` |
 | Robot adapter | World snapshots containing stop state and `POST /robots/{id}/health` |
-| Agents | `POST /tasks` using the same validation as manual actions; agent-chat routes are a spectator preview |
+| Agents | `POST /tasks` for physical work plus the `/economy` transaction routes; agent-chat routes are a spectator preview |
 | Database/history | Backend-owned persistence plus `GET /events` and `GET /robots/{id}/history` |
 
 FastAPI's interactive route documentation is available at `/docs` while the
@@ -149,8 +149,9 @@ team's chosen private transport to reach the ESP32.
 
 ## Agent checklist
 
-- Submit only `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, or `PLANT`
-  through `POST /tasks`. `WAIT` means do not submit a task.
+- Submit `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, or `PLANT`
+  through `POST /tasks`. Economy decisions use the dedicated proposal, response,
+  request, and transfer routes. `WAIT` means do not submit a command.
 - Submit `PLANT` at `farm` with exactly `item` and `plot_id`. It completes on
   confirmed arrival and may still fail if the seed or empty plot is no longer
   available.
@@ -158,7 +159,8 @@ team's chosen private transport to reach the ESP32.
   assignment and completion; a competing winner causes `PLOT_NOT_READY` without a
   duplicate reward.
 - Generate one stable `request_id` per intended task and reuse it only when retrying
-  that identical request. A retry returns the same task in its latest state.
+  that identical request. Apply the same rule to economy commands. A retry returns
+  the same canonical result without charging or transferring twice.
 - Respect the required locations and trade parameters documented in `api.md`.
 - Treat an accepted task as assigned, not completed. Observe the task or world
   feed until it becomes `COMPLETED`, `FAILED`, or `CANCELLED`.

@@ -45,7 +45,35 @@ class AgentChat:
                     else (
                         {'item': decision.item, 'plot_id': decision.plot_id}
                         if decision.action == 'PLANT'
-                        else {}
+                        else (
+                            {
+                                'stage': decision.stage,
+                                'contributions': decision.contributions,
+                            }
+                            if decision.action == 'PROPOSE_UNLOCK'
+                            else (
+                                {
+                                    'proposal_id': decision.proposal_id,
+                                    'accepted': decision.accepted,
+                                }
+                                if decision.action == 'RESPOND_UNLOCK'
+                                else (
+                                    {
+                                        'recipient_id': decision.recipient_id,
+                                        'amount': decision.amount,
+                                    }
+                                    if decision.action in ('TRANSFER_MONEY', 'REQUEST_MONEY')
+                                    else (
+                                        {
+                                            'money_request_id': decision.money_request_id,
+                                            'accepted': decision.accepted,
+                                        }
+                                        if decision.action == 'RESPOND_MONEY'
+                                        else {}
+                                    )
+                                )
+                            )
+                        )
                     )
                 )
             ),

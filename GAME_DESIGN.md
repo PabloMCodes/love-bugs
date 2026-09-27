@@ -162,10 +162,9 @@ and data-driven Carrot/Pumpkin lifecycle tests.
 Each crop stage has a money threshold. Reaching a threshold makes the next seed
 eligible to unlock; it does not silently purchase it.
 
-The current Repair Fund implementation uses automatic milestone unlocks as an
-intermediate step: 100 combined gold permanently unlocks carrot seeds and 150
-permanently unlocks pumpkin seeds. The cooperative proposal and contribution flow
-below remains the intended replacement once agent transaction actions are added.
+The backend now uses explicit cooperative unlocks. At 100 combined gold Stage 2
+becomes eligible and costs 30 gold; at 150 combined gold Stage 3 becomes eligible
+and costs 60 gold. These are current demo tuning values, not final balance.
 
 The cooperative unlock flow is:
 
@@ -192,8 +191,9 @@ balances. A cooperative purchase therefore needs:
 - One atomic deduction and one unlock event.
 - Cancellation or timeout behavior if agreement is not completed.
 
-Whether both robots must contribute a positive amount, or whether one may fund
-the entire unlock after both consent, remains an open balancing decision.
+Both robots currently must contribute a positive whole amount. Unequal splits are
+valid, but the proposed contributions must total the configured cost and remain
+affordable when the final acceptance executes.
 
 ## Individual economy
 
@@ -218,10 +218,10 @@ robot currently at the market cannot afford its intended purchase.
 A robot that cannot afford a seed or proposed stage contribution may ask its
 teammate for money.
 
-The intended transfer flow is:
+The implemented transfer flow is:
 
 1. Requesting robot states the amount and purpose.
-2. Teammate accepts, rejects, or proposes a different amount.
+2. Teammate accepts or rejects the exact request.
 3. An accepted transfer is revalidated against the sender's current wallet.
 4. The backend moves the money atomically between wallets.
 5. Both the dialogue feed and semantic event feed show the result.
@@ -350,7 +350,8 @@ strategies rather than one scripted sequence.
 
 ## Authoritative state the design will need
 
-This is a conceptual checklist, not a committed schema:
+These fields now live in the canonical version-3 world schema, except for the
+planned fishing-tier state:
 
 - Current stage and unlocked seed IDs.
 - Stage thresholds, costs, and final target.
@@ -424,12 +425,10 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 - Final tuning of seed costs, grow times, and crop sale values.
 - Stage eligibility thresholds, cooperative unlock costs, and final target.
 - Final farm plot count and whether playtesting justifies planter-only harvesting.
-- Whether both robots must contribute a positive amount to an unlock.
 - Proposal timeout and cancellation behavior.
 - Whether earlier seeds remain available after later stages unlock.
 - Fish-tier probabilities.
-- Whether one robot can have multiple pending money requests.
-- Which cooperation actions are tasks versus separate transaction endpoints.
+- Proposal and money-request history retention beyond the current game session.
 - Whether harvested crops need a short completed-history section in the queue.
 
 ## Suggested implementation order
@@ -438,7 +437,6 @@ No implementation begins merely because it appears in this document. When the
 team is ready, the safest order is:
 
 1. Add map stage rendering and crop-specific farm presentation.
-2. Implement seeded fishing duration and reward tiers.
-3. Add money request/transfer transactions.
-4. Add cooperative unlock proposal, agreement, contributions, and stage changes.
-5. Tune the complete autonomous loop in simulation before connecting physical motion.
+2. Render cooperative proposals, requests, and transfers in the dashboard.
+3. Implement seeded fishing duration and reward tiers.
+4. Tune the complete autonomous loop in simulation before connecting physical motion.

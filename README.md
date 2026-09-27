@@ -24,8 +24,8 @@ The project is designed so the same game rules run in two modes:
 - [frontend/README.md](frontend/README.md): dashboard setup and frontend structure.
 
 The current baseline already completes a backend-owned autonomous simulation round:
-robots collect, travel, sell their own inventory, advance permanent farming stages,
-and complete the shared gold goal. The dashboard now includes a purchase-only seed
+robots collect, travel, sell their own inventory, jointly fund permanent farming stages,
+transfer gold when needed, and complete the shared gold goal. The dashboard now includes a purchase-only seed
 market, an authoritative Crop Queue backed by three shared farm plots, transaction
 notifications, live robot conversation, and session controls.
 
@@ -33,5 +33,5 @@ The authoritative three-crop lifecycle now runs end to end without browser input
 planners compare unlocked Wheat, Carrot, and Pumpkin returns, buy only enough seed
 for open capacity, claim distinct plots, plant, wait or fish during growth, harvest
 the selected plot once, and sell the crop. The Crop Queue displays every crop with
-live progress from backend timestamps. See `GAME_PLAN.md` for the remaining stage,
-fishing, hardware, and presentation work.
+live progress from backend timestamps. See `GAME_PLAN.md` for the remaining
+fishing, hardware, economy UI, and presentation work.

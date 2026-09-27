@@ -1,7 +1,13 @@
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from app.schemas import Point, Pose, TaskRequest
+from app.schemas import (
+    EconomyResponseRequest,
+    Point,
+    Pose,
+    StageUnlockProposalRequest,
+    TaskRequest,
+)
 from app.simulation.simulator import SimulationRunner, move_pose_toward
 from app.state import WorldStateError, WorldStore, default_world
 
@@ -485,16 +491,15 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(milo.game.inventory['crop'].quantity, 1)
         self.assertEqual(milo.game.money, 64)
         self.assertEqual(completed.game.goal.current, 104)
-        self.assertEqual(completed.game.stage, 2)
-        self.assertEqual(completed.events[-1].type, 'stage_unlocked')
-        self.assertEqual(completed.events[-1].data['item'], 'carrot_seeds')
+        self.assertEqual(completed.game.stage, 1)
+        self.assertEqual(completed.events[-1].type, 'task_completed')
 
         revision = completed.revision
         simulator.tick()
         self.assertEqual(store.snapshot().revision, revision)
         self.assertEqual(store.snapshot().robots[1].game.money, 64)
 
-    def test_sale_completes_goal_and_cancels_other_work(self):
+    def test_sale_cannot_complete_goal_before_final_stage(self):
         world = default_world()
         world['game']['goal']['target'] = 100
         world['robots'][1]['physical']['pose'] = {'x': 80, 'y': 25, 'heading': 180}
@@ -523,15 +528,16 @@ class SimulationRunnerTests(unittest.TestCase):
         SimulationRunner(store, step_distance=1).tick()
 
         completed = store.snapshot()
-        self.assertEqual(completed.game.status, 'COMPLETED')
+        self.assertEqual(completed.game.status, 'RUNNING')
         self.assertEqual(completed.game.goal.current, 104)
-        self.assertIsNone(completed.robots[0].task)
+        self.assertIsNotNone(completed.robots[0].task)
         self.assertIsNone(completed.robots[1].task)
-        self.assertIn('task_cancelled', [event.type for event in completed.events])
-        self.assertEqual(completed.events[-1].type, 'game_completed')
+        self.assertNotIn('task_cancelled', [event.type for event in completed.events])
+        self.assertEqual(completed.events[-1].type, 'task_completed')
 
     def test_clean_round_collects_sells_and_completes_shared_goal_once(self):
         world = default_world()
+        world['game']['goal']['target'] = 115
         ready_plot_ids = [
             ready_wheat_plot(world, plot_index)
             for plot_index in range(2)
@@ -541,7 +547,7 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(initial.game.status, 'READY')
         self.assertEqual(initial.game.stage, 1)
         self.assertEqual(initial.game.goal.current, 80)
-        self.assertEqual(initial.game.goal.target, 200)
+        self.assertEqual(initial.game.goal.target, 115)
         self.assertTrue(all(robot.game.location == 'homebase' for robot in initial.robots))
         self.assertTrue(all(robot.game.inventory == {} for robot in initial.robots))
 
@@ -588,22 +594,59 @@ class SimulationRunnerTests(unittest.TestCase):
         after_wheat = store.snapshot()
         self.assertEqual(after_wheat.game.status, 'RUNNING')
         self.assertEqual(after_wheat.game.goal.current, 152)
-        self.assertEqual(after_wheat.game.stage, 3)
+        self.assertEqual(after_wheat.game.stage, 1)
         self.assertNotIn('wheat', after_wheat.robots[0].game.inventory)
+
+        stage_two = store.propose_stage_unlock(StageUnlockProposalRequest(
+            request_id='clean-round-propose-stage-two',
+            proposer_id='robot-a',
+            stage=2,
+            contributions={'robot-a': 15, 'robot-b': 15},
+        ))
+        store.respond_stage_unlock(stage_two.id, EconomyResponseRequest(
+            request_id='clean-round-accept-stage-two',
+            robot_id='robot-b',
+            accepted=True,
+        ))
 
         store.assign_task(TaskRequest(
             request_id='clean-round-sell-fish',
             robot_id='robot-b',
             action='SELL',
             location='market',
-            parameters={'item': 'fish', 'quantity': 3},
+            parameters={'item': 'fish', 'quantity': 2},
+        ))
+        simulator.tick()
+        after_fish = store.snapshot()
+        self.assertEqual(after_fish.game.status, 'RUNNING')
+        self.assertEqual(after_fish.game.goal.current, 158)
+        self.assertEqual(after_fish.game.stage, 2)
+
+        stage_three = store.propose_stage_unlock(StageUnlockProposalRequest(
+            request_id='clean-round-propose-stage-three',
+            proposer_id='robot-b',
+            stage=3,
+            contributions={'robot-a': 30, 'robot-b': 30},
+        ))
+        store.respond_stage_unlock(stage_three.id, EconomyResponseRequest(
+            request_id='clean-round-accept-stage-three',
+            robot_id='robot-a',
+            accepted=True,
+        ))
+
+        store.assign_task(TaskRequest(
+            request_id='clean-round-sell-final-fish',
+            robot_id='robot-b',
+            action='SELL',
+            location='market',
+            parameters={'item': 'fish', 'quantity': 1},
         ))
         simulator.tick()
         completed = store.snapshot()
         self.assertEqual(completed.game.status, 'COMPLETED')
-        self.assertEqual(completed.game.goal.current, 206)
-        self.assertEqual(completed.robots[0].game.money, 112)
-        self.assertEqual(completed.robots[1].game.money, 94)
+        self.assertEqual(completed.game.goal.current, 116)
+        self.assertEqual(completed.robots[0].game.money, 67)
+        self.assertEqual(completed.robots[1].game.money, 49)
         self.assertNotIn('fish', completed.robots[1].game.inventory)
         self.assertEqual(
             sum(event.type == 'game_completed' for event in completed.events),

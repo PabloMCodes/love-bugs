@@ -45,11 +45,17 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         world = store.snapshot()
         actions = [task.action for task in store.tasks()]
         self.assertEqual(world.game.status, 'COMPLETED')
+        self.assertEqual(world.game.stage, 3)
         self.assertGreaterEqual(world.game.goal.current, world.game.goal.target)
         self.assertIn('BUY', actions)
         self.assertIn('PLANT', actions)
         self.assertIn('HARVEST', actions)
         self.assertIn('SELL', actions)
+        self.assertTrue(all(rule.unlocked for rule in world.economy.unlocks))
+        self.assertIn(
+            'pumpkin_seeds',
+            [event.data['item'] for event in world.events if event.type == 'stage_unlocked'],
+        )
         self.assertTrue(all(robot.task is None for robot in world.robots))
         self.assertIn('agent_decision', [event.type for event in world.events])
         self.assertTrue(
@@ -78,6 +84,24 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(accepted)
         self.assertEqual(store.tasks(), [])
         self.assertTrue(all(robot.task is None for robot in store.snapshot().robots))
+
+    async def test_runner_rejects_old_session_without_transferring_money(self):
+        store = WorldStore()
+        store.start_game()
+        runner = AutonomyRunner(store, AgentOrchestrator(MockPlanner()))
+
+        accepted = await runner.submit_task('old-session', {
+            'request_id': 'stale-autonomous-transfer',
+            'robot_id': 'robot-a',
+            'action': 'TRANSFER_MONEY',
+            'location': None,
+            'parameters': {'recipient_id': 'robot-b', 'amount': 5},
+            'reason': 'Help with seeds',
+        })
+
+        self.assertFalse(accepted)
+        self.assertEqual([robot.game.money for robot in store.snapshot().robots], [40, 40])
+        self.assertEqual(store.snapshot().economy.transfers, [])
 
     def test_store_session_check_is_atomic_with_task_assignment(self):
         store = WorldStore()

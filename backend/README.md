@@ -4,7 +4,8 @@ The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and AP
 `GET /world`, live `/events` snapshots, goal configuration, game lifecycle
 controls, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, `SELL`, and
 `PLANT` tasks, robot stop/resume, pose, arrival, health, and blocked-state ingestion,
-spectator agent chat, and standalone overhead vision are implemented.
+cooperative stage unlocks, money requests/transfers, spectator agent chat, and
+standalone overhead vision are implemented.
 [Standalone WALL-Y click-to-drive](app/navigation/README.md) provides phased
 camera/BLE bring-up. Connecting this local controller to backend tasks, pose
 ingestion and lifecycle controls remains integration work.
@@ -89,6 +90,7 @@ entire world snapshot:
 curl http://localhost:8000/robots
 curl http://localhost:8000/robots/robot-a
 curl http://localhost:8000/market
+curl http://localhost:8000/economy
 curl http://localhost:8000/tasks
 curl http://localhost:8000/tasks/task-3
 ```
@@ -300,8 +302,9 @@ python -m unittest discover -s tests -v
 
 Each robot gets an independent Google ADK `LlmAgent` and runner using Gemini.
 The default model is `gemini-3.5-flash-lite`; set `AGENT_MODEL` to change it.
-Agents choose one high-level task and a short public reason. They never control
-motors, assign rewards, or change game state themselves.
+Agents choose one high-level task or economy command and a short public reason.
+They never control motors, assign rewards, or mutate game state without backend
+validation.
 
 Install the updated `requirements.txt`, then run one offline planning round:
 
@@ -323,7 +326,7 @@ python -m app.agents --provider gemini
 
 That makes real model calls but still uses the demo task sink, with no hardware
 or backend calls. `--world /path/to/world.json` accepts a world snapshot instead;
-the file is never modified. The game must be `RUNNING`, below its gold goal, with
+the file is never modified. The game must be `RUNNING`, below its completed Stage-3 goal, with
 idle, online, unblocked, unstopped robots whose tracking is `TRACKED` and pose is
 known. Otherwise planning is skipped. Missing credentials, invalid decisions,
 and model failures do not silently switch to the mock policy.
@@ -344,9 +347,10 @@ Responsibilities:
 For backend integration, keep one `AgentOrchestrator` for the game process and call
 `await orchestrator.tick(read_world, submit_task)` from the backend lifecycle.
 `read_world()` returns the current authoritative snapshot. Async
-`submit_task(session_id, request)` must atomically revalidate through the same
-service used by manual tasks, handle request-ID idempotency, reject old sessions,
-and return `True` only after the accepted task is visible in the snapshot.
+`submit_task(session_id, request)` dispatches either a task or economy command and
+must atomically revalidate through the same services used by HTTP, handle
+request-ID idempotency, reject old sessions, and return `True` only after the
+accepted change is visible in the snapshot.
 The request follows `api.md`; the host should publish an `agent_decision` event
 from accepted outcomes. WAIT is internal and never submitted as an API task.
 
@@ -367,8 +371,9 @@ shared task service. The frontend conversation panel is a read-only spectator fe
 Authoritative buy prices come from `world.market.items`; authoritative sell prices
 come from the selected robot's inventory entry.
 
-Canonical schema version 2 exposes Wheat, Carrot, and Pumpkin definitions in
-`farm.crops` and three shared `farm.plots`. `PLANT` atomically consumes one owned
+Canonical schema version 3 exposes Wheat, Carrot, and Pumpkin definitions in
+`farm.crops`, three shared `farm.plots`, and cooperative transaction history in
+`economy`. `PLANT` atomically consumes one owned
 seed on arrival and creates a
 timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
 duplicate the crop or consume the losing seed. The backend game loop transitions
@@ -377,7 +382,10 @@ browser. `HARVEST` requires a `READY` plot ID, rechecks it at completion, grants
 defined crop exactly once, and returns the plot to `EMPTY`. Mock autonomy compares
 net return per growth second, buys only for unreserved empty capacity, assigns
 distinct plots, and runs the complete loop without a browser. Gemini decisions
-support the same `PLANT` and `HARVEST` contract. Final crop values remain tunable.
+support the same crop contract. Mock and Gemini planners can propose and answer
+stage unlocks, transfer or request money, and answer pending money requests. A
+stage advances only after every robot accepts affordable positive contributions;
+the final gold goal completes only after Stage 3. Final values remain tunable.
 
 Enable deterministic backend-owned play with:
 

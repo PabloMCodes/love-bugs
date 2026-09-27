@@ -33,8 +33,10 @@ The first cohesive scenario is **The Repair Fund**:
 4. Each robot owns its inventory and wallet. Items never teleport between robots.
 5. A robot carrying sellable resources travels to the `market` and sells them.
 6. The sum of both wallets advances the shared repair-fund goal.
-7. Reaching the configured gold target changes the game to `COMPLETED`, stops new
-   work, and gives the frontend a clear victory moment.
+7. At 100 and 150 combined gold, the robots cooperatively propose, accept, and
+   fund the next farm stage before its seed becomes available.
+8. Reaching the configured gold target after Stage 3 changes the game to
+   `COMPLETED`, stops new work, and gives the frontend a clear victory moment.
 
 This goal deliberately uses the systems already built: navigation, collection,
 individual inventory, trading, agent decisions, simulation, hardware telemetry,
@@ -103,10 +105,11 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Task lifecycle | Implemented | Move, return home, harvest, fish, buy, sell, and plant are validated and tracked. |
 | Simulation | Implemented | Movement, arrival, activity timing, inventory rewards, and trading run without hardware. |
 | Individual inventory and wallets | Implemented | The robot tracker exposes each robot's separate wallet and inventory. |
-| Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
-| Market purchases | Implemented | The purchase-only market sells all three seeds; later seeds unlock permanently at 100 and 150 combined gold. Purchases and sales create transient parchment notifications. |
+| Shared gold goal | Implemented | Combined wallet balance completes the `earn_gold` goal only after Stage 3 is active. |
+| Market purchases | Implemented | The purchase-only market sells all three seeds; later seeds become eligible at 100 and 150 combined gold, then require a paid cooperative unlock. Purchases and sales create transient parchment notifications. |
 | Crop lifecycle | Implemented | Wheat, Carrots, and Pumpkins share authoritative buy, plant, growth, plot-aware harvest, and sale rules. |
-| Autonomous decisions | Implemented | Mock autonomy compares unlocked crop returns and coordinates plot/seed reservations; Gemini uses the same validated action contract and crop data. |
+| Cooperative economy | Implemented | Retry-safe transfers, money requests, proposal responses, and two-robot stage contributions are backend-authoritative. |
+| Autonomous decisions | Implemented | Mock and Gemini autonomy can coordinate tasks, money, and stage proposals through one validated command contract. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
@@ -116,10 +119,11 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **Stage progression is still transitional.** Carrot and Pumpkin unlock
-   automatically at gold thresholds instead of through cooperative agreement and payment.
-2. **Victory presentation is still incomplete.** Completion is enforced by the
+1. **Victory presentation is still incomplete.** Completion is enforced by the
    backend, but the frontend still needs a clear celebration.
+2. **Economy presentation is still incomplete.** The world/event stream contains
+   proposals, responses, requests, transfers, and contributions, but the dashboard
+   does not yet have a dedicated cooperative-economy panel.
 3. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
@@ -147,8 +151,8 @@ These are the highest-value gaps to close before adding more content:
 - Camera video inside the dashboard.
 - Multiplayer or remote public deployment.
 
-The crop lifecycle is reliable in simulation. Cooperative stage unlocks, richer
-fishing, victory presentation, and hardware rehearsal are the active remaining
+The crop lifecycle and cooperative economy are reliable in simulation. Richer
+fishing, economy/victory presentation, and hardware rehearsal are the active remaining
 milestones; the broader expansion stays deferred.
 
 ## Roadmap
@@ -210,7 +214,17 @@ Goal: purchases create a visible decision instead of dead inventory.
 Exit criterion: spectators can understand why a robot chose a seed, and every
 purchase contributes to a complete farming loop instead of dead inventory.
 
-### Phase 4 — Hardware rehearsal
+### Phase 4 — Cooperative progression
+
+- [x] Make threshold gold an eligibility check rather than an automatic unlock.
+- [x] Require both robots to accept explicit positive contributions.
+- [x] Deduct contributions and advance the stage atomically and exactly once.
+- [x] Add direct transfers and accept/reject money requests without changing total gold.
+- [x] Teach mock and Gemini autonomy the cooperative economy actions.
+- [x] Require Stage 3 as well as the final gold target for victory.
+- [ ] Render pending proposals, requests, and completed contributions in the dashboard.
+
+### Phase 5 — Hardware rehearsal
 
 Goal: replace simulated motion without changing gameplay behavior.
 
@@ -225,7 +239,7 @@ Goal: replace simulated motion without changing gameplay behavior.
 Exit criterion: switching `GAME_MODE` changes the movement source but not the UI,
 task rules, inventory, market, goal, or victory behavior.
 
-### Phase 5 — Balance and presentation
+### Phase 6 — Balance and presentation
 
 Goal: make the proven loop feel polished and demo-ready.
 
@@ -241,8 +255,8 @@ Goal: make the proven loop feel polished and demo-ready.
 
 | Workstream | Owns | Builds against | Immediate handoff |
 | --- | --- | --- | --- |
-| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Replace automatic thresholds with cooperative unlock transactions |
-| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Tune crop selection through measured demo runs |
+| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state, task, and economy services | Tune cooperative costs and final goal through measured runs |
+| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots plus task/economy command semantics | Tune crop selection through measured demo runs |
 | Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add later crop art and a clearer victory presentation |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |
 | Navigation/control | Destination following, arrival, cancellation, blocked handling | Active task plus map locations | Safe adapter from tasks to robot commands |
@@ -265,10 +279,11 @@ The first complete milestone must pass this script:
 6. Observe at least one robot travel to the market and sell its own inventory.
 7. Confirm inventory decreases, that robot's wallet increases, and shared goal
    progress equals the sum of both wallets.
-8. Reach the target, transition exactly once to `COMPLETED`, stop new dispatch,
+8. Watch both robots approve and fund Stage 2 and Stage 3 without duplicate deductions.
+9. Reach the target after Stage 3, transition exactly once to `COMPLETED`, stop new dispatch,
    and show victory in the frontend.
-9. Refresh the browser and confirm the completed state is reconstructed.
-10. Repeat with a mid-route stop/reset and confirm no cancelled task grants a reward.
+10. Refresh the browser and confirm the completed state is reconstructed.
+11. Repeat with a mid-route stop/reset and confirm no cancelled task grants a reward.
 
 The same scenario is the hardware acceptance test, except pose and arrival updates
 come from the real adapters instead of `SimulationRunner`.

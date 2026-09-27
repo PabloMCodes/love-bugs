@@ -32,7 +32,12 @@ function isWorldSnapshot(value) {
         && value.market
         && value.farm
         && Array.isArray(value.farm.crops)
-        && Array.isArray(value.farm.plots),
+        && Array.isArray(value.farm.plots)
+        && value.economy
+        && Array.isArray(value.economy.unlocks)
+        && Array.isArray(value.economy.unlock_proposals)
+        && Array.isArray(value.economy.money_requests)
+        && Array.isArray(value.economy.transfers),
     );
 }
 
@@ -732,20 +737,11 @@ export function useWorld() {
                 (total, robot) => total + robot.game.money,
                 0,
             );
-            const goalCompleted = currentGold >= currentWorld.game.goal.target;
-            const saleId = `sale-${currentWorld.revision + 1}`;
-            const currentStage = currentWorld.game.stage ?? 1;
-            const unlockedItems = currentWorld.market.items
-                .filter((item) => (
-                    (item.required_stage ?? 1) > currentStage
-                    && Number.isFinite(item.unlock_at)
-                    && currentGold >= item.unlock_at
-                ))
-                .sort((left, right) => left.required_stage - right.required_stage);
-            const nextStage = unlockedItems.reduce(
-                (stage, item) => Math.max(stage, item.required_stage),
-                currentStage,
+            const goalCompleted = (
+                currentGold >= currentWorld.game.goal.target
+                && currentWorld.game.stage >= 3
             );
+            const saleId = `sale-${currentWorld.revision + 1}`;
             const saleEvents = [
                 {
                     id: `event-${saleId}-inventory`,
@@ -774,22 +770,6 @@ export function useWorld() {
                 },
             ];
 
-            unlockedItems.forEach((item) => {
-                saleEvents.push({
-                    id: `event-${saleId}-stage-${item.required_stage}`,
-                    timestamp: updatedAt,
-                    type: 'stage_unlocked',
-                    robot_id: robotId,
-                    task_id: null,
-                    message: `The team unlocked Stage ${item.required_stage}: ${item.name}.`,
-                    data: {
-                        stage: item.required_stage,
-                        item: item.id,
-                        threshold: item.unlock_at,
-                    },
-                });
-            });
-
             if (goalCompleted && currentWorld.game.status !== 'COMPLETED') {
                 saleEvents.push({
                     id: `event-${saleId}-goal`,
@@ -809,7 +789,6 @@ export function useWorld() {
                 game: {
                     ...currentWorld.game,
                     status: goalCompleted ? 'COMPLETED' : currentWorld.game.status,
-                    stage: nextStage,
                     goal: {
                         ...currentWorld.game.goal,
                         current: currentGold,

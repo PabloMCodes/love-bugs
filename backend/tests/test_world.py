@@ -15,7 +15,7 @@ class WorldRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         world = response.json()
-        self.assertEqual(world['schema_version'], 2)
+        self.assertEqual(world['schema_version'], 3)
         self.assertEqual([robot['id'] for robot in world['robots']], ['robot-a', 'robot-b'])
         self.assertTrue(all(robot['game']['location'] == 'homebase' for robot in world['robots']))
         self.assertTrue(all(robot['game']['inventory'] == {} for robot in world['robots']))
@@ -95,6 +95,29 @@ class WorldRouteTests(unittest.TestCase):
             }
             for plot_number in range(1, 4)
         ])
+        self.assertEqual(world['economy'], {
+            'unlocks': [
+                {
+                    'stage': 2,
+                    'item_id': 'carrot_seeds',
+                    'item_name': 'Carrot Seeds',
+                    'eligibility_gold': 100,
+                    'cost': 30,
+                    'unlocked': False,
+                },
+                {
+                    'stage': 3,
+                    'item_id': 'pumpkin_seeds',
+                    'item_name': 'Pumpkin Seeds',
+                    'eligibility_gold': 150,
+                    'cost': 60,
+                    'unlocked': False,
+                },
+            ],
+            'unlock_proposals': [],
+            'money_requests': [],
+            'transfers': [],
+        })
 
     def test_snapshots_cannot_mutate_store(self):
         store = WorldStore(default_world())

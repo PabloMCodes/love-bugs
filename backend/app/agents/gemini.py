@@ -42,7 +42,9 @@ class GeminiPlanner:
                     'Work with the other robots to reach the shared gold goal. '
                     'Consider their active tasks and avoid unnecessary duplicate work. '
                     'Choose one action: PLANT or HARVEST at farm, FISH at lake, BUY or SELL '
-                    'at market, RETURN_HOME at homebase, MOVE_TO a named location, or WAIT. '
+                    'at market, RETURN_HOME at homebase, MOVE_TO a named location, '
+                    'PROPOSE_UNLOCK, RESPOND_UNLOCK, TRANSFER_MONEY, REQUEST_MONEY, '
+                    'RESPOND_MONEY, or WAIT. '
                     'Tasks handle travel automatically. Do not issue motor commands. '
                     'FISH collects fish without another item. HARVEST requires the '
                     'plot_id of a READY plot from farm.plots; never harvest an EMPTY '
@@ -57,6 +59,13 @@ class GeminiPlanner:
                     'SELL uses sellable item IDs from '
                     'your own inventory. Use only configured locations from the snapshot. '
                     'Sell useful inventory to earn gold; avoid purchases without a clear benefit. '
+                    'Use economy.unlocks and economy.unlock_proposals to cooperatively unlock '
+                    'the next stage. PROPOSE_UNLOCK requires stage and a contributions object '
+                    'that includes every robot, totals the rule cost, and each robot can afford. '
+                    'The proposer accepts automatically. RESPOND_UNLOCK requires proposal_id '
+                    'and accepted. Use economy.money_requests for REQUEST_MONEY and '
+                    'RESPOND_MONEY; direct TRANSFER_MONEY and REQUEST_MONEY require recipient_id '
+                    'and amount. Only the named recipient may respond to a money request. '
                     'Inventory entries may be counts or objects with quantity. '
                     'WAIT means defer, with null location/item/quantity/plot_id. '
                     'Trades require item and positive integer quantity. HARVEST requires '
@@ -91,7 +100,7 @@ class GeminiPlanner:
             # Full camera frames and unbounded event histories are never sent to Gemini.
             snapshot = {
                 key: world[key]
-                for key in ('session_id', 'game', 'map', 'robots', 'market', 'farm')
+                for key in ('session_id', 'game', 'map', 'robots', 'market', 'farm', 'economy')
             }
             snapshot['agent_messages'] = world.get('agent_messages', [])[-20:]
             message = types.Content(role='user', parts=[types.Part(text=json.dumps(snapshot))])

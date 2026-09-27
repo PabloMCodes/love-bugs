@@ -70,7 +70,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "session_id": "session-001",
   "revision": 12,
   "updated_at": "2026-09-25T14:00:00.000Z",
@@ -162,6 +162,15 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       { "id": "plot-3", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null }
     ]
   },
+  "economy": {
+    "unlocks": [
+      { "stage": 2, "item_id": "carrot_seeds", "item_name": "Carrot Seeds", "eligibility_gold": 100, "cost": 30, "unlocked": false },
+      { "stage": 3, "item_id": "pumpkin_seeds", "item_name": "Pumpkin Seeds", "eligibility_gold": 150, "cost": 60, "unlocked": false }
+    ],
+    "unlock_proposals": [],
+    "money_requests": [],
+    "transfers": []
+  },
   "events": [
     {
       "id": "event-001",
@@ -184,8 +193,11 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
 - Every endpoint returning a robot uses the canonical robot shape above. `task` is the current nonterminal task or `null`; terminal tasks remain available in task history.
 - `physical.online` describes robot communication; `tracking` independently describes localization: `TRACKED`, `STALE`, or `UNKNOWN`. Initially pose and pose timestamp are `null`, and tracking is `UNKNOWN`. A stale pose may remain for display but must not be treated as fresh control input. The hardware adapter defines and documents its freshness threshold before live driving.
 - `battery` is a fraction from 0 to 1 or `null`. `stopped` is a latched control stop, not an indication that the wheels happen to be stationary.
-- The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` is the combined-gold threshold that permanently advances to that stage, or `null` for initially unlocked items. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
+- The market list contains items visible in the shop. `game.stage` is permanent within a session and begins at 1. An item is purchasable only when `game.stage >= required_stage`; `unlock_at` mirrors the eligibility threshold for display and does not advance the stage by itself. Inventory entries contain their execution-time `sell_price`; `null` means that item cannot be sold. `stock: null` means unlimited shop stock; zero means sold out. MVP inventory has no capacity limit.
 - `farm.crops` is the authoritative crop catalog. `farm.plots` contains three shared plots; nonempty plots reference a crop and planter by stable ID and carry backend-owned timestamps.
+- `economy.unlocks` defines the eligibility and paid cost for each later stage.
+  Proposal, money-request, and transfer arrays retain the current session's
+  canonical transaction history. Clients must not infer an unlock from gold alone.
 - `events` contains the latest 100 semantic events, oldest first. Pose samples are not feed events. Event `robot_id` and `task_id` may be `null`. `data` contains optional details; the UI can always display `message`.
 
 ## Frontend-facing HTTP API
@@ -198,6 +210,12 @@ Routes below are the proposed MVP surface. Empty request bodies are shown as “
 | `GET /robots` | none | `200`: `{ "robots": [...] }`, canonical robots |
 | `GET /robots/{id}` | none | `200`: canonical robot |
 | `GET /market` | none | `200`: canonical market object |
+| `GET /economy` | none | `200`: canonical economy object |
+| `POST /economy/transfers` | direct transfer request below | `201`: canonical transfer |
+| `POST /economy/money-requests` | money request below | `201`: canonical pending money request |
+| `POST /economy/money-requests/{id}/respond` | economy response below | `200`: accepted or rejected money request |
+| `POST /economy/unlock-proposals` | stage proposal below | `201`: canonical pending unlock proposal |
+| `POST /economy/unlock-proposals/{id}/respond` | economy response below | `200`: pending, completed, or rejected proposal |
 | `POST /goal` | `{ "type": "earn_gold", "target": 500 }` | `200`: updated goal object; allowed only in `READY`, with a target above current gold |
 | `POST /game/start` | none | `200`: world snapshot; starts from `READY`, resumes from `STOPPED` |
 | `POST /game/stop` | none | `200`: world snapshot after stop is latched |
@@ -209,6 +227,73 @@ Routes below are the proposed MVP surface. Empty request bodies are shown as “
 | `GET /tasks/{id}` | none | `200`: canonical task, including terminal results |
 
 Repeated start while running and repeated stops succeed without repeating side effects. Starting a completed game returns `409`; reset first. Reset cancels work and stops the fleet before clearing game state. In hardware mode it does not teleport robots or assert that they are at home; preserve actual telemetry and await fresh localization. In simulation, reset may place them at home.
+
+### Cooperative economy
+
+Economy commands are separate from physical tasks because they do not require a
+destination or occupy a robot. Every body carries a stable `request_id`. Retrying
+the identical command returns its existing result; reusing the ID for different
+data returns `409 REQUEST_ID_CONFLICT`.
+
+Direct transfer:
+
+```json
+{
+  "request_id": "transfer-001",
+  "sender_id": "robot-a",
+  "recipient_id": "robot-b",
+  "amount": 10,
+  "purpose": "Help buy carrot seeds"
+}
+```
+
+Money request:
+
+```json
+{
+  "request_id": "money-request-command-001",
+  "requester_id": "robot-a",
+  "recipient_id": "robot-b",
+  "amount": 10,
+  "purpose": "Fund my proposed contribution"
+}
+```
+
+Only the named recipient may answer a pending money request. The same response
+shape is used to answer a stage proposal:
+
+```json
+{
+  "request_id": "response-001",
+  "robot_id": "robot-b",
+  "accepted": true
+}
+```
+
+A robot may have only one pending outgoing money request. Acceptance rechecks the
+recipient wallet, debits and credits atomically, and records a linked transfer.
+Rejection changes no wallet. Direct and accepted-request transfers preserve the
+combined-gold total.
+
+Stage unlock proposal:
+
+```json
+{
+  "request_id": "unlock-command-001",
+  "proposer_id": "robot-a",
+  "stage": 2,
+  "contributions": { "robot-a": 20, "robot-b": 10 }
+}
+```
+
+Only the next stage can be proposed, its combined-gold eligibility must be met,
+and there may be only one pending unlock proposal. Contributions must include
+every robot exactly once, each contribution must be a positive integer, and the
+sum must equal the rule's cost. The proposer accepts automatically. No gold moves
+until every robot accepts; final acceptance rechecks each wallet, deducts every
+contribution in one state change, permanently advances `game.stage`, and publishes
+`unlock_contribution` plus `stage_unlocked` events. Any rejection closes the
+proposal without charging anyone and permits a new proposal.
 
 Game stop cancels unfinished tasks, disables autonomous dispatch, and requests a fleet-wide motor stop. Robot stop does the equivalent for one robot. Controllers must invalidate active movement commands so their next update cannot restart motion. Resume allows new tasks; cancelled tasks never automatically resume. Game start clears a game-level pause but must not clear a separately requested robot stop. A `200` stop response confirms backend acceptance, not proof of physical motor delivery; communication loss is still covered by the onboard watchdog.
 
@@ -282,10 +367,12 @@ timer. Any nonterminal task can become `FAILED` or `CANCELLED`. `progress` measu
 activity completion, not distance traveled: it stays zero during navigation,
 advances during an activity, and is one on completion. Terminal failure includes
 `error: { "code": "...", "message": "..." }`; otherwise error is `null`.
-Cancellation or failure never grants the completion reward. Goal completion sets
-the game to `COMPLETED`, cancels remaining work, and stops dispatch and movement.
+Cancellation or failure never grants the completion reward. Goal completion
+requires both the target combined gold and Stage 3, then sets the game to
+`COMPLETED`, cancels remaining work, and stops dispatch and movement.
 
-Contract version 2 adds `farm.crops` and three shared `farm.plots`. Empty plots
+Contract version 3 adds `economy` to version 2's `farm.crops` and three shared
+`farm.plots`. Empty plots
 contain null crop metadata. A nonempty plot has status `GROWING` or `READY` and
 must include `crop_id`, `planted_by`, `planted_at`, and `ready_at`. Clients derive
 the visible queue from these records: omit empty plots, show ready plots first,
@@ -332,7 +419,7 @@ For the MVP, use complete snapshots rather than requiring clients to assemble st
 {
   "type": "world_snapshot",
   "data": {
-    "schema_version": 2,
+    "schema_version": 3,
     "session_id": "session-001",
     "revision": 12
   }
@@ -343,7 +430,7 @@ The abbreviated `data` above must contain the **entire canonical world object** 
 
 The frontend replaces its state with each newer snapshot, deduplicates feed events by `(session_id, event.id)`, and discards lower/equal revisions within a session. Only the current socket connection may apply updates. A different session clears old tasks, events, and revision tracking. On reconnect, the server sends current state; replay of every missed event is not required. Display disconnection and retry with bounded backoff, for example 1, 2, 4, then 5 seconds. A REST snapshot used at startup follows the same revision checks and must not overwrite newer socket state.
 
-Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `gold_updated`, `market_updated`, `help_requested`, `help_accepted`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
+Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived`, `task_started`, `task_completed`, `task_failed`, `task_cancelled`, `inventory_updated`, `gold_updated`, `market_updated`, `money_requested`, `money_request_accepted`, `money_request_rejected`, `money_transferred`, `stage_unlock_proposed`, `stage_unlock_accepted`, `stage_unlock_rejected`, `unlock_contribution`, `stage_unlocked`, `robot_blocked`, `robot_offline`, `tracking_stale`, `game_started`, `game_stopped`, `game_completed`. These are entries inside `world.events`, not separate required socket message formats. Unknown event types can still render their `message`.
 
 ## Robotics integration boundary
 
@@ -412,7 +499,10 @@ decisions defer submission; they do not add a public task action or endpoint.
 The standalone CLI uses a temporary demo task sink, not the backend or frontend
 simulation. See `backend/README.md` for environment settings and integration.
 
-Cooperation is the next integration milestone after the individual gameplay loop. Reserve `help_requested` and `help_accepted` feed events, but do not require a speculative co-op API to unblock the frontend. Before implementing cooperation, agree on a shared objective ID, participant list, invitation/acceptance flow, waiting/active/completed/cancelled states, reward split, and timeout/cancellation behavior. Both robots must have confirmed arrival before the shared activity starts, and its reward must be applied once. The exact objective and agent communication mechanism remain open.
+Cooperative stage and money actions use the dedicated economy routes above and do
+not create movement tasks. Mock and Gemini planners submit those commands through
+the same session-checked host boundary used for task assignment. Additional
+physical co-op activities that require both robots at one location remain future work.
 
 ## Working without hardware
 
