@@ -19,12 +19,12 @@ export default function BuyPanel({ disabled = false, market, onBuyItem, robots }
                 return (
                     <div
                         key={item.id}
-                        className="rounded-xl border border-stone-700 bg-stone-800 p-4"
+                        className="market-parchment-card p-4 text-[#422313]"
                     >
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <h3 className="font-semibold">{item.name}</h3>
-                                <p className="mt-1 text-xs text-stone-400">
+                                <p className="mt-1 text-xs text-[#805431]">
                                     {recipient
                                         ? `Recipient: ${recipient.name}`
                                         : 'No robot at the market'
@@ -32,14 +32,14 @@ export default function BuyPanel({ disabled = false, market, onBuyItem, robots }
                                 </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
-                                <p className="text-sm font-semibold text-amber-300">
+                                <p className="text-sm font-bold text-[#7e351f]">
                                     {item.buy_price} gold
                                 </p>
                                 <button
                                     type="button"
                                     disabled={!canBuy}
                                     onClick={() => onBuyItem(item.id)}
-                                    className="rounded-md bg-sky-300 px-3 py-1 text-xs font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="market-action-button px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     Buy
                                 </button>

@@ -18,21 +18,21 @@ export default function SellPanel({ disabled = false, onSellItem, robots }) {
                     <section
                         key={robot.id}
                         aria-disabled={!isAtMarket}
-                        className={`rounded-xl border p-4 ${
+                        className={`market-parchment-card p-4 text-[#422313] ${
                             isAtMarket
-                                ? 'border-stone-700 bg-stone-800'
-                                : 'border-stone-800 bg-stone-900 opacity-40 grayscale'
+                                ? ''
+                                : 'opacity-45 grayscale'
                         }`}
                     >
                         <div className="flex items-center justify-between gap-4">
                             <h3 className="font-semibold">{robot.name}</h3>
-                            <span className="text-xs font-semibold text-stone-400">
+                            <span className="text-xs font-semibold text-[#805431]">
                                 {isAtMarket ? 'At market' : `At ${robot.game.location}`}
                             </span>
                         </div>
 
                         {inventoryItems.length === 0 ? (
-                            <p className="mt-3 text-sm text-stone-400">
+                            <p className="mt-3 text-sm text-[#805431]">
                                 Inventory is empty.
                             </p>
                         ) : (
@@ -40,23 +40,23 @@ export default function SellPanel({ disabled = false, onSellItem, robots }) {
                                 {inventoryItems.map((item) => (
                                     <div
                                         key={item.id}
-                                        className="flex items-center justify-between gap-4 rounded-lg border border-stone-700 p-3"
+                                        className="market-parchment-item flex items-center justify-between gap-4 p-3"
                                     >
                                         <div>
                                             <h4 className="text-sm font-semibold">{item.name}</h4>
-                                            <p className="text-xs text-stone-400">
+                                            <p className="text-xs text-[#805431]">
                                                 Quantity: {item.quantity}
                                             </p>
                                         </div>
                                         <div className="flex shrink-0 items-center gap-2">
-                                            <p className="text-sm font-semibold text-amber-300">
+                                            <p className="text-sm font-bold text-[#7e351f]">
                                                 {item.sell_price} gold each
                                             </p>
                                             <button
                                                 type="button"
                                                 disabled={disabled || !isAtMarket}
                                                 onClick={() => onSellItem(robot.id, item.id)}
-                                                className="rounded-md bg-emerald-400 px-3 py-1 text-xs font-semibold text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                className="market-action-button px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 Sell all
                                             </button>
@@ -67,7 +67,7 @@ export default function SellPanel({ disabled = false, onSellItem, robots }) {
                         )}
 
                         {!isAtMarket && (
-                            <p className="mt-3 text-xs font-semibold text-stone-500">
+                            <p className="mt-3 text-xs font-semibold text-[#805431]">
                                 Move {robot.name} to the market to access these items.
                             </p>
                         )}
