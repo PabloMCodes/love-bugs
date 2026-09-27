@@ -412,6 +412,13 @@ Messages are broadcasts to teammates and spectators. Sender identity comes from
 the planner's assigned robot, not model-generated IDs. Gemini decisions may include
 an optional `message` string (1–300 characters); it is kept out of task request
 parameters. Planners receive the latest 20 messages as `agent_messages`. The
+Gemini adapter also highlights the robot's recent speech, peer messages since
+its last public message, and up to ten recent confirmed world events. Public
+speech is optional: unchanged plans may produce no message. Near-duplicate
+speech for the same robot/action/trade/status is suppressed against its six
+most recent messages without suppressing task execution. Consumers must not
+assume one chat message per accepted task or use chat as the task audit trail.
+The
 in-process orchestrator also exposes `chat.snapshot()`, publishing `accepted` or
 `waiting` messages after validation and task acceptance. Trade proposals carry
 `{ "item": "...", "quantity": 1 }` in `parameters`; other proposals use an empty

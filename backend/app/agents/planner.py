@@ -15,7 +15,8 @@ class Decision(BaseModel):
     quantity: int | None = Field(default=None, strict=True, ge=1)
     reason: str = Field(min_length=1, max_length=300)
 
-    message: str | None = Field(default=None, min_length=1, max_length=300)
+    message: str | None = Field(default=None, min_length=1, max_length=300,
+                                description='Optional useful public dialogue; null when there is nothing new to say.')
 
     @model_validator(mode='after')
     def check_parameters(self):
@@ -135,11 +136,16 @@ class MockPlanner:
             if quantity > 0 and valid_price(inventory_sell_price(world, robot, item_id)):
                 return Decision(action='SELL', location='market', item=item_id,
                                 quantity=quantity, reason='Sell inventory toward our shared gold goal.',
-                                message='I propose selling my inventory. Can you keep collecting resources?')
+                                message=f'I’ll sell {quantity} {item_id} from my inventory while you keep collecting.')
         index = [robot['id'] for robot in world['robots']].index(robot_id)
         action, location = ('HARVEST', 'farm') if index % 2 == 0 else ('FISH', 'lake')
         heard = world.get('agent_messages', [])
-        reply = 'Got it, teammate! ' if heard else 'Team, here is my plan: '
+        peer = next((m for m in reversed(heard) if m.get('robot_id') != robot_id), None)
+        message = f'I’ll cover the {location}.'
+        if peer and peer.get('action') == 'SELL':
+            message = f'I’ll keep collecting at the {location} while you sell.'
+        elif peer and peer.get('location') and peer['location'] != location:
+            message = f'You’ve got the {peer["location"]}; I’ll cover the {location}.'
         return Decision(action=action, location=location,
-                        message=f'{reply}I propose collecting at the {location}. Let’s cover both spots.',
+                        message=message,
                         reason='Collect resources while my teammate covers the other location.')
