@@ -28,6 +28,18 @@ def config():
 
 
 class TrafficTests(unittest.TestCase):
+    def test_temporary_boundary_override_keeps_peer_building_and_frame_checks(self):
+        c = replace(config(),arena=[200,100,800,700],obstacles=[[400,200,450,250]])
+        normal = TrafficController(c)
+        temporary = TrafficController(c,ignore_arena_boundary=True)
+        peer = ((650,600),'robot-b')
+        self.assertFalse(normal.clear_segment((850,400),(900,400),'robot-a',peer))
+        self.assertTrue(temporary.clear_segment((850,400),(900,400),'robot-a',peer))
+        self.assertFalse(temporary.clear_segment((850,400),(1000,400),'robot-a',peer))
+        self.assertFalse(temporary.clear_segment((350,225),(500,225),'robot-a',peer))
+        self.assertFalse(temporary.clear_segment((600,600),(700,600),'robot-a',peer))
+        self.assertEqual(c.arena,[200,100,800,700])
+
     def test_segment_distance(self):
         self.assertEqual(segment_distance((5,5),(0,0),(10,0)),5)
         self.assertEqual(segment_distance((0,3),(0,0),(0,0)),3)

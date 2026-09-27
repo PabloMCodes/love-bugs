@@ -11,6 +11,13 @@ snapshot. Game behavior is unchanged.
 
 ### Named destination selection
 
+Temporary operator-requested override: `--ignore-arena-boundary` permits fleet
+travel outside the saved arena while keeping the robot inside the camera frame
+with clearance. Building/peer checks and all existing stop gates remain. The
+override is per-process, visibly labeled, and never edits calibration or destination
+coordinates. Omit the flag to restore normal bounds. This addresses the reported
+stop caused by Eeva at x≈1146 near the saved right edge of 1170.
+
 Added `DestinationController.go_to_location(robot_id, location)` in navigation's
 `fleet.py` to select saved service coordinates on the existing robot controllers.
 Local fleet phases 2–4 now accept W/E then keys 1–4 for homebase/farm/lake/market;

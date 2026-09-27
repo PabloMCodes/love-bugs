@@ -109,8 +109,9 @@ class TrafficConfig:
 
 
 class TrafficController:
-    def __init__(self, config):
+    def __init__(self, config, *, ignore_arena_boundary=False):
         self.config = config
+        self.ignore_arena_boundary = ignore_arena_boundary
         self.owner = None
         self.last_owner = None
         self.route = []
@@ -132,6 +133,8 @@ class TrafficController:
         """Exact circle distance and slab test against expanded rectangles."""
         radius = self.clearance(robot_id)
         left, top, right, bottom = self.config.arena
+        if self.ignore_arena_boundary:
+            left, top, right, bottom = 0, 0, self.config.frame_width, self.config.frame_height
         if any(not (left + radius < p[0] < right - radius and top + radius < p[1] < bottom - radius) for p in (start, end)):
             return False
         if segment_distance(peer[0], start, end) <= radius + self.config.radii[peer[1]]:

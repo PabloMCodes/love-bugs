@@ -183,13 +183,15 @@ def main():
                         help='Two-robot JSON profiles; enables W/E selection and independent targets')
     parser.add_argument('--traffic-config', type=Path, help='Override the saved backend/traffic_config.json used automatically in fleet mode')
     parser.add_argument('--backend-url', help='Hardware backend URL; enables task/pose/chat bridge')
+    parser.add_argument('--ignore-arena-boundary', action='store_true',
+                        help='Temporarily allow travel outside the saved arena, within the camera frame')
     sources = parser.add_mutually_exclusive_group()
     sources.add_argument('--camera', type=int)
     sources.add_argument('--video')
     args = parser.parse_args()
     if args.phase == 4 and args.video:
         parser.error('Phase 4 requires a live camera; prerecorded poses cannot control hardware')
-    if (args.traffic_config or args.backend_url) and not args.robots_config:
+    if (args.traffic_config or args.backend_url or args.ignore_arena_boundary) and not args.robots_config:
         parser.error('Traffic and backend integration require --robots-config')
     if args.phase == 4 and not args.robots_config:
         parser.error('Phase 4 requires --robots-config navigation_robots.json; single-robot mode does not enforce saved boundaries')

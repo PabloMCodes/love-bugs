@@ -2,6 +2,12 @@
 
 ## Drive to saved places without clicking
 
+For temporary local testing, append `--ignore-arena-boundary` to the fleet command.
+This permits travel outside the saved arena rectangle while retaining camera-frame
+clearance, buildings, peer separation, calibration review, marker-loss and BLE stops.
+The window displays ARENA BOUNDARY OFF. The saved JSON, named coordinates and backend
+map conversion are unchanged. Remove the flag to restore the saved boundary.
+
 In fleet mode (phases 2–4), W selects WALL-Y and E selects Eeva. Press **1 homebase,
 2 farm, 3 lake, or 4 market** to select that robot's saved `service_points` target
 from `traffic_config.json`. Then press A in phase 4 to arm. Phase 3 previews without

@@ -144,7 +144,10 @@ async def run_fleet(args, profiles):
     selected = 0
     traffic_path = (getattr(args, 'traffic_config', None) or DEFAULT_TRAFFIC_CONFIG).resolve()
     config = TrafficConfig.load(traffic_path)
-    traffic = TrafficController(config)
+    ignore_boundary = getattr(args, 'ignore_arena_boundary', False)
+    traffic = TrafficController(config, ignore_arena_boundary=ignore_boundary)
+    if ignore_boundary:
+        logging.warning('Saved arena boundary DISABLED for this run; camera-frame, building and peer clearance remain active')
     destinations = DestinationController(robots, config)
     logging.info('Traffic configuration: %s | calibrated=%s | arena=%s | buildings=%d | frame=%sx%s',
                  traffic_path, config.calibrated, config.arena, len(config.obstacles),
@@ -270,6 +273,8 @@ async def run_fleet(args, profiles):
                       'W WALL-Y | E Eeva | 1 home 2 farm 3 lake 4 market | A arm | SPACE stop | Q quit')]
             if traffic:
                 lines.append('TRAFFIC: ' + traffic.reason)
+                if ignore_boundary:
+                    lines.append('ARENA BOUNDARY OFF | saved rectangle is reference only')
             if bridge:
                 lines.append('BACKEND: ' + (bridge.error or ('armed for tasks' if follower.session else 'press A to enable tasks')))
             for robot in robots:
