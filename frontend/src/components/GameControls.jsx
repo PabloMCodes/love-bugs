@@ -69,21 +69,21 @@ export default function GameControls({
             className="game-status-panel w-full shrink-0 px-5 py-3 text-sky-950"
             aria-labelledby="game-status-heading"
         >
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <div className="min-w-0 md:w-64">
-                    <div className="flex items-center gap-2">
-                        <h2 id="game-status-heading" className="text-sm font-bold uppercase tracking-wide text-sky-800">
-                            Repair Fund
-                        </h2>
-                        <span className={`rounded-full px-2 py-1 text-xs font-bold ${status.className}`}>
-                            {status.label}
-                        </span>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-sky-800" aria-live="polite">
-                        {status.summary}
-                    </p>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex items-center gap-2">
+                    <h2 id="game-status-heading" className="text-sm font-bold uppercase tracking-wide text-sky-800">
+                        Repair Fund
+                    </h2>
+                    <span className={`rounded-full px-2 py-1 text-xs font-bold ${status.className}`}>
+                        {status.label}
+                    </span>
                 </div>
+                <p className="min-w-0 text-xs text-sky-800 sm:truncate sm:text-right" aria-live="polite">
+                    {status.summary}
+                </p>
+            </div>
 
+            <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end">
                 <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-sky-900">
                         <span>Combined gold</span>
