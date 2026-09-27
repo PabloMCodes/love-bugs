@@ -14,6 +14,9 @@ The project is designed so the same game rules run in two modes:
 
 ## Start here
 
+- [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md): detailed implementation handoff, verification evidence, unmerged teammate work, runbooks, and next-step options.
+- [CAMERA_SETUP_GUIDE.md](CAMERA_SETUP_GUIDE.md): camera, calibration, traffic, hardware setup, and troubleshooting runbook.
+
 - [GAME_DESIGN.md](GAME_DESIGN.md): staged farming tycoon, fishing risk/reward,
   cooperative unlocks, money transfers, map progression, and open balance decisions.
 - [GAME_PLAN.md](GAME_PLAN.md): product direction, core loop, current gaps,
