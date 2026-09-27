@@ -11,6 +11,7 @@ from app.schemas import (
     EconomyState,
     Goal,
     GoalRequest,
+    GameStopRequest,
     HealthReport,
     Market,
     MoneyRequestCreate,
@@ -177,9 +178,9 @@ def create_world_router(store: WorldStore) -> APIRouter:
             raise translate_world_error(error) from error
 
     @router.post('/game/stop', response_model=WorldSnapshot)
-    def stop_game() -> WorldSnapshot:
+    def stop_game(request: GameStopRequest | None = None) -> WorldSnapshot:
         try:
-            return store.stop_game()
+            return store.stop_game(session_id=request.session_id if request else None)
         except WorldStateError as error:
             raise translate_world_error(error) from error
 

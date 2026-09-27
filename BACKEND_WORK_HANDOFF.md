@@ -5,6 +5,34 @@ Continue work here; do not merge or switch implementation to main without a requ
 
 ## Objective and ownership
 
+### Latest continuation after pulling `3493845`
+
+Implemented the SPACE-to-backend stop slice without changing camera-owner geometry.
+`BackendBridge.request_stop()` latches pending stop intent, clears queued arrivals,
+and invalidates motion authority. The asynchronous bridge prioritizes delivery and
+retries failed requests. The follower rejects A while acknowledgement is pending.
+`POST /game/stop` now accepts an optional session_id body; existing bodyless browser
+calls still work. The world checks session identity under its lock so retries from
+an old session cannot stop a replacement game. Recovery requires game start plus A.
+
+This covers operator SPACE while the adapter is running. It does not complete
+settled-arrival validation, automatic fault/exit propagation, or persistent stop
+intent across process exits. Quitting while a stop is pending logs a warning.
+The backend cannot process an unreachable stop; its telemetry watchdog remains a
+fallback during the outage. Next implement fresh/settled arrival validation and
+test one backend-directed task, while Joet completes the local calibration review.
+
+Files touched: navigation backend/fleet, backend schemas/routes/state, traffic
+tests, API contract and operating guides. No firmware, calibration, database schema,
+frontend, or Gemini decision changes in this slice.
+
+Verification for this continuation: full suite passed 227 tests with one live
+Tiger test skipped; after adding one additional background-retry case, all 16
+traffic tests passed. HTTP/WebSocket smoke also passed. Fault-injection coverage
+includes failed stop delivery/retry, active fishing cancellation, no post-stop
+reward, old-session rejection, bodyless browser compatibility, and blocked re-arm.
+No physical hardware or live Tiger/Gemini verification was performed here.
+
 Complete a physical game loop for WALL-Y and Eeva: overhead ArUco observations →
 backend world → per-robot agent decisions → validated tasks → deterministic
 navigation/BLE → confirmed arrival → backend inventory/gold/progression → live UI.
@@ -179,9 +207,10 @@ Changing camera position, zoom, or resolution requires recalibration.
    submitted backend tasks/autonomy disabled to isolate the adapter.
 3. **Harden arrivals and stops before autonomous rewards.** Require fresh, settled,
    stopped arrival for the current task/session; invalidate stale queued reports.
-   Add backend hardware arrival validation. Local SPACE currently disarms motors
-   without propagating backend game stop; fix that asynchronously while retaining
-   immediate local stop and deliberate recovery. Test interruptions during activity.
+   Add backend hardware arrival validation. SPACE now propagates backend game stop
+   asynchronously while retaining immediate local stop and deliberate recovery.
+   Extend this to other interruption/exit paths and test physical interruptions
+   during activity; do not assume the SPACE slice completes all safety integration.
 4. **Improve bridge scheduling/freshness.** Deduplicate observations using capture
    timestamps; separate chat retries from control authority, bound HTTP work, and
    report persistent blocked reasons through the existing contract.

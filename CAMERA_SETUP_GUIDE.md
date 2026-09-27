@@ -471,6 +471,14 @@ Backend mode behavior:
   or a lost BLE link revokes motion permission.
 - A human must press **A** again after an interruption.
 
+In backend mode, SPACE also requests a backend game stop asynchronously. It retries
+HTTP failures and blocks re-arming until acknowledged (or the old session has been
+replaced). This cancels unfinished robot activities rather than letting rewards
+continue after an acknowledged stop. Restart the game in the dashboard, then press
+A to recover. During a network outage the backend cannot receive the stop instantly;
+telemetry expiry remains its fallback. Keep the process open for retries. Quitting
+with an unacknowledged stop logs a warning; stop the backend game separately.
+
 Do not run a second telemetry writer or BLE controller alongside this adapter.
 
 ## 14. Expected logs and meanings

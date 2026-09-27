@@ -188,9 +188,10 @@ async def run_fleet(args, profiles):
             elif key in (ord('e'), ord('E')):
                 selected = 1
             if key == ord(' '):
-                await stop_all(robots)
                 if follower:
                     follower.stop(robots)
+                    bridge.request_stop()
+                await stop_all(robots)
                 logging.info('EMERGENCY STOP: both robots disarmed')
             if worker.error:
                 raise RuntimeError(f'Camera failed: {worker.error}')
@@ -278,6 +279,8 @@ async def run_fleet(args, profiles):
                 cv2.imshow(WINDOW, frame)
             await asyncio.sleep(.01)
     finally:
+        if bridge and bridge.pending_stop is not None:
+            logging.warning('Exiting with backend stop unacknowledged; stop the game in the dashboard')
         if bridge_task:
             bridge_task.cancel()
             await asyncio.gather(bridge_task, return_exceptions=True)

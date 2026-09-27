@@ -308,6 +308,14 @@ proposal without charging anyone and permits a new proposal.
 
 Game stop cancels unfinished tasks, disables autonomous dispatch, and requests a fleet-wide motor stop. Robot stop does the equivalent for one robot. Controllers must invalidate active movement commands so their next update cannot restart motion. Resume allows new tasks; cancelled tasks never automatically resume. Game start clears a game-level pause but must not clear a separately requested robot stop. A `200` stop response confirms backend acceptance, not proof of physical motor delivery; communication loss is still covered by the onboard watchdog.
 
+`POST /game/stop` still accepts no body for browser controls. Hardware adapters may
+send `{ "session_id": "current-session-id" }` to prevent a delayed stop from
+cancelling a replacement session. A mismatch returns `409 SESSION_MISMATCH`; the
+check and stop execute under the same world lock. Repeating a successful stop is
+idempotent. In backend-connected navigation, SPACE first latches local disarm and
+requests local motor stops, then the asynchronous bridge retries this scoped game
+stop. Pending acknowledgement blocks re-arming and discards queued arrivals.
+
 ### Assigning a task
 
 ```json

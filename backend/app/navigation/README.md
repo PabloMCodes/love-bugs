@@ -196,6 +196,14 @@ alongside navigation.
 
 ## Hardware backend and spectator traffic conversation
 
+With `--backend-url`, SPACE also queues a session-scoped backend game stop, cancelling
+unfinished activities/tasks when acknowledged. Motor stopping does not await HTTP.
+The bridge retries failures while this process runs; A cannot re-arm while a stop
+is pending. After acknowledgement, start the game in the dashboard and press A
+again. Old-session stops are discarded after a reset, with local motion still
+disarmed. If you quit before acknowledgement, the log warns that the backend game
+still needs stopping; the stop queue is not persisted across process exits.
+
 Start the backend with `GAME_MODE=hardware` (simulation remains available for
 other demos). For example, in a separate terminal in `backend`:
 

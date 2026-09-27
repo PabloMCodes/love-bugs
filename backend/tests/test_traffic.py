@@ -159,7 +159,103 @@ class TaskFollowerTests(unittest.TestCase):
         self.follower.report_arrivals(self.robots,self.world,traffic)
         self.assertEqual(len(self.bridge.arrivals),1)
 
+    def test_pending_operator_stop_prevents_rearm_and_discards_queued_arrivals(self):
+        self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        self.bridge.world = self.world
+        self.bridge.arrivals.append({'task_id':'one'})
+        self.bridge.request_stop()
+        self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        self.assertFalse(self.robots[0].gate.armed)
+        self.assertIsNone(self.follower.session)
+        self.assertIsNone(self.bridge.current(10))
+        self.assertEqual(self.bridge.arrivals,[])
 
+
+class OperatorStopTests(unittest.IsolatedAsyncioTestCase):
+    async def test_background_loop_retries_stop_before_map_validation(self):
+        import asyncio
+        import httpx
+        from unittest.mock import patch
+        store = WorldStore(default_world('hardware'))
+        store.start_game()
+        bridge = BackendBridge('http://test',config())  # No named points yet.
+        bridge.request_stop()  # Also no cached world/session yet.
+        attempts = []
+
+        def respond(request):
+            if request.url.path == '/world':
+                return httpx.Response(200,json=store.snapshot().model_dump(mode='json'))
+            self.assertEqual(request.url.path,'/game/stop')
+            attempts.append(request)
+            if len(attempts) == 1:
+                return httpx.Response(503,json={'error':{'code':'PERSISTENCE_UNAVAILABLE'}})
+            return httpx.Response(200,json=store.stop_game().model_dump(mode='json'))
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(respond),base_url='http://test')
+        with patch('app.navigation.backend.httpx.AsyncClient',return_value=client):
+            task = asyncio.create_task(bridge.run())
+            try:
+                for _ in range(100):
+                    if bridge.pending_stop is None:
+                        break
+                    await asyncio.sleep(.01)
+                self.assertIsNone(bridge.pending_stop)
+                self.assertEqual(len(attempts),2)
+                self.assertEqual(store.snapshot().game.status,'STOPPED')
+            finally:
+                task.cancel()
+                await asyncio.gather(task,return_exceptions=True)
+
+    async def test_stop_retries_then_cancels_backend_activity_once(self):
+        import httpx
+        from unittest.mock import AsyncMock
+        from app.schemas import TaskRequest, ArrivalReport
+        store = WorldStore(default_world())
+        store.start_game()
+        task = store.assign_task(TaskRequest(request_id='fish-stop',robot_id='robot-a',
+                                            action='FISH',location='lake',parameters={}))
+        session = store.snapshot().session_id
+        store.confirm_arrival('robot-a',ArrivalReport(session_id=session,task_id=task.id,location='lake'))
+        self.assertEqual(store.robot('robot-a').task.status,'ACTIVE')
+        bridge = BackendBridge('http://test',config())
+        bridge.world = store.snapshot().model_dump(mode='json')
+        bridge.request_stop()
+        failed = AsyncMock()
+        failed.post.side_effect = httpx.ConnectError('offline')
+        with self.assertRaises(httpx.ConnectError):
+            await bridge.deliver_stop(failed)
+        self.assertIsNotNone(bridge.pending_stop)
+        app = create_app(world_store=store,run_simulator=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
+            await bridge.deliver_stop(client)
+            self.assertIsNone(bridge.pending_stop)
+            self.assertEqual(store.snapshot().game.status,'STOPPED')
+            self.assertIsNone(store.robot('robot-a').task)
+            before = store.snapshot().model_dump(mode='json')
+            # A retry of the acknowledged request is idempotent.
+            response = await client.post('/game/stop',json={'session_id':session})
+            self.assertEqual(response.status_code,200)
+            store.advance_activities(60)
+            self.assertEqual(store.snapshot().model_dump(mode='json'),before)
+
+    async def test_old_session_stop_cannot_stop_new_game(self):
+        import httpx
+        store = WorldStore(default_world('hardware'))
+        bridge = BackendBridge('http://test',config())
+        bridge.world = store.snapshot().model_dump(mode='json')
+        bridge.request_stop()
+        store.reset_game()
+        store.start_game()
+        app = create_app(world_store=store,run_simulator=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
+            await bridge.deliver_stop(client)
+            self.assertIsNone(bridge.pending_stop)
+            self.assertEqual(store.snapshot().game.status,'RUNNING')
+            self.assertIsNone(bridge.current(10))
+            # Existing browser bodyless stop remains supported.
+            response = await client.post('/game/stop')
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()['game']['status'],'STOPPED')
 class BridgeTransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_real_routes_receive_telemetry_and_traffic(self):
         import asyncio
