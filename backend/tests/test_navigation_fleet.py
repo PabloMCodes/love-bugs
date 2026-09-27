@@ -19,6 +19,7 @@ from app.navigation.fleet import (
 )
 from app.navigation.__main__ import CameraWorker
 from app.robots.client import BleController
+from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, TrafficConfig
 from test_vision import frame_with_markers
 
 
@@ -153,13 +154,16 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(r.gate.armed)
             r.ble.send.assert_awaited_once_with('S', force=True)
 
-    async def run_ui(self, keys, phase=4, connect_error=False):
+    async def run_ui(self, keys, phase=4, connect_error=False, traffic_config=None):
         worker = Mock(error=None, done=False)
-        worker.snapshot.side_effect = lambda: sample({'robot-a': pose(0), 'robot-b': pose(1)})
+        peer = pose(1)
+        peer.center_x, peer.center_y = 500, 300
+        worker.snapshot.side_effect = lambda: sample({'robot-a': pose(0), 'robot-b': peer})
         worker.thread.is_alive.return_value = False
         clients = [SimpleNamespace(connected=True, last_command='S', connect=AsyncMock(),
                                    send=AsyncMock(), close=AsyncMock()) for _ in range(2)]
-        with patch('app.navigation.fleet.CameraWorker', return_value=worker), \
+        with patch('app.navigation.fleet.TrafficConfig.load', return_value=traffic_config or TrafficConfig()) as load_traffic, \
+                patch('app.navigation.fleet.CameraWorker', return_value=worker), \
                 patch('app.navigation.fleet.BleController', side_effect=clients) as factory, \
                 patch('app.navigation.fleet.connect_fleet', new_callable=AsyncMock) as connect, \
                 patch('app.navigation.fleet.cv2') as cv, \
@@ -189,19 +193,46 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
             else:
                 connect.assert_awaited_once()
             worker.thread.start.assert_called_once()
+            load_traffic.assert_called_once_with(DEFAULT_TRAFFIC_CONFIG.resolve())
         return clients
 
-    async def test_ui_routes_clicks_arms_independently_and_stops_both(self):
+    async def test_default_fleet_loads_config_and_blocks_unreviewed_calibration(self):
         clients = await self.run_ui([(300, 100), 'a', 'e', (100, 300), 'a', ' ', 'q'])
         a_commands = [c.args[0] for c in clients[0].send.await_args_list]
         b_commands = [c.args[0] for c in clients[1].send.await_args_list]
-        self.assertIn('F', a_commands)
-        self.assertNotIn('R', a_commands)
-        self.assertIn('R', b_commands)
-        self.assertNotIn('F', b_commands)
+        self.assertEqual(set(a_commands), {'S'})
+        self.assertEqual(set(b_commands), {'S'})
         for client in clients:
             client.send.assert_any_await('S', force=True)
             client.close.assert_awaited_once()
+
+    async def test_default_guard_blocks_building_targets_and_arena_edges(self):
+        config = TrafficConfig(calibrated=True, frame_width=600, frame_height=400,
+                               arena=[50, 50, 550, 350], radii={'robot-a':5, 'robot-b':5},
+                               margin=5, max_speed=10, obstacles=[[200,50,400,200]])
+        for target in ((300,100), (590,100)):
+            with self.assertLogs(level='WARNING') as logs:
+                clients = await self.run_ui([target, 'a', 'q'], traffic_config=config)
+            self.assertTrue(any('No clear route' in line for line in logs.output))
+            for client in clients:
+                self.assertTrue(all(call.args[0] == 'S' for call in client.send.await_args_list))
+        config.arena = [150,50,550,350]  # WALL-Y is now outside the saved arena.
+        with self.assertLogs(level='WARNING') as logs:
+            clients = await self.run_ui([(450,100), 'a', 'q'], traffic_config=config)
+        self.assertTrue(any('outside safe arena' in line for line in logs.output))
+        for client in clients:
+            self.assertTrue(all(call.args[0] == 'S' for call in client.send.await_args_list))
+
+    async def test_missing_explicit_config_never_starts_camera_or_ble(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / 'missing.json'
+            with patch('app.navigation.fleet.connect_fleet', new_callable=AsyncMock) as connect, \
+                    patch('app.navigation.fleet.CameraWorker') as camera:
+                with self.assertRaises(FileNotFoundError):
+                    await run_fleet(SimpleNamespace(phase=4, camera=0, video=None,
+                                                   traffic_config=missing), profiles())
+                connect.assert_not_awaited()
+                camera.assert_not_called()
 
     async def test_second_connection_failure_cleans_up_both(self):
         clients = await self.run_ui([], connect_error=True)

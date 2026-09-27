@@ -185,6 +185,9 @@ but do not change existing MVP v1 fields or meanings silently.
 `GET /world` in hardware mode and uses existing pose, health and arrival reports.
 The health `blocked` flag reports local traffic faults. Camera calibration maps
 pixel arena bounds linearly onto map width/height; see the navigation README.
+Fleet mode always loads `backend/traffic_config.json` unless `--traffic-config`
+selects another file; it never falls back to unguarded driving. The setup editor
+uses the same default. Single-robot CLI phase 4 is rejected.
 This adapter owns hardware telemetry: do not run another pose/health writer or
 BLE controller for these robots simultaneously.
 

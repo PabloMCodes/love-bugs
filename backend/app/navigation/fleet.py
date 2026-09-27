@@ -1,4 +1,4 @@
-"""Two robots sharing a camera, with optional calibrated traffic control."""
+"""Two robots sharing a camera, with mandatory calibrated traffic control."""
 
 import asyncio
 import logging
@@ -9,7 +9,7 @@ import cv2
 from app.navigation.__main__ import CameraWorker, draw
 from app.navigation.controller import MotionGate, steer
 from app.robots.client import BleController
-from app.navigation.traffic import TrafficConfig, TrafficController
+from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, TrafficConfig, TrafficController
 from app.navigation.backend import BackendBridge, TaskFollower
 
 WINDOW = 'Love Bugs navigation'
@@ -116,14 +116,18 @@ async def stop_all(robots):
 async def run_fleet(args, profiles):
     robots = [RobotControl(profile, args.phase) for profile in profiles]
     selected = 0
-    traffic_path = getattr(args, 'traffic_config', None)
-    traffic = TrafficController(TrafficConfig.load(traffic_path)) if traffic_path else None
+    traffic_path = (getattr(args, 'traffic_config', None) or DEFAULT_TRAFFIC_CONFIG).resolve()
+    config = TrafficConfig.load(traffic_path)
+    traffic = TrafficController(config)
+    logging.info('Traffic configuration: %s | calibrated=%s | arena=%s | buildings=%d | frame=%sx%s',
+                 traffic_path, config.calibrated, config.arena, len(config.obstacles),
+                 config.frame_width, config.frame_height)
+    if not config.calibrated:
+        logging.warning('Traffic calibration is not reviewed: all motion will remain STOPPED')
     backend_url = getattr(args, 'backend_url', None)
     bridge = BackendBridge(backend_url, traffic.config) if backend_url else None
     bridge_task = None
     follower = TaskFollower(bridge) if bridge else None
-    if not traffic:
-        logging.warning('Traffic protection OFF: pass --traffic-config traffic_config.json')
     worker = CameraWorker(args.video if args.video else
                           (args.camera if args.camera is not None else profiles[0].config.camera_index),
                           profiles[0].config, robots=profiles)
@@ -203,7 +207,7 @@ async def run_fleet(args, profiles):
             elif key in (ord('a'), ord('A')):
                 robots[selected].arm(now)
             commands = (traffic.update(robots, now, sample[1].shape[:2] if sample else None, args.phase)
-                        if traffic and args.phase >= 3 else {r.profile.robot_id: r.command(now) for r in robots})
+                        if args.phase >= 3 else {r.profile.robot_id: r.command(now) for r in robots})
             if traffic and traffic.blocked and bridge:
                 follower.stop(robots)
             if bridge:

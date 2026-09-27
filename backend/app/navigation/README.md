@@ -3,6 +3,8 @@
 Standalone local control using the existing `VideoSource` and `ArucoTracker`
 (DICT_4X4_50). This does not submit game tasks or publish backend poses.
 Close the manual BLE script before phase 4; run only one controller at a time.
+Phase 4 requires fleet mode and reviewed traffic calibration (see below).
+Single-robot phases 1–3 remain available for localization diagnostics only.
 
 From `backend/`, install dependencies and verify each phase **in order**:
 
@@ -11,7 +13,7 @@ From `backend/`, install dependencies and verify each phase **in order**:
 .venv/bin/python -m app.navigation --camera 0 --phase 1
 .venv/bin/python -m app.navigation --camera 0 --phase 2
 .venv/bin/python -m app.navigation --camera 0 --phase 3
-.venv/bin/python -m app.navigation --camera 0 --phase 4
+.venv/bin/python -m app.navigation --camera 0 --phase 4 --robots-config navigation_robots.json
 ```
 
 Use the camera index that worked for your iPhone. Allow macOS camera/Bluetooth
@@ -89,8 +91,9 @@ BLE reference: [Bleak client](https://bleak.readthedocs.io/en/latest/api/client.
 
 ## Two robots on one camera
 
-Use `--robots-config navigation_robots.json` to enable independent WALL-Y/Eeva
-control. Existing commands without this option still run the single-robot mode.
+Use `--robots-config navigation_robots.json` to enable WALL-Y/Eeva control with
+mandatory traffic protection. Commands without this option support only phases
+1–3; phase 4 rejects the old single-robot path because it has no boundary guard.
 The profiles use unique advertised names and `response=False` writes:
 
 - WALL-Y (`robot-a`): `WALL-Y`
@@ -119,12 +122,12 @@ Verify both identities/headings in phases 1–3. In the **camera window**, press
 **W** for WALL-Y or **E** for Eeva, then click that robot's target. Magenta marks
 WALL-Y's target and cyan marks Eeva's. Both start without targets and stopped.
 Press **A** to arm only the selected robot. Select the other robot, click its
-target, and press A again to run both. Switching selection does not stop the
-other robot. Clicking a new target disarms only the selected robot.
+target, and press A again to queue its trip. The traffic controller permits only
+one robot to move at a time. Clicking a new target disarms the selected robot.
 
 SPACE stops/disarms **both**, and Q/window close/error stops and disconnects both.
-Arrival and marker loss stop only the affected robot; stale camera frames affect
-both. Neither resumes after a timeout without A. Any BLE disconnect/write failure
+Arrival stops that robot. Losing either marker or receiving stale camera frames
+stops both. Neither resumes after a timeout without A. Any BLE disconnect/write failure
 ends the entire session and attempts stop/cleanup on both connections. If the
 second connection fails, the first is also stopped and disconnected. Restart to
 reconnect. No automatic re-arming occurs.
@@ -135,17 +138,19 @@ If a robot is not found, verify that it is powered, advertising under that name,
 and disconnected from other controllers. Direct-address mode remains available
 for diagnostics, but a configured identifier must belong to the current Mac.
 
-This is simultaneous independent point-to-point driving, **not collision
-avoidance**. Use clear, separated paths. It remains separate from backend task
-execution, game autonomy and backend stop controls; use this window's SPACE/Q.
-Physical two-robot behavior must be tested on the camera laptop; automated tests
-use mocked BLE and UI and do not move robots.
+The fleet always loads `backend/traffic_config.json`, the same default used by
+the setup editor. Startup prints the absolute path, calibration state, arena and
+building count. The camera window shows the boxes and a TRAFFIC status line.
+Missing/invalid configuration fails startup; unreviewed calibration blocks motion.
+Manual BLE scripts do not enforce camera bounds; do not use them for bounded
+navigation. Without `--backend-url`, use this window's SPACE/Q to stop. Physical
+behavior must be tested on the camera laptop; tests do not move real robots.
 
 ## Calibrated traffic control and detours
 
-Add `--traffic-config traffic_config.json` to the **fleet** command to enable
-traffic protection. The old commands above retain independent driving for
-compatibility; they do not enable this protection implicitly.
+Traffic protection is always enabled in fleet mode. Use `--traffic-config PATH`
+only to select a different saved file. Use that same path with the setup editor
+(`--config PATH`). There is no automatic fallback to unguarded driving.
 
 1. Keep the camera fixed and verify both marker IDs, corrected headings and turn
    directions. In `backend/traffic_config.json`, set the actual image resolution.

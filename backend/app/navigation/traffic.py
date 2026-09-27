@@ -15,6 +15,8 @@ from uuid import uuid4
 
 from app.navigation.controller import steer
 
+DEFAULT_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / 'traffic_config.json'
+
 
 def distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])

@@ -14,7 +14,7 @@ import time
 
 import cv2
 
-from app.navigation.traffic import TrafficConfig
+from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, TrafficConfig
 from app.vision.capture import VideoSource
 
 WINDOW = 'Traffic setup'
@@ -186,7 +186,7 @@ def main():
     source = parser.add_mutually_exclusive_group()
     source.add_argument('--camera',type=int,default=0)
     source.add_argument('--video')
-    parser.add_argument('--config',type=Path,default=Path(__file__).resolve().parents[2]/'traffic_config.json')
+    parser.add_argument('--config',type=Path,default=DEFAULT_TRAFFIC_CONFIG)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO,format='%(levelname)s: %(message)s')
     try:
