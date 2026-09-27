@@ -100,7 +100,9 @@ export default function AgentChat({ onTaskProposal, world }) {
                     {messages.map((message) => (
                         <article
                             key={message.id}
-                            className="chat-message-bubble px-5 pb-7 pt-4 text-[#15364a]"
+                            className={`chat-message-bubble px-5 pb-7 pt-4 text-[#15364a] ${
+                                message.robot_id === 'robot-b' ? 'chat-message-bubble-reversed' : ''
+                            }`}
                         >
                             <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                                 <span className="font-bold text-[#287aa2]">{message.name}</span>

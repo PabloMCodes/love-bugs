@@ -189,6 +189,14 @@ body {
     filter: drop-shadow(0 4px 0 rgb(32 84 112 / 38%));
 }
 
+.chat-message-bubble-reversed {
+    transform: scaleX(-1);
+}
+
+.chat-message-bubble-reversed > * {
+    transform: scaleX(-1);
+}
+
 .world-map-board {
     border: 1px solid #285f31;
     background-color: #367a3b;
