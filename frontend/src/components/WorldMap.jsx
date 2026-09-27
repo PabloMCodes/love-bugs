@@ -13,6 +13,7 @@ const robotPortraits = {
 
 export default function WorldMap({ world }) {
     const { map, robots } = world;
+    const locatedRobots = robots.filter((robot) => robot.physical.pose);
 
     return (
         <section className="flex h-full min-h-0 w-full flex-col">
@@ -42,7 +43,13 @@ export default function WorldMap({ world }) {
                     );
                 })}
 
-                {robots.map((robot) => {
+                {locatedRobots.length === 0 && (
+                    <p className="absolute inset-x-4 bottom-4 z-30 rounded bg-sky-950/80 px-3 py-2 text-center text-xs font-semibold text-white">
+                        Waiting for robot localization…
+                    </p>
+                )}
+
+                {locatedRobots.map((robot) => {
                     const left = (robot.physical.pose.x / map.width) * 100;
                     const top = (robot.physical.pose.y / map.height) * 100;
                     const portrait = robotPortraits[robot.id];

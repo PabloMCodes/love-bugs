@@ -86,9 +86,9 @@ Status meanings:
 | Cooperative economy | Implemented | Paid stage proposals, two-robot approval, contributions, direct transfers, money requests, retry safety, and timeout recovery. |
 | Agent autonomy | Implemented | Deterministic mock planner and Gemini planner share the same bounded decision/validation contract. |
 | Spectator conversation | Implemented | Accepted/waiting decisions, coordination messages, occasional banter, traffic messages, WebSocket updates, and auto-scrolling UI. |
-| Frontend dashboard | Implemented | Robot tracker, game status, market, crop queue, world map, transaction notices, and conversation layout. |
-| Victory presentation | Partial | Backend completion is authoritative; a dedicated celebration is still missing. |
-| Economy presentation | Partial | Economy state/events exist; a dedicated proposal/request/contribution panel is still missing. |
+| Frontend dashboard | Implemented | Robot tracker, hardware-input readiness, game/economy status, market, crop queue, null-safe world map, transaction notices, and conversation layout. |
+| Victory presentation | Implemented | `COMPLETED` state opens a dedicated celebration with authoritative team totals and reset control. |
+| Economy presentation | Implemented | Pending votes/requests, completed contributions, recent transfers, and funded-upgrade count are visible in game status. |
 | Map stage presentation | Partial | World state exposes the stage and crops; crop-specific farm/map artwork still needs to react to progression. |
 | Persistence | Implemented | SQLite default, Tiger/Timescale support, migrations, setup/check CLI, rollback, history, and restart behavior. |
 | Vision/localization | Implemented in software | ArUco detection, coordinate calibration, zones, timestamps, and pose ingestion exist; final arena calibration remains physical work. |
@@ -370,6 +370,15 @@ Subsystem boundaries:
   from the bottom.
 - Fixed market overflow/padding and made locked-stage badges match the pixel
   button style.
+- Made hardware startup safe when robot poses are still unknown instead of
+  dereferencing null localization data on the map.
+- Added explicit offline, stale tracking, awaiting-pose, blocked, stopped, and
+  all-input-ready presentation; hardware start stays disabled until both robots
+  have usable input.
+- Added a compact cooperative economy status for pending votes/requests, recent
+  contributions/transfers, and funded upgrade count.
+- Added an authoritative victory overlay driven only by `game.status ===
+  "COMPLETED"`, with team totals and a backend reset action.
 
 ### 10. Persistence and database setup
 
@@ -649,18 +658,15 @@ demo.
 Exit condition: switching from simulation to hardware changes the movement
 source but not game rules, frontend behavior, inventory, economy, or victory.
 
-### Priority 2 — Make progression and victory obvious in the UI
+### Priority 2 — Optional presentation polish
 
-- Add a dedicated victory overlay/celebration driven only by
-  `game.status === "COMPLETED"`.
-- Add a cooperative economy panel for pending stage proposals, approvals,
-  contributions, money requests, and transfers.
-- Add stage-specific farm/map artwork for Wheat, Carrots, and Pumpkins.
-- Consider a short completed-crop or recent-outcome history if queue testing
-  shows that completed work disappears too quickly for spectators.
+- Add stage-specific farm/map artwork for Wheat, Carrots, and Pumpkins if time permits.
+- Consider a short completed-crop history if rehearsal shows completed work
+  disappears too quickly for spectators.
+- Add sound only if it helps in the actual demo environment.
 
-Exit condition: a first-time viewer can explain the current goal, current stage,
-pending cooperation, robot roles, and victory without reading logs.
+The required objective, current stage, pending cooperation, robot readiness, and
+victory are now visible without reading logs.
 
 ### Priority 3 — Verify balance against physical pacing
 

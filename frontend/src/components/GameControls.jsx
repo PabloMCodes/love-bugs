@@ -1,13 +1,17 @@
 // Present authoritative game progress and send session lifecycle commands.
 import { useState } from 'react';
+import { hardwareInputReadiness } from '../utils/robotReadiness.js';
+import EconomyStatus from './EconomyStatus.jsx';
 
 export default function GameControls({
     backendAvailable,
-    game,
+    backendConnected,
+    world,
     onReset,
     onStart,
     onStop,
 }) {
+    const { economy, game, mode, robots } = world;
     const [pendingAction, setPendingAction] = useState(null);
     const [error, setError] = useState(null);
     const currentGold = game.goal.current;
@@ -15,7 +19,12 @@ export default function GameControls({
     const progress = targetGold > 0
         ? Math.min(100, Math.max(0, (currentGold / targetGold) * 100))
         : 0;
-    const controlsDisabled = !backendAvailable || pendingAction !== null;
+    const controlsDisabled = (
+        !backendAvailable || !backendConnected || pendingAction !== null
+    );
+    const inputReadiness = hardwareInputReadiness(world);
+    const inputReady = backendConnected && inputReadiness.ready;
+    const startRequiresInput = mode === 'hardware' && !inputReady;
 
     async function runAction(name, action) {
         setPendingAction(name);
@@ -59,7 +68,7 @@ export default function GameControls({
                 <div className="relative z-10 flex flex-col gap-3 md:flex-row md:items-end">
                     <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-sky-900">
-                            <span>Combined gold</span>
+                            <span>{game.status} · Combined gold</span>
                             <span>{currentGold} / {targetGold}</span>
                         </div>
                         <div
@@ -81,7 +90,7 @@ export default function GameControls({
                         <button
                             type="button"
                             className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={controlsDisabled || game.status === 'RUNNING' || game.status === 'COMPLETED'}
+                            disabled={controlsDisabled || startRequiresInput || game.status === 'RUNNING' || game.status === 'COMPLETED'}
                             onClick={() => runAction('Start', onStart)}
                         >
                             {pendingAction === 'Start' ? 'Starting…' : 'Start'}
@@ -103,6 +112,28 @@ export default function GameControls({
                             {pendingAction === 'Reset' ? 'Resetting…' : 'Reset'}
                         </button>
                     </div>
+                </div>
+
+                <div className={`relative z-10 mt-2 text-[11px] font-bold ${
+                    inputReady ? 'text-emerald-800' : 'text-amber-900'
+                }`}>
+                    {mode === 'simulation'
+                        ? backendConnected
+                            ? 'Movement source: deterministic simulation'
+                            : 'Waiting for the backend event stream'
+                        : !backendConnected
+                            ? 'Waiting for the backend event stream'
+                            : inputReadiness.ready
+                            ? `Hardware input ready · ${inputReadiness.readyCount}/${inputReadiness.totalCount} robots online and tracked`
+                            : `Waiting for hardware input · ${inputReadiness.robots
+                                .filter((robot) => robot.issues.length > 0)
+                                .map((robot) => `${robot.name}: ${robot.issues.join(', ')}`)
+                                .join(' · ')}`
+                    }
+                </div>
+
+                <div className="relative z-10">
+                    <EconomyStatus economy={economy} robots={robots} />
                 </div>
 
                 {!backendAvailable && (

@@ -7,6 +7,7 @@ import AgentChat from './components/AgentChat.jsx';
 import GameControls from './components/GameControls.jsx';
 import CropPanel from './components/CropPanel.jsx';
 import MarketNotifications from './components/MarketNotifications.jsx';
+import VictoryOverlay from './components/VictoryOverlay.jsx';
 
 export default function App() {
     const {
@@ -56,7 +57,8 @@ export default function App() {
 
                         <GameControls
                             backendAvailable={connection.source === 'backend'}
-                            game={world.game}
+                            backendConnected={connection.connected}
+                            world={world}
                             onReset={resetSession}
                             onStart={startSession}
                             onStop={stopSession}
@@ -82,6 +84,12 @@ export default function App() {
                 </div>
             </div>
             <MarketNotifications world={world} />
+            <VictoryOverlay
+                backendAvailable={connection.source === 'backend' && connection.connected}
+                game={world.game}
+                onReset={resetSession}
+                robots={world.robots}
+            />
         </main>
     );
 }

@@ -1,4 +1,6 @@
 // Show each robot's health, wallet, inventory, location, and current task.
+import { robotInputIssues } from '../utils/robotReadiness.js';
+
 function formatLabel(value) {
     if (!value) {
         return 'Unknown';
@@ -11,24 +13,40 @@ function formatLabel(value) {
 }
 
 function getRobotStatus(robot) {
-    if (!robot.physical.online) {
+    const inputIssues = robotInputIssues(robot);
+
+    if (inputIssues.includes('offline')) {
         return {
             label: 'Offline',
             className: 'bg-red-200 text-red-800',
         };
     }
 
-    if (robot.physical.stopped) {
+    if (inputIssues.includes('stopped')) {
         return {
             label: 'Stopped',
             className: 'bg-red-200 text-red-800',
         };
     }
 
-    if (robot.physical.blocked) {
+    if (inputIssues.includes('blocked')) {
         return {
             label: 'Blocked',
             className: 'bg-orange-200 text-orange-900',
+        };
+    }
+
+    if (inputIssues.includes('stale tracking')) {
+        return {
+            label: 'Tracking stale',
+            className: 'bg-amber-200 text-amber-900',
+        };
+    }
+
+    if (inputIssues.includes('awaiting pose')) {
+        return {
+            label: 'Awaiting pose',
+            className: 'bg-amber-200 text-amber-900',
         };
     }
 

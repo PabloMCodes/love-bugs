@@ -112,6 +112,10 @@ backend is running. Payload meaning and lifecycle rules live in [api.md](api.md)
 - Send commands over HTTP; the world WebSocket is server-to-client only.
 - Render the returned robot list and market data instead of assuming fixed names,
   counts, balances, stock, or prices.
+- Treat `physical.pose: null`, `UNKNOWN`, and `STALE` as expected hardware startup
+  states. Do not dereference or plot a missing pose; show why input is not ready.
+- A frontend-ready indicator may summarize backend health/localization facts but
+  must not claim that traffic calibration or the local motion arm is enabled.
 - Render the Crop Queue from `world.farm.plots`; omit `EMPTY` plots, show `READY`
   plots first, then order `GROWING` plots by `ready_at`. Never run an authoritative
   browser-only growth timer.
@@ -121,6 +125,8 @@ backend is running. Payload meaning and lifecycle rules live in [api.md](api.md)
   startup, but do not let an older REST response overwrite a newer socket state.
 - Set `VITE_API_BASE_URL` when the backend is not at `http://localhost:8000`, and
   add the exact browser origin to backend `FRONTEND_ORIGINS`.
+- Drive victory only from `game.status === "COMPLETED"`, and render cooperative
+  requests/proposals/transfers from `world.economy` without predicting outcomes.
 
 ## Localization checklist
 

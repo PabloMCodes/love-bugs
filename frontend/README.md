@@ -33,7 +33,8 @@ npm exec --yes --package=node@24 -- npm run dev
 - `src/App.jsx`: dashboard layout and shared world state.
 - `src/styles.css`: Tailwind and shared styles.
 - `src/components/`: Crop Queue, market, map, robot tracker, game controls,
-  transaction notifications, and spectator conversation.
+  cooperative economy status, transaction notifications, victory presentation,
+  and spectator conversation.
 - `src/hooks/useWorld.js`: current snapshot and session/revision handling.
 - `src/api/`: HTTP requests and the live WebSocket connection.
 
@@ -59,11 +60,21 @@ and the wider World Map share the lower center row.
 - **Robot Conversation:** smoothly follows new accepted/waiting agent messages;
   manual scrolling away from the bottom pauses auto-follow.
 - **Game controls:** start, stop, reset, Farm Stage, and combined-gold progress.
+- **Hardware readiness:** shows offline, stale, unknown-pose, blocked, and stopped
+  input states. In hardware mode Start remains disabled until both robots have
+  fresh usable health/localization input. This does not replace arming or traffic
+  calibration in the camera controller.
+- **Team economy:** shows pending votes and money requests, the latest completed
+  contributions or transfer, and funded stage count.
+- **Victory:** `game.status === "COMPLETED"` opens a celebration using only
+  authoritative gold/stage/robot data and offers a backend reset action.
 
 The version-4 snapshot carries cooperative unlock proposals, money requests, and
 transfers under `world.economy`, plus the authoritative fishing duration and tier
-catalog under `world.fishing`. These are authoritative and available for UI and
-planning; the browser must not infer unlocks or choose fishing outcomes itself.
+catalog under `world.fishing`. The dashboard renders them but never infers an
+unlock, transfer, completion, or fishing outcome itself. Hardware snapshots may
+legitimately contain `physical.pose: null` before localization; the map omits that
+robot safely and displays a waiting message.
 
 The browser animates Wheat, Carrot, and Pumpkin progress from timestamps but never
 decides that a crop is ready. The next frontend crop milestone is crop-specific

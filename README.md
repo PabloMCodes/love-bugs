@@ -33,7 +33,8 @@ The current baseline already completes a backend-owned autonomous simulation rou
 robots collect, travel, sell their own inventory, jointly fund permanent farming stages,
 transfer gold when needed, and complete the shared gold goal. The dashboard now includes a purchase-only seed
 market, an authoritative Crop Queue backed by three shared farm plots, transaction
-notifications, live robot conversation, and session controls.
+notifications, live robot conversation, hardware-input readiness, cooperative
+economy status, session controls, and an authoritative victory celebration.
 
 The authoritative three-crop lifecycle now runs end to end without browser input:
 planners compare unlocked Wheat, Carrot, and Pumpkin returns, buy only enough seed

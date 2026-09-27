@@ -112,7 +112,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Fishing risk/reward | Implemented | Each attempt fixes a seeded 5–15 second duration and a 70/25/5 fish tier exactly once. |
 | Autonomous decisions | Implemented | Mock and Gemini autonomy can compare farming with fishing, coordinate tasks, request exact seed shortfalls, and manage stage proposals through one validated command contract. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
-| Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
+| Goal presentation | Implemented | Farm Stage, combined-gold progress, lifecycle controls, and an authoritative completion celebration are rendered from world state. |
 | Hardware boundary | Ready for physical acceptance | Pose, health, blocked, arrival, freshness, and safety contracts plus the camera/BLE backend bridge exist; calibration, watchdog flashing, and the guarded two-robot run remain. |
 | Persistence/history | Implemented | Accepted transitions and pose history persist through SQLite or Tiger Data. |
 
@@ -120,14 +120,14 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **Victory presentation is still incomplete.** Completion is enforced by the
-   backend, but the frontend still needs a clear celebration.
-2. **Economy presentation is still incomplete.** The world/event stream contains
-   proposals, responses, requests, transfers, and contributions, but the dashboard
-   does not yet have a dedicated cooperative-economy panel.
-3. **Physical pacing still needs measurement.** The committed configuration
+1. **Physical acceptance remains incomplete.** Software now displays missing,
+   stale, blocked, stopped, and ready robot input safely, including the valid
+   hardware startup state where poses are null. Real calibration is still needed.
+2. **Physical pacing still needs measurement.** The committed configuration
    completes a deterministic seed-0 simulation in about 88 seconds, inside the
    60–120 second target; calibrated robot travel may still require profile tuning.
+3. **Stage artwork remains presentation polish.** The farm stage and crop queue
+   are authoritative, but the map background does not yet change by crop stage.
 
 ## Scope for the first complete demo
 
@@ -173,7 +173,7 @@ Goal: one understandable, deterministic simulation round.
 - [x] Add session-level start, stop, and reset controls without restoring manual
   robot-action buttons.
 - [x] Prevent post-completion task dispatch and cancel remaining work at victory.
-- [ ] Add a clear dedicated frontend victory celebration.
+- [x] Add a clear dedicated frontend victory celebration driven by authoritative completion.
 - [x] Add an end-to-end test covering collect → inventory → sell → gold → victory.
 
 Exit criterion: a teammate unfamiliar with the code can start the app, understand
@@ -225,7 +225,8 @@ purchase contributes to a complete farming loop instead of dead inventory.
 - [x] Expire unanswered money requests and unlock proposals so autonomy can replan.
 - [x] Teach mock and Gemini autonomy the cooperative economy actions.
 - [x] Require Stage 3 as well as the final gold target for victory.
-- [ ] Render pending proposals, requests, and completed contributions in the dashboard.
+- [x] Render pending proposals, money requests, completed contributions, and
+  recent transfers in the dashboard.
 
 ### Fishing strategy
 
@@ -261,8 +262,8 @@ Goal: make the proven loop feel polished and demo-ready.
 - [ ] Recheck pacing with calibrated physical travel and tune a copied profile
   only if the guarded round falls outside the target window.
 - [ ] Make task reasons and robot dialogue concise and nonrepetitive.
-- [ ] Add sound, celebration, and clearer transition feedback only after state
-  correctness is stable.
+- [x] Add an authoritative victory celebration and clearer hardware-input status.
+- [ ] Add sound only if rehearsal shows it improves the presentation.
 - [ ] Add a timer or failure condition only if repeated hardware runs leave enough
   reliability margin.
 
@@ -272,7 +273,7 @@ Goal: make the proven loop feel polished and demo-ready.
 | --- | --- | --- | --- |
 | Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state, task, and economy services | Tune cooperative costs and final goal through measured runs |
 | Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots plus task/economy command semantics | Tune crop selection through measured demo runs |
-| Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add later crop art and a clearer victory presentation |
+| Frontend | Objective, progress, robot state/readiness, economy, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add optional stage-specific crop art |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |
 | Navigation/control | Destination following, arrival, cancellation, blocked handling | Active task plus map locations | Safe adapter from tasks to robot commands |
 | ESP32/robot | Motor execution, health reporting, local watchdog | Private navigation transport | Stop on stale commands and publish health |
