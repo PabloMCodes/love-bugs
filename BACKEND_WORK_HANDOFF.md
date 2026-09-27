@@ -72,6 +72,67 @@ editing or pulling over local calibration. Do not invent points or enable moveme
 by changing the flag from this laptop. Measurements and readiness need confirmation
 on the physical setup, especially that radii cover the full robot, not just its marker.
 
+### Current local calibration evidence
+
+After pulling `8a14d30`, the camera laptop's uncommitted
+`backend/traffic_config.json` was inspected in place. It is the named-point draft,
+not the committed `43f1c52` geometry. Preserve it as hardware-owner work. Its
+current values are:
+
+- frame 1920×1080; arena `[516,269,1170,772]`;
+- radii 16/13 pixels, margin 30, max speed 250 px/s and stop latency 1.1 s;
+- all four service points present;
+- homebase, lake and market waiting points present, but the farm waiting point missing;
+- no obstacle rectangles; and
+- `calibrated: false`.
+
+This draft does not pass complete destination review. The service/waiting minimum
+separation is `16 + 13 + 30 = 59` pixels. The lake pair is only about 14 pixels
+apart and the market pair about 3 pixels apart. Reopen the editor, use key 6 for
+the missing farm waiting point, and reposition keys 7/8 more than 59 pixels from
+their matching service points. Confirm whether an empty obstacle list is physically
+correct. Both speed/latency values and the small measured radii still require
+physical review. Do not set `calibrated: true` until those checks pass, then repeat
+phase 1 and phase 3 before phase 4.
+
+## Database integration status
+
+The application already keeps persistence behind the authoritative backend. The
+frontend, camera/navigation bridge and agents use HTTP/WebSocket or in-process
+world services; they must not connect directly to SQLite/Tiger. Every accepted
+`WorldStore` transition is written before it becomes visible in memory. Current
+persistence covers complete world snapshots, semantic events and changed robot
+poses, which includes tasks, lifecycle, crops, fishing outcomes, inventory,
+wallets, cooperative economy, pose/health/blocked/arrival effects and resets.
+
+The five initialized tables remain `world_state`, `robot_events`,
+`robot_positions`, `event_ids` and `event_order`. Spectator chat, raw camera frames,
+individual BLE commands and calibration JSON are deliberately outside those
+tables. Chat is currently bounded in memory; persisting it would be a separate
+contract/schema decision. Raw frames and motor commands should not be placed in
+the authoritative game database.
+
+Verified on this checkout:
+
+- `backend/lovebugs.sqlite3` exists locally, is ignored by Git and is the default
+  backend because no `DATABASE_URL` is configured;
+- the ignored `backend/.env` contains agent/frontend configuration but no
+  `DATABASE_URL`, `TEST_DATABASE_URL` or `SQLITE_PATH`;
+- isolated SQLite `app.persistence init` and `check` reported all five tables ready;
+- persistence tests ran 6 cases: 5 passed and the credential-dependent live Tiger
+  case skipped;
+- the real HTTP/WebSocket smoke passed gameplay/persisted history,
+  pose/health/world socket, mock chat/CORS and lifecycle flows; and
+- the user separately ran `init` and `check` against the default local SQLite file
+  and reported the same ready schema.
+
+Live Tiger remains unverified. To test it, place `DATABASE_URL` and
+`TEST_DATABASE_URL` only in the ignored local environment, run `init` and `check`,
+then run the isolated-schema persistence test. Do not paste or commit credentials.
+Use SQLite for the first physical task slice so database/network latency is not
+confused with camera/BLE integration; repeat against Tiger afterward and measure
+telemetry/write latency.
+
 ## Immediate operating sequence
 
 From the actual `backend` folder on the camera laptop:
@@ -106,7 +167,9 @@ Changing camera position, zoom, or resolution requires recalibration.
 
 1. **Resolve the current operating issue and calibration mismatch.** Confirm the
    actual branch, absolute config path, phase, marker IDs and BLE states. Preserve
-   local calibration. Verify both robots can execute guarded clicked targets.
+   local calibration. Complete and validate all waiting points, review obstacles,
+   radii, speed and stop latency, then verify both robots can execute guarded
+   clicked targets.
 2. **Complete a backend-directed single-task slice.** Use the same complete traffic
    file on camera/backend laptops. Start hardware mode with
    `HARDWARE_TRAFFIC_CONFIG=./traffic_config.json`; copy the file if hosts differ.
