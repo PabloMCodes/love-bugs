@@ -20,9 +20,11 @@ export default function App() {
     return (
         <main className="app-background h-dvh overflow-hidden px-6 py-4 text-stone-100">
             <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-4 overflow-y-auto lg:overflow-hidden">
-                <div className="flex items-center justify-between gap-4">
-                    <h1 className="text-3xl font-semibold">Love Bugs</h1>
-                    <div className="text-right">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                    <h1 className="section-title col-start-2 text-center text-5xl font-black leading-none sm:text-6xl">
+                        Love Bugs
+                    </h1>
+                    <div className="col-start-3 text-right">
                         <p className={`text-xs font-semibold ${
                             connection.connected
                                 ? 'text-emerald-300'

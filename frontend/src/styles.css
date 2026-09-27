@@ -21,6 +21,13 @@ body {
     background-size: cover;
 }
 
+.section-title {
+    color: #fff;
+    -webkit-text-stroke: 2px #082f49;
+    paint-order: stroke fill;
+    text-shadow: 0 2px 0 #082f49;
+}
+
 .robot-cloud-card {
     isolation: isolate;
     clip-path: polygon(

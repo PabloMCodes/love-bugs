@@ -14,7 +14,7 @@ export default function AgentChat({ world }) {
 
     return (
         <section className="flex h-full min-h-0 w-full flex-col" aria-label="Agent chat">
-            <h2 className="mb-3 text-lg font-semibold">Robot conversation</h2>
+            <h2 className="section-title mb-3 text-lg font-semibold">Robot Conversation</h2>
 
             <div className="market-crate flex min-h-0 w-full flex-1 flex-col overflow-hidden p-5">
                 <div className="chat-controls flex shrink-0 items-center gap-2 px-3 py-2.5">

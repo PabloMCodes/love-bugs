@@ -207,7 +207,7 @@ function RobotCard({ robot }) {
 export default function RobotPanel({ robots }) {
     return (
         <section className="w-full shrink-0">
-            <h2 className="mb-3 text-lg font-semibold">Robot Tracker</h2>
+            <h2 className="section-title mb-3 text-lg font-semibold">Robot Tracker</h2>
             <div className="grid gap-4 lg:grid-cols-2">
                 {robots.map((robot) => (
                     <RobotCard key={robot.id} robot={robot} />

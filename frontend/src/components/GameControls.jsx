@@ -43,7 +43,7 @@ export default function GameControls({
         >
             <h2
                 id="farm-stage-heading"
-                className="mb-2 text-center text-xl font-extrabold tracking-wide text-sky-950"
+                className="section-title mb-2 text-center text-xl font-extrabold tracking-wide"
             >
                 Farm Stage {game.stage ?? 1}
             </h2>
