@@ -289,6 +289,43 @@ measurements with the hardware team before committing or enabling them.
 
 ## 10. Review `traffic_config.json`
 
+### Named service and waiting points
+
+In the frozen setup image, first define arena/buildings and measure both robots.
+Then use these keys and click the floor where the robot's marker center should stop:
+
+| Destination | Service point | Waiting point |
+| --- | --- | --- |
+| homebase | 1 | 5 |
+| farm | 2 | 6 |
+| lake | 3 | 7 |
+| market | 4 | 8 |
+
+Service points belong beside buildings, not inside their obstacle boxes. Waiting
+points need room for the second robot while the service point is occupied. Click
+again in a selected mode to reposition it. Green circles mark service points;
+blue circles mark waiting points, both in setup and the navigation window.
+
+Press S to save `service_points` and `waiting_points` in the same traffic JSON.
+Partial drafts can be saved, but backend task following requires all eight points.
+Each point must clear walls/buildings for the larger robot plus the margin; a
+waiting point must be separated from its corresponding service point by more than
+both robot radii plus the margin. Saving still disables motion (`calibrated=false`).
+Changed resolution clears these points along with old arena/building geometry.
+
+Waiting points are saved and displayed for the next traffic integration slice;
+automatic queueing/parking is not implemented yet. Endpoint validation does not
+prove a route is reachable: inspect routes with the existing dry run and current
+robot positions before physical movement. Local clicked-target mode remains usable
+with older files without named points.
+
+Set `HARDWARE_TRAFFIC_CONFIG=./traffic_config.json` on the backend process. If it
+runs on another laptop, copy this saved file there and use its local path. The
+backend publishes the calibrated service locations in `/world`; navigation checks
+they match its calibration and stops on mismatch. Restart both processes after
+editing geometry. Camera movement or zoom requires recalibration even if frame
+resolution stays the same.
+
 Fields:
 
 | Field | Meaning |
@@ -386,6 +423,7 @@ Use this only after local traffic-controlled phase 4 works.
 ```sh
 cd backend
 GAME_MODE=hardware \
+HARDWARE_TRAFFIC_CONFIG=./traffic_config.json \
 AUTONOMY_ENABLED=true \
 AUTONOMY_PROVIDER=mock \
 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000

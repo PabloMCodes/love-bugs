@@ -200,7 +200,7 @@ Start the backend with `GAME_MODE=hardware` (simulation remains available for
 other demos). For example, in a separate terminal in `backend`:
 
 ```sh
-GAME_MODE=hardware AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+GAME_MODE=hardware HARDWARE_TRAFFIC_CONFIG=./traffic_config.json AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Use `AUTONOMY_PROVIDER=gemini` and your existing local key/model settings for real
@@ -243,6 +243,15 @@ The sketch still needs compilation/upload with your installed ESP32 Arduino core
 it cannot be flashed or physically verified from this development laptop.
 
 ## Draw buildings before the game
+
+Named destinations use the same editor/file: keys 1–4 select homebase, farm, lake,
+market service points; keys 5–8 select their waiting points. Click clear floor for
+each marker-center target, then S to save. All eight points are required for
+`--backend-url`. Start the backend with `HARDWARE_TRAFFIC_CONFIG` pointing to the
+same file so its world locations match. Local clicked targets remain compatible
+with older geometry files. Waiting points are currently saved/displayed only;
+automatic parking will be a separate traffic change. See the
+[setup guide](../../../CAMERA_SETUP_GUIDE.md#named-service-and-waiting-points).
 
 On the camera laptop, stop navigation and any other robot controller first, then
 run from `backend`:

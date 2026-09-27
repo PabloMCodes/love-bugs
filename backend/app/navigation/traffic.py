@@ -16,6 +16,7 @@ from uuid import uuid4
 from app.navigation.controller import steer
 
 DEFAULT_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / 'traffic_config.json'
+LOCATIONS = ('homebase', 'farm', 'lake', 'market')
 
 
 def distance(a, b):
@@ -41,6 +42,8 @@ class TrafficConfig:
     stop_latency: float = 1.1
     grid: float = 25
     obstacles: list = field(default_factory=list)
+    service_points: dict = field(default_factory=dict)
+    waiting_points: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if type(self.calibrated) is not bool:
@@ -61,6 +64,44 @@ class TrafficConfig:
             raise ValueError('Traffic grid too fine; keep fewer than 20,000 cells')
         if self.stop_latency < 1:
             raise ValueError('stop_latency must cover tracking plus BLE stop latency (at least 1 second)')
+        for label, points in (('service', self.service_points), ('waiting', self.waiting_points)):
+            if not isinstance(points, dict) or set(points) - set(LOCATIONS):
+                raise ValueError(f'{label} points must use homebase, farm, lake, market')
+            for name, point in points.items():
+                self.validate_point(point, f'{name} {label}')
+
+    def validate_point(self, point, label='Point'):
+        if (not isinstance(point, (list, tuple)) or len(point) != 2 or
+                any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+                    not math.isfinite(v) for v in point)):
+            raise ValueError(f'{label} must contain two finite pixel coordinates')
+        radius = max(self.radii.values()) + self.margin
+        left, top, right, bottom = self.arena
+        x, y = point
+        if not (left + radius < x < right - radius and top + radius < y < bottom - radius):
+            raise ValueError(f'{label} needs clearance from the arena walls for BOTH robots')
+        if any(x1-radius <= x <= x2+radius and y1-radius <= y <= y2+radius
+               for x1, y1, x2, y2 in self.obstacles):
+            raise ValueError(f'{label} needs clearance from buildings for BOTH robots')
+
+    def validate_destinations(self):
+        for label, points in (('service', self.service_points), ('waiting', self.waiting_points)):
+            missing = set(LOCATIONS) - set(points)
+            if missing:
+                raise ValueError(f'Configure {label} points: {", ".join(sorted(missing))}')
+            for name, point in points.items():
+                self.validate_point(point, f'{name} {label}')
+        separation = sum(self.radii.values()) + self.margin
+        for name in LOCATIONS:
+            if distance(self.service_points[name], self.waiting_points[name]) <= separation:
+                raise ValueError(f'{name} waiting point is too close to its service point')
+
+    def world_locations(self, width, height):
+        self.validate_destinations()
+        left, top, right, bottom = self.arena
+        return {name: {'x': (p[0]-left)/(right-left)*width,
+                       'y': (p[1]-top)/(bottom-top)*height}
+                for name, p in self.service_points.items()}
 
     @classmethod
     def load(cls, path):

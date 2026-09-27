@@ -169,7 +169,12 @@ class BridgeTransportTests(unittest.IsolatedAsyncioTestCase):
         from datetime import datetime, timezone
         store=WorldStore(default_world('hardware'))
         app=create_app(world_store=store,run_simulator=False)
-        bridge=BackendBridge('http://test',config())
+        geometry = config()
+        geometry.service_points = {name: [p['x']*10, p['y']*8]
+                                   for name, p in default_world()['map']['locations'].items()}
+        geometry.waiting_points = {name: [p[0], p[1]+100]
+                                   for name, p in geometry.service_points.items()}
+        bridge=BackendBridge('http://test',geometry)
         bridge.sample=[{'robot_id':'robot-a','online':True,'blocked':False,
             'pose':{'x':.2,'y':.3,'heading':90},'captured':time.monotonic(),
             'timestamp':datetime.now(timezone.utc).isoformat()}]

@@ -468,6 +468,14 @@ Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived
 
 ## Robotics integration boundary
 
+The camera adapter can share saved destinations with the hardware backend via
+`HARDWARE_TRAFFIC_CONFIG` at server startup. Its `service_points` are arena pixel
+coordinates converted into the existing `world.map.locations` world units; API
+payloads and schema version remain unchanged. Reset preserves this configured map.
+The adapter checks map agreement before following tasks. Waiting points remain
+local navigation configuration and are not additional game locations. See
+[camera setup](CAMERA_SETUP_GUIDE.md#named-service-and-waiting-points).
+
 These implemented routes are for localization/navigation adapters, not browser controls.
 Teammates can use equivalent in-process calls if components share a process. The
 world schema and frontend routes remain unchanged.

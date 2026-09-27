@@ -2,6 +2,7 @@
 import asyncio
 from datetime import datetime, timezone
 import logging
+import math
 import time
 
 import httpx
@@ -26,6 +27,15 @@ class BackendBridge:
         return (x1+p['x']/world['map']['width']*(x2-x1),
                 y1+p['y']/world['map']['height']*(y2-y1))
 
+    def validate_map(self, world):
+        expected = self.traffic.world_locations(world['map']['width'], world['map']['height'])
+        actual = world['map']['locations']
+        if set(actual) != set(expected) or any(
+                not math.isclose(actual[name][axis], point[axis], abs_tol=1e-6)
+                for name, point in expected.items() for axis in ('x', 'y')):
+            raise ValueError('Destination map mismatch: restart hardware backend with '
+                             'HARDWARE_TRAFFIC_CONFIG pointing to the same calibration')
+
     def capture(self, robots, traffic):
         x1,y1,x2,y2 = self.traffic.arena
         self.sample = [dict(robot_id=r.profile.robot_id,
@@ -48,6 +58,7 @@ class BackendBridge:
                     world = response.json()
                     if world['mode'] != 'hardware':
                         raise ValueError('Backend must run with GAME_MODE=hardware')
+                    self.validate_map(world)
                     old_session = self.world and self.world['session_id']
                     if old_session != world['session_id']:
                         self.events.clear()
