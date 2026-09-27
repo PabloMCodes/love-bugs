@@ -38,75 +38,77 @@ export default function GameControls({
 
     return (
         <section
-            className="game-status-panel w-full shrink-0 px-5 py-3 text-sky-950"
+            className="w-full shrink-0 text-sky-950"
             aria-labelledby="farm-stage-heading"
         >
             <h2
                 id="farm-stage-heading"
-                className="text-center text-xl font-extrabold tracking-wide text-sky-950"
+                className="mb-2 text-center text-xl font-extrabold tracking-wide text-sky-950"
             >
                 Farm Stage {game.stage ?? 1}
             </h2>
 
-            <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end">
-                <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-sky-900">
-                        <span>Combined gold</span>
-                        <span>{currentGold} / {targetGold}</span>
-                    </div>
-                    <div
-                        className="game-status-progress h-3 overflow-hidden rounded-full"
-                        role="progressbar"
-                        aria-label="Farm stage progress"
-                        aria-valuemin="0"
-                        aria-valuemax={targetGold}
-                        aria-valuenow={Math.min(targetGold, Math.max(0, currentGold))}
-                    >
+            <div className="game-status-panel px-5 py-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-sky-900">
+                            <span>Combined gold</span>
+                            <span>{currentGold} / {targetGold}</span>
+                        </div>
                         <div
-                            className="h-full rounded-full bg-rose-400 transition-[width] duration-300"
-                            style={{ width: `${progress}%` }}
-                        />
+                            className="game-status-progress h-3 overflow-hidden rounded-full"
+                            role="progressbar"
+                            aria-label="Farm stage progress"
+                            aria-valuemin="0"
+                            aria-valuemax={targetGold}
+                            aria-valuenow={Math.min(targetGold, Math.max(0, currentGold))}
+                        >
+                            <div
+                                className="h-full rounded-full bg-rose-400 transition-[width] duration-300"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                        <button
+                            type="button"
+                            className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={controlsDisabled || game.status === 'RUNNING' || game.status === 'COMPLETED'}
+                            onClick={() => runAction('Start', onStart)}
+                        >
+                            {pendingAction === 'Start' ? 'Starting…' : 'Start'}
+                        </button>
+                        <button
+                            type="button"
+                            className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={controlsDisabled || game.status !== 'RUNNING'}
+                            onClick={() => runAction('Stop', onStop)}
+                        >
+                            {pendingAction === 'Stop' ? 'Stopping…' : 'Stop'}
+                        </button>
+                        <button
+                            type="button"
+                            className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={controlsDisabled}
+                            onClick={confirmReset}
+                        >
+                            {pendingAction === 'Reset' ? 'Resetting…' : 'Reset'}
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                    <button
-                        type="button"
-                        className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={controlsDisabled || game.status === 'RUNNING' || game.status === 'COMPLETED'}
-                        onClick={() => runAction('Start', onStart)}
-                    >
-                        {pendingAction === 'Start' ? 'Starting…' : 'Start'}
-                    </button>
-                    <button
-                        type="button"
-                        className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={controlsDisabled || game.status !== 'RUNNING'}
-                        onClick={() => runAction('Stop', onStop)}
-                    >
-                        {pendingAction === 'Stop' ? 'Stopping…' : 'Stop'}
-                    </button>
-                    <button
-                        type="button"
-                        className="market-action-button px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={controlsDisabled}
-                        onClick={confirmReset}
-                    >
-                        {pendingAction === 'Reset' ? 'Resetting…' : 'Reset'}
-                    </button>
-                </div>
+                {!backendAvailable && (
+                    <p className="mt-2 text-xs font-semibold text-amber-800">
+                        Connect to the backend to control the game session.
+                    </p>
+                )}
+                {error && (
+                    <p className="mt-2 text-xs font-semibold text-red-800" role="alert">
+                        {error}
+                    </p>
+                )}
             </div>
-
-            {!backendAvailable && (
-                <p className="mt-2 text-xs font-semibold text-amber-800">
-                    Connect to the backend to control the game session.
-                </p>
-            )}
-            {error && (
-                <p className="mt-2 text-xs font-semibold text-red-800" role="alert">
-                    {error}
-                </p>
-            )}
         </section>
     );
 }
