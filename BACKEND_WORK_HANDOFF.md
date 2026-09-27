@@ -9,6 +9,18 @@ snapshot. Game behavior is unchanged.
 
 ## Objective and ownership
 
+### Named destination selection
+
+Added `DestinationController.go_to_location(robot_id, location)` in navigation's
+`fleet.py` to select saved service coordinates on the existing robot controllers.
+Local fleet phases 2–4 now accept W/E then keys 1–4 for homebase/farm/lake/market;
+phase 4 still requires A after local selection. Invalid known-robot selections
+disarm that robot. No second BLE client or bypass of the existing guard was added.
+Backend agents already submit named tasks; the task follower now shares
+`RobotControl.set_target` with local selection. Local shortcuts cannot override
+backend tasks. See navigation README for the function and task payload examples.
+Waiting/parking and stronger arrival validation remain separate outstanding work.
+
 ### Latest continuation after pulling `3493845`
 
 Implemented the SPACE-to-backend stop slice without changing camera-owner geometry.

@@ -180,7 +180,12 @@ class TaskFollower:
             changed = self.keys.get(robot.profile.robot_id) != identity
             if changed:
                 robot.gate.stop()
-                robot.target = self.bridge.target(task['location'], world) if active else None
+                if active:
+                    # Agent and local named selection share the target setter;
+                    # only an enabled backend session may arm automatically.
+                    robot.set_target(*self.bridge.target(task['location'], world))
+                else:
+                    robot.target = None
                 self.keys[robot.profile.robot_id] = identity
                 robot.observe(sample, now, 4)
             if (changed or arm) and identity and self.session == world['session_id']:

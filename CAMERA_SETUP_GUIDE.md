@@ -398,6 +398,12 @@ Phase 3 sends no BLE commands. Move robots by hand to exercise different routes.
 
 ## 12. Traffic-protected physical movement
 
+To use saved places instead of clicking targets, select W or E, then press
+1 (homebase), 2 (farm), 3 (lake), or 4 (market), followed by A. This uses the selected
+robot's existing navigation loop and the saved service point. Preview the same
+number keys in phase 3 without movement. In backend mode, agents select named
+locations through tasks; these local shortcuts are disabled.
+
 After the dry run is correct:
 
 ```sh

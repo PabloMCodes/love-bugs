@@ -1,5 +1,46 @@
 # WALL-Y click-to-drive bring-up
 
+## Drive to saved places without clicking
+
+In fleet mode (phases 2–4), W selects WALL-Y and E selects Eeva. Press **1 homebase,
+2 farm, 3 lake, or 4 market** to select that robot's saved `service_points` target
+from `traffic_config.json`. Then press A in phase 4 to arm. Phase 3 previews without
+BLE/movement. Selecting a new destination disarms that robot; SPACE stops both.
+Missing/unsafe destinations are rejected and leave the selected robot disarmed.
+Existing wall, marker-loss, traffic and BLE checks remain enabled.
+
+The reusable in-process interface in `fleet.py` is:
+
+```python
+destinations = DestinationController(robots, traffic_config)
+destinations.go_to_location('robot-a', 'farm')
+destinations.go_to_location('robot-b', 'lake')
+```
+
+Use the running fleet's `RobotControl` instances. This selects targets; it does not
+open another BLE connection or bypass arming. The existing control loop handles
+steering and stopping. Waiting points are not used by these selections.
+
+For backend agents, keep using the existing task interface instead of importing
+camera state into the agent process. For example, submit `POST /tasks` with:
+
+```json
+{
+  "request_id": "unique-request-id",
+  "robot_id": "robot-a",
+  "action": "MOVE_TO",
+  "location": "farm",
+  "parameters": {}
+}
+```
+
+Use a new request ID for each new task and reuse it only when retrying that same
+request. In `--backend-url` mode, the follower resolves the named location from
+the matching calibrated backend map and sets the robot's target. After game start
+and one deliberate A to enable backend following, later accepted tasks arm through
+that session's existing gate. Local number keys/clicks are disabled in backend
+mode so they cannot override agent tasks. No public motor API is needed.
+
 Standalone local control using the existing `VideoSource` and `ArucoTracker`
 (DICT_4X4_50). This does not submit game tasks or publish backend poses.
 Close the manual BLE script before phase 4; run only one controller at a time.

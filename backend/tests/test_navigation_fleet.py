@@ -12,6 +12,7 @@ import numpy as np
 from app.config import NavigationConfig, NavigationRobot, load_navigation_robots
 from app.navigation.fleet import (
     RobotControl,
+    DestinationController,
     connect_fleet,
     discover_fleet_devices,
     run_fleet,
@@ -39,6 +40,26 @@ def sample(poses, captured=None):
 
 
 class FleetStateTests(unittest.TestCase):
+    def test_named_destinations_select_only_requested_robot_and_require_rearm(self):
+        robots = [RobotControl(p,3) for p in profiles()]
+        geometry = TrafficConfig(service_points={'farm':[300,300], 'lake':[600,300]})
+        controller = DestinationController(robots,geometry)
+        for r in robots:
+            r.gate.arm(10,True)
+        self.assertEqual(controller.go_to_location('robot-a','farm'),(300,300))
+        self.assertEqual(robots[0].target,(300,300))
+        self.assertFalse(robots[0].gate.armed)
+        self.assertIsNone(robots[1].target)
+        self.assertTrue(robots[1].gate.armed)
+        controller.go_to_location('robot-b','lake')
+        self.assertEqual(robots[1].target,(600,300))
+        for robot_id,location in [('missing','farm'),('robot-a','missing'),('robot-a','market')]:
+            with self.assertRaises(ValueError):
+                controller.go_to_location(robot_id,location)
+        geometry.obstacles.append([250,250,350,350])
+        with self.assertRaisesRegex(ValueError,'buildings'):
+            controller.go_to_location('robot-a','farm')
+
     def test_camera_worker_routes_both_marker_ids(self):
         source = Mock()
         source.live = True
@@ -252,6 +273,16 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
     async def test_dry_phases_never_connect(self):
         for phase in (1, 2, 3):
             await self.run_ui(['w', (300, 100), 'e', (100, 300), 'a', 'q'], phase=phase)
+
+    async def test_named_keys_preview_without_mouse_or_ble(self):
+        geometry = TrafficConfig(calibrated=True,frame_width=600,frame_height=400,
+            arena=[0,0,600,400],radii={'robot-a':5,'robot-b':5},margin=5,
+            service_points={'farm':[300,100],'lake':[300,300]})
+        with patch.object(RobotControl,'set_target',autospec=True) as select:
+            await self.run_ui(['w','2','e','3','q'],phase=3,traffic_config=geometry)
+        self.assertEqual([(call.args[0].profile.robot_id,call.args[1:])
+                          for call in select.call_args_list],
+                         [('robot-a',(300,100)),('robot-b',(300,300))])
 
 
 if __name__ == '__main__':

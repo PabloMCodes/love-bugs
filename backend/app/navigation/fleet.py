@@ -9,12 +9,37 @@ import cv2
 from app.navigation.__main__ import CameraWorker, draw
 from app.navigation.controller import MotionGate, steer
 from app.robots.client import BleController
-from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, TrafficConfig, TrafficController
+from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, LOCATIONS, TrafficConfig, TrafficController
 from app.navigation.backend import BackendBridge, TaskFollower
 from app.navigation.calibrate import draw_destinations
 
 WINDOW = 'Love Bugs navigation'
 COLORS = ((255, 80, 255), (255, 220, 0))
+
+
+class DestinationController:
+    """Select saved targets on the running fleet; never create a second BLE client.
+
+    Selection disarms the chosen robot. The UI or backend task follower retains
+    responsibility for deliberate arming and all movement/safety checks.
+    """
+    def __init__(self, robots, traffic_config):
+        self.robots = {robot.profile.robot_id: robot for robot in robots}
+        self.config = traffic_config
+
+    def go_to_location(self, robot_id, location):
+        if robot_id not in self.robots:
+            raise ValueError(f'Unknown robot: {robot_id}')
+        self.robots[robot_id].gate.stop()
+        if location not in LOCATIONS:
+            raise ValueError(f'Unknown destination: {location}; choose {", ".join(LOCATIONS)}')
+        if location not in self.config.service_points:
+            raise ValueError(f'Configure the {location} service point in the calibration editor first')
+        point = self.config.service_points[location]
+        self.config.validate_point(point, location)
+        self.robots[robot_id].set_target(*point)
+        logging.info('%s destination=%s target=%s', robot_id, location, point)
+        return tuple(point)
 
 
 class RobotControl:
@@ -120,6 +145,7 @@ async def run_fleet(args, profiles):
     traffic_path = (getattr(args, 'traffic_config', None) or DEFAULT_TRAFFIC_CONFIG).resolve()
     config = TrafficConfig.load(traffic_path)
     traffic = TrafficController(config)
+    destinations = DestinationController(robots, config)
     logging.info('Traffic configuration: %s | calibrated=%s | arena=%s | buildings=%d | frame=%sx%s',
                  traffic_path, config.calibrated, config.arena, len(config.obstacles),
                  config.frame_width, config.frame_height)
@@ -187,6 +213,14 @@ async def run_fleet(args, profiles):
                 selected = 0
             elif key in (ord('e'), ord('E')):
                 selected = 1
+            if not bridge and args.phase >= 2 and ord('1') <= key <= ord('4'):
+                try:
+                    destinations.go_to_location(robots[selected].profile.robot_id,
+                                                LOCATIONS[key-ord('1')])
+                except ValueError as error:
+                    # A failed selection must not leave an old target driving.
+                    robots[selected].gate.stop()
+                    logging.warning('Destination rejected: %s', error)
             if key == ord(' '):
                 if follower:
                     follower.stop(robots)
@@ -233,7 +267,7 @@ async def run_fleet(args, profiles):
                 raise RuntimeError(f'BLE write failed; stopping both: {errors[0]}')
             lines = [f'Phase {args.phase} | selected robot: {robots[selected].profile.name}',
                      ('A enable backend tasks | SPACE stop BOTH | Q quit' if bridge else
-                      'W WALL-Y | E Eeva | click target | A arm selected | SPACE stop BOTH | Q quit')]
+                      'W WALL-Y | E Eeva | 1 home 2 farm 3 lake 4 market | A arm | SPACE stop | Q quit')]
             if traffic:
                 lines.append('TRAFFIC: ' + traffic.reason)
             if bridge:
