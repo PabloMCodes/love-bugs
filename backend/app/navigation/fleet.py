@@ -93,6 +93,14 @@ async def discover_fleet_devices(profiles, *, scanner=None):
     return resolved
 
 
+async def connect_fleet(robots, profiles):
+    """Resolve the fleet together, then connect each robot without implicit scans."""
+    devices = await discover_fleet_devices(profiles)
+    for robot in robots:
+        logging.info('Connecting to %s', robot.profile.name)
+        await robot.ble.connect(device=devices[robot.profile.robot_id])
+
+
 async def stop_all(robots):
     for robot in robots:
         robot.gate.stop()
@@ -118,16 +126,40 @@ async def run_fleet(args, profiles):
             robots[selected].set_target(x, y)
 
     cv2.setMouseCallback(WINDOW, click)
+    startup = None
     try:
-        # Resolve both peripherals before connecting. Passing BLEDevice objects
-        # avoids Bleak's implicit per-client scans, which are fragile on macOS.
-        devices = await discover_fleet_devices(profiles) if args.phase == 4 else {}
-        # Connect sequentially as in the supplied working script. Neither moves.
-        for robot in robots:
-            if robot.ble:
-                logging.info('Connecting to %s', robot.profile.name)
-                await robot.ble.connect(device=devices[robot.profile.robot_id])
         worker.thread.start()
+        if args.phase == 4:
+            # Keep OpenCV responsive and show camera frames while the one fleet
+            # scan and sequential BLE connections run. Robots remain stopped.
+            startup = asyncio.create_task(connect_fleet(robots, profiles))
+            await asyncio.sleep(0)
+            displayed = False
+            while not startup.done():
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord('q'), ord('Q')) or (
+                    displayed and cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1
+                ):
+                    logging.info('BLE startup cancelled by user')
+                    startup.cancel()
+                    await asyncio.gather(startup, return_exceptions=True)
+                    return
+                if worker.error:
+                    raise RuntimeError(f'Camera failed during BLE startup: {worker.error}')
+                if worker.done:
+                    raise RuntimeError('Camera stopped during BLE startup')
+                sample = worker.snapshot()
+                if sample:
+                    display = sample[1].copy()
+                    lines = [
+                        'Phase 4 | camera ready | connecting robots',
+                        'Robots remain STOPPED | Q closes',
+                    ]
+                    draw(display, None, None, None, lines)
+                    cv2.imshow(WINDOW, display)
+                    displayed = True
+                await asyncio.sleep(.01)
+            await startup
         while True:
             key = cv2.waitKey(1) & 0xFF
             if key in (ord('q'), ord('Q')) or cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
@@ -188,6 +220,9 @@ async def run_fleet(args, profiles):
                 cv2.imshow(WINDOW, frame)
             await asyncio.sleep(.01)
     finally:
+        if startup and not startup.done():
+            startup.cancel()
+            await asyncio.gather(startup, return_exceptions=True)
         for robot in robots:
             robot.gate.stop()
         # Attempt both stops concurrently before waiting for either disconnect.

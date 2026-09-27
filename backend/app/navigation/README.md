@@ -96,8 +96,10 @@ The profiles use unique advertised names and `response=False` writes:
 - WALL-Y (`robot-a`): `WALL-Y`
 - Eeva (`robot-b`): `Eeva`
 
-Phase 4 performs one 10-second scan, resolves both names to the current Mac's
-`BLEDevice` objects, and only then connects sequentially. This avoids storing
+Phase 4 starts the camera immediately and keeps its window responsive while it
+performs one 10-second BLE scan. The window reports that the robots are
+connecting and remain stopped. Startup resolves both names to the current Mac's
+`BLEDevice` objects and then connects sequentially. This avoids storing
 machine-specific macOS UUIDs and avoids Bleak's implicit per-client discovery.
 
 **Before driving**, set each profile's actual `marker_id`, calibrated
