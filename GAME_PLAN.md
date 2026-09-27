@@ -3,9 +3,8 @@
 > **Gameplay direction update:** [GAME_DESIGN.md](GAME_DESIGN.md) is now the
 > authoritative reference for the planned three-stage farming tycoon, fishing,
 > cooperative unlocks, and money transfers. The simpler Repair Fund below records
-> the current technical baseline and earlier milestone plan. Do not implement its
-> generic `tool_upgrade` recommendation without first reconciling the roadmap with
-> the newer design.
+> the current technical baseline and earlier milestone plan. The newer design
+> replaces the earlier generic `tool_upgrade` concept with three crop-seed stages.
 
 This document is the shared product and implementation direction for the game.
 It explains what the demo is trying to prove, how a round should feel, what is
@@ -105,7 +104,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Simulation | Implemented | Movement, arrival, activity timing, inventory rewards, and trading run without hardware. |
 | Individual inventory and wallets | Implemented | The market sell view exposes each robot separately. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
-| Market purchases | Partial | Items can be bought, but seeds and tool upgrades do not affect gameplay yet. |
+| Market purchases | Partial | Wheat, carrot, and pumpkin seeds can be bought, but planting and stage locks are not implemented yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents progress and lifecycle controls; a dedicated victory presentation remains. |
@@ -116,10 +115,10 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **The round does not explain itself.** The UI needs a visible objective,
-   current/target gold, game status, and a clear completion state.
-2. **Purchases are currently cosmetic inventory.** Seeds and the tool upgrade cost
-   gold but do not unlock or improve actions. Useless purchases make autonomous
+1. **Victory presentation is still incomplete.** The HUD now explains the objective,
+   current/target gold, and game status, but completion needs a clear celebration.
+2. **Purchases are currently cosmetic inventory.** Seeds cost gold but cannot be
+   planted yet. Useless purchases make autonomous
    behavior look incorrect.
 3. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
@@ -195,17 +194,14 @@ reopen the frontend to see valid progress and conversation history.
 
 Goal: purchases create a visible decision instead of dead inventory.
 
-- [ ] Give `tool_upgrade` one simple effect. Recommended first effect: the owning
-  robot collects one additional resource per completed harvest or fishing task.
-- [ ] Limit the upgrade to one purchase and display its owner/effect.
-- [ ] Teach both planners to compare the upgrade cost with remaining goal progress.
-- [ ] Remove seeds from the market until planting exists, or implement a complete
-  seed → plant → grow → harvest loop as a later feature.
-- [ ] Test that buying lowers current shared gold and that future rewards apply the
-  upgrade exactly once.
+- [x] Replace placeholder purchases with wheat, carrot, and pumpkin seeds.
+- [ ] Enforce stage-based seed availability in the backend.
+- [ ] Implement the complete seed → plant → grow → harvest → sell loop.
+- [ ] Teach both planners to compare seed cost, growth time, and expected crop value.
+- [ ] Test that purchases, planting, growth, harvesting, and sales resolve exactly once.
 
-Exit criterion: spectators can understand why a robot bought or skipped the
-upgrade, and both choices remain capable of finishing the round.
+Exit criterion: spectators can understand why a robot chose a seed, and every
+purchase contributes to a complete farming loop instead of dead inventory.
 
 ### Phase 4 — Hardware rehearsal
 
@@ -278,9 +274,9 @@ come from the real adapters instead of `SimulationRunner`.
 | Demo target | 200 gold candidate | Measured round is outside 60–120 seconds |
 | Robot roles | Wall-y farms; Eeva fishes | Recovery or balancing needs dynamic reassignment |
 | Reliable demo provider | Deterministic mock planner | Gemini behavior passes repeated rehearsals |
-| Upgrade effect | +1 collected resource per activity | Economy testing shows a clearer alternative |
 | Timer/loss state | Deferred | Hardware loop is reliable with time margin |
-| Seed mechanics | Deferred; hide seeds | Planting is implemented as a complete loop |
+| Seed catalog | Wheat 5; carrot 10; pumpkin 20 | Simulation balancing produces better values |
+| Seed mechanics | Purchases visible; planting pending | Planting is implemented as a complete loop |
 
 Any change to an endpoint, world field, event meaning, or task lifecycle must be
 coordinated through [api.md](api.md), updated in consumers and examples, and tested

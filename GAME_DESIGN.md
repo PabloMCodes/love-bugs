@@ -57,9 +57,9 @@ The seed catalog contains exactly three progression items:
 
 | Stage | Seed | Speed | Seed cost | Crop value | Availability |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Wheat seeds | Quick | Cheap | Low | Unlocked when the round begins |
-| 2 | Carrot seeds | Medium | Medium | Medium | Unlocked through the first cooperative progression purchase |
-| 3 | Pumpkin seeds | Slow | High | High | Unlocked through the second cooperative progression purchase |
+| 1 | Wheat seeds | Quick | 5 gold candidate | Low | Unlocked when the round begins |
+| 2 | Carrot seeds | Medium | 10 gold candidate | Medium | Unlocked through the first cooperative progression purchase |
+| 3 | Pumpkin seeds | Slow | 20 gold candidate | High | Unlocked through the second cooperative progression purchase |
 
 The qualitative relationship is a firm design rule:
 
@@ -69,8 +69,9 @@ wheat seed cost < carrot seed cost < pumpkin seed cost
 wheat sale value < carrot sale value < pumpkin sale value
 ```
 
-Exact numbers are intentionally not fixed yet. They should be chosen so every
-crop has a positive return and a longer crop produces a meaningfully larger sale,
+These seed prices are initial simulation candidates, not final balance. Crop sale
+values and growth times are still open. Final numbers should ensure that every crop
+has a positive return and a longer crop produces a meaningfully larger sale,
 without making earlier crops immediately useless.
 
 ### Crop lifecycle

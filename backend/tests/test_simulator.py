@@ -313,23 +313,23 @@ class SimulationRunnerTests(unittest.TestCase):
             robot_id='robot-b',
             action='BUY',
             location='market',
-            parameters={'item': 'tool_upgrade', 'quantity': 1},
+            parameters={'item': 'pumpkin_seeds', 'quantity': 1},
         ))
         simulator = SimulationRunner(store, step_distance=100)
 
         simulator.tick()
         completed = store.snapshot()
         milo = completed.robots[1]
-        upgrade = milo.game.inventory['tool_upgrade']
-        market_upgrade = next(
-            item for item in completed.market.items if item.id == 'tool_upgrade'
+        seeds = milo.game.inventory['pumpkin_seeds']
+        market_seeds = next(
+            item for item in completed.market.items if item.id == 'pumpkin_seeds'
         )
         self.assertIsNone(milo.task)
-        self.assertEqual(milo.game.money, 0)
-        self.assertEqual(upgrade.quantity, 1)
-        self.assertIsNone(upgrade.sell_price)
-        self.assertEqual(market_upgrade.stock, 0)
-        self.assertEqual(completed.game.goal.current, 40)
+        self.assertEqual(milo.game.money, 20)
+        self.assertEqual(seeds.quantity, 1)
+        self.assertIsNone(seeds.sell_price)
+        self.assertIsNone(market_seeds.stock)
+        self.assertEqual(completed.game.goal.current, 60)
         self.assertEqual(completed.events[-1].type, 'task_completed')
 
         revision = completed.revision
@@ -337,7 +337,12 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(store.snapshot().revision, revision)
 
     def test_competing_purchase_rechecks_stock_at_execution(self):
-        store = WorldStore()
+        world = default_world()
+        next(
+            item for item in world['market']['items']
+            if item['id'] == 'pumpkin_seeds'
+        )['stock'] = 1
+        store = WorldStore(world)
         store.start_game()
         for robot_id in ('robot-a', 'robot-b'):
             store.assign_task(TaskRequest(
@@ -345,22 +350,22 @@ class SimulationRunnerTests(unittest.TestCase):
                 robot_id=robot_id,
                 action='BUY',
                 location='market',
-                parameters={'item': 'tool_upgrade', 'quantity': 1},
+                parameters={'item': 'pumpkin_seeds', 'quantity': 1},
             ))
 
         SimulationRunner(store, step_distance=100).tick()
 
         completed = store.snapshot()
         billy, milo = completed.robots
-        market_upgrade = next(
-            item for item in completed.market.items if item.id == 'tool_upgrade'
+        market_seeds = next(
+            item for item in completed.market.items if item.id == 'pumpkin_seeds'
         )
-        self.assertEqual(billy.game.inventory['tool_upgrade'].quantity, 1)
-        self.assertNotIn('tool_upgrade', milo.game.inventory)
+        self.assertEqual(billy.game.inventory['pumpkin_seeds'].quantity, 1)
+        self.assertNotIn('pumpkin_seeds', milo.game.inventory)
         self.assertEqual(milo.game.money, 40)
         self.assertIsNone(billy.task)
         self.assertIsNone(milo.task)
-        self.assertEqual(market_upgrade.stock, 0)
+        self.assertEqual(market_seeds.stock, 0)
         self.assertEqual(completed.events[-1].type, 'task_failed')
         self.assertEqual(completed.events[-1].data['code'], 'OUT_OF_STOCK')
 

@@ -105,8 +105,8 @@ def default_world(mode: str = 'simulation') -> dict:
         'market': {
             'items': [
                 {'id': 'seeds', 'name': 'Wheat Seeds', 'buy_price': 5, 'stock': None},
-                {'id': 'corn_seeds', 'name': 'Corn Seeds', 'buy_price': 8, 'stock': None},
-                {'id': 'tool_upgrade', 'name': 'Tool Upgrade', 'buy_price': 40, 'stock': 1},
+                {'id': 'carrot_seeds', 'name': 'Carrot Seeds', 'buy_price': 10, 'stock': None},
+                {'id': 'pumpkin_seeds', 'name': 'Pumpkin Seeds', 'buy_price': 20, 'stock': None},
             ],
         },
         'events': [

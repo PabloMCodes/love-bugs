@@ -22,6 +22,29 @@ class WorldRouteTests(unittest.TestCase):
             'target': 200,
             'current': 80,
         })
+        self.assertEqual(world['market']['items'], [
+            {
+                'id': 'seeds',
+                'name': 'Wheat Seeds',
+                'buy_price': 5,
+                'sell_price': None,
+                'stock': None,
+            },
+            {
+                'id': 'carrot_seeds',
+                'name': 'Carrot Seeds',
+                'buy_price': 10,
+                'sell_price': None,
+                'stock': None,
+            },
+            {
+                'id': 'pumpkin_seeds',
+                'name': 'Pumpkin Seeds',
+                'buy_price': 20,
+                'sell_price': None,
+                'stock': None,
+            },
+        ])
         self.assertEqual(world['map']['locations']['market'], {'x': 80.0, 'y': 25.0})
 
     def test_snapshots_cannot_mutate_store(self):

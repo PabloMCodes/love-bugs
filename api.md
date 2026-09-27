@@ -145,7 +145,8 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
   "market": {
     "items": [
       { "id": "seeds", "name": "Wheat Seeds", "buy_price": 5, "sell_price": null, "stock": null },
-      { "id": "tool_upgrade", "name": "Tool Upgrade", "buy_price": 40, "sell_price": null, "stock": 1 }
+      { "id": "carrot_seeds", "name": "Carrot Seeds", "buy_price": 10, "sell_price": null, "stock": null },
+      { "id": "pumpkin_seeds", "name": "Pumpkin Seeds", "buy_price": 20, "sell_price": null, "stock": null }
     ]
   },
   "events": [

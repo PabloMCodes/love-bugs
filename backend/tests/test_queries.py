@@ -4,12 +4,17 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.simulation.simulator import SimulationRunner
-from app.state import WorldStore
+from app.state import WorldStore, default_world
 
 
 class QueryRouteTests(unittest.TestCase):
     def setUp(self):
-        self.store = WorldStore()
+        world = default_world()
+        next(
+            item for item in world['market']['items']
+            if item['id'] == 'pumpkin_seeds'
+        )['stock'] = 1
+        self.store = WorldStore(world)
         self.client = TestClient(create_app(world_store=self.store))
 
     def tearDown(self):
@@ -100,14 +105,14 @@ class QueryRouteTests(unittest.TestCase):
             'query-buy-a',
             action='BUY',
             location='market',
-            parameters={'item': 'tool_upgrade', 'quantity': 1},
+            parameters={'item': 'pumpkin_seeds', 'quantity': 1},
         )
         second = self.assign(
             'query-buy-b',
             robot_id='robot-b',
             action='BUY',
             location='market',
-            parameters={'item': 'tool_upgrade', 'quantity': 1},
+            parameters={'item': 'pumpkin_seeds', 'quantity': 1},
         )
 
         SimulationRunner(self.store, step_distance=100).tick()

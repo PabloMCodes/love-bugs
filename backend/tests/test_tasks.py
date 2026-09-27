@@ -182,7 +182,7 @@ class TaskRouteTests(unittest.TestCase):
             'robot_id': 'robot-b',
             'action': 'BUY',
             'location': 'market',
-            'parameters': {'item': 'tool_upgrade', 'quantity': 1},
+            'parameters': {'item': 'pumpkin_seeds', 'quantity': 1},
         }
 
         accepted = self.client.post('/tasks', json=request)
@@ -207,13 +207,17 @@ class TaskRouteTests(unittest.TestCase):
 
         stocked_world = default_world()
         stocked_world['robots'][1]['game']['money'] = 100
+        next(
+            item for item in stocked_world['market']['items']
+            if item['id'] == 'pumpkin_seeds'
+        )['stock'] = 1
         stock_store = WorldStore(stocked_world)
         with TestClient(create_app(world_store=stock_store)) as client:
             client.post('/game/start')
             out_of_stock = client.post('/tasks', json={
                 **request,
                 'request_id': 'request-buy-stock',
-                'parameters': {'item': 'tool_upgrade', 'quantity': 2},
+                'parameters': {'item': 'pumpkin_seeds', 'quantity': 2},
             })
 
         self.assertEqual(insufficient_funds.status_code, 409)
