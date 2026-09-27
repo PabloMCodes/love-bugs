@@ -13,6 +13,14 @@ body {
     font-family: Arial, sans-serif;
 }
 
+.app-background {
+    background-color: #000c38;
+    background-image: url('/assets/ui/app-background.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
 .robot-cloud-card {
     isolation: isolate;
     clip-path: polygon(
