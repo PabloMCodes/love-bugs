@@ -1,6 +1,8 @@
 """Small transactional store using SQL common to SQLite and PostgreSQL."""
 import json
 import sqlite3
+import re
+from pathlib import Path
 from datetime import timezone
 from contextlib import contextmanager
 
@@ -8,20 +10,41 @@ from app.config import Settings
 from app.persistence.models import Event, Pose, PositionSample
 
 
+class DatabaseSetupError(RuntimeError):
+    """Actionable setup failures that never include credentials or server errors."""
+
+
+def require_timescale(conn):
+    row = conn.execute("SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'").fetchone()
+    version = re.fullmatch(r'(\d+)\.(\d+)(?:\..*)?', row[0]) if row else None
+    if not version or tuple(map(int, version.groups())) < (2, 13):
+        raise DatabaseSetupError('PostgreSQL requires TimescaleDB 2.13 or newer; enable or upgrade the extension on the service.')
+    return row[0]
+
+
 class Store:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.postgres = bool(settings.database_url)
 
+    def sqlite_file(self):
+        value = self.settings.sqlite_path
+        if not value or value == ':memory:' or value.startswith('file:'):
+            raise DatabaseSetupError('SQLITE_PATH must be a persistent file path; in-memory/URI databases are unsupported.')
+        return Path(value).expanduser().resolve()
+
     @contextmanager
-    def connection(self):
+    def connection(self, *, read_only=False):
         if self.postgres:
             import psycopg
             conn = psycopg.connect(self.settings.database_url, connect_timeout=10)
         else:
-            conn = sqlite3.connect(self.settings.sqlite_path, timeout=10)
+            path = self.sqlite_file()
+            conn = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=10) if read_only else sqlite3.connect(path, timeout=10)
         try:
             with conn:
+                if read_only and self.postgres:
+                    conn.execute('SET TRANSACTION READ ONLY')
                 yield conn
         finally:
             conn.close()
@@ -30,12 +53,13 @@ class Store:
         return conn.execute(sql.replace("?", "%s") if self.postgres else sql, params)
 
     def initialize(self):
+        if not self.postgres:
+            self.sqlite_file().parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as conn:
             if self.postgres:
                 # Serialize schema migration across simultaneous server starts.
                 conn.execute("SELECT pg_advisory_xact_lock(70624001)")
-                if not conn.execute("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'").fetchone():
-                    raise RuntimeError("PostgreSQL requires the TimescaleDB extension (2.13+).")
+                require_timescale(conn)
             conn.execute("""CREATE TABLE IF NOT EXISTS world_state (
                 session_id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)""")
             conn.execute("""CREATE TABLE IF NOT EXISTS robot_events (
@@ -75,6 +99,37 @@ class Store:
                 ON robot_events (session_id, robot_id, timestamp DESC, id DESC)""")
             conn.execute("""CREATE INDEX IF NOT EXISTS events_recent
                 ON robot_events (session_id, timestamp DESC, id DESC)""")
+
+    def check(self):
+        """Read-only connectivity/schema check. Does not initialize or create a session."""
+        columns = {
+            'world_state': 'session_id, snapshot',
+            'robot_events': 'session_id, id, timestamp, type, robot_id, task_id, message, data',
+            'robot_positions': 'session_id, robot_id, timestamp, source, x, y, heading',
+            'event_ids': 'session_id, id',
+            'event_order': 'session_id, id, revision, ordinal',
+        }
+        with self.connection(read_only=True) as conn:
+            version = require_timescale(conn) if self.postgres else None
+            for table, names in columns.items():
+                try:
+                    conn.execute(f'SELECT {names} FROM {table} LIMIT 0')
+                except Exception:
+                    raise DatabaseSetupError(
+                        f'Table {table} is missing, incompatible or inaccessible; run the init command and check database permissions.'
+                    ) from None
+            hypertables = []
+            if self.postgres:
+                rows = conn.execute("""SELECT h.hypertable_name
+                    FROM timescaledb_information.hypertables h
+                    JOIN pg_namespace n ON n.nspname = h.hypertable_schema
+                    JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = h.hypertable_name
+                    WHERE c.oid IN (to_regclass('robot_events'), to_regclass('robot_positions'))""").fetchall()
+                hypertables = sorted(row[0] for row in rows)
+                if hypertables != ['robot_events', 'robot_positions']:
+                    raise DatabaseSetupError('History tables are not TimescaleDB hypertables; run the init command.')
+            return {'backend': 'postgresql' if self.postgres else 'sqlite', 'ready': True,
+                    'timescaledb_version': version, 'tables': sorted(columns), 'hypertables': hypertables}
 
     def commit(self, world: dict, events: list[Event], positions: list[PositionSample]):
         """Atomically publish validated state and its history; errors roll back all writes.
@@ -124,6 +179,8 @@ class Store:
                          if self.postgres else "BEGIN")
             row = self.execute(conn, "SELECT snapshot FROM world_state WHERE session_id = ?",
                                (session_id,)).fetchone()
+            if row is None:
+                raise KeyError(session_id)
             world = json.loads(row[0])
             world["events"] = self.recent_events(session_id, conn=conn)
             return world

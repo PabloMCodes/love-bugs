@@ -495,6 +495,8 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 export SQLITE_PATH=./lovebugs.sqlite3
 unset DATABASE_URL
+.venv/bin/python -m app.persistence init
+.venv/bin/python -m app.persistence check
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -523,6 +525,8 @@ For Tiger Data, export the service's PostgreSQL connection URL locally:
 
 ```sh
 export DATABASE_URL='postgresql://USER:PASSWORD@HOST:PORT/tsdb?sslmode=require'
+.venv/bin/python -m app.persistence init
+.venv/bin/python -m app.persistence check
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -531,7 +535,47 @@ the role must be able to create/alter/read/write tables. Initialization creates
 `robot_events` and `robot_positions` hypertables; their primary keys include
 `timestamp`. A regular event-ID registry enforces session-wide identity, and the
 migration supports the earlier ordinary event-table primary key. There is no
-Tiger API key requirement. `.env` files are not automatically loaded.
+Tiger API key requirement. Startup enforces the minimum version required by the
+[TimescaleDB generalized hypertable API](https://docs.timescale.com/api/latest/hypertable/create_hypertable/).
+
+`init` creates/migrates the five existing tables idempotently and checks the
+result; it does not start a game, clear history, or create an alternate data model.
+`check` is read-only: it checks connectivity, the required columns, and (for
+PostgreSQL) both hypertables. Its JSON output names the backend and readiness,
+without printing connection credentials. A nonzero exit means setup failed.
+SQLite parent directories are created by `init` or server startup; `check` never
+creates a database file. `SQLITE_PATH` must be a file, not `:memory:` or a SQLite
+URI, because the app opens a connection for each transaction.
+
+The five tables are:
+
+| Table | Records |
+| --- | --- |
+| `world_state` | Latest authoritative snapshot per session (including gold, inventory, tasks, market and goal) |
+| `robot_events` | Accepted game events and outcomes, partitioned by time on Tiger |
+| `robot_positions` | Changed pose observations, partitioned by time on Tiger |
+| `event_ids` | Session-wide duplicate-event protection |
+| `event_order` | Revision/ordinal ordering for simultaneous event timestamps |
+
+For an ignored local `backend/.env`, explicit loading is also supported (commands
+below run from `backend`). Put the real URL there locally; never commit it:
+
+```sh
+.venv/bin/python -m app.persistence init --env-file .env
+.venv/bin/python -m app.persistence check --env-file .env
+.venv/bin/python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000
+```
+
+Existing exported shell variables take precedence over the file, including an
+empty `DATABASE_URL`. Unset conflicting variables first. Environment files are
+not automatically discovered. CLI dotenv values are loaded literally (no variable
+interpolation). The game still uses one backend worker and the same APIs.
+
+If setup fails: check the configured URL/service reachability and credentials,
+TimescaleDB 2.13+ installation, and table create/alter/read/write permissions.
+Run `init` for missing or ordinary history tables. No fallback to SQLite occurs
+when a PostgreSQL URL is configured. Initialization does not install or upgrade a
+managed service extension; configure that on the database service.
 
 Insert/read smoke test against the running server:
 
@@ -542,7 +586,9 @@ curl -fsS http://localhost:8000/robots/robot-a/history
 ```
 
 Expect a persisted `game_started` event and an initial position sample. Automated
-verification, including an isolated-schema Tiger test when credentials are set:
+verification, including an isolated-schema Tiger test when credentials are set
+(the Tiger test checks game/economy persistence, rollback, restart history and
+hypertables; it creates and removes only its own random `smoke_...` schema):
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
