@@ -17,6 +17,19 @@ from app.navigation.controller import steer
 
 DEFAULT_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / 'traffic_config.json'
 LOCATIONS = ('homebase', 'farm', 'lake', 'market')
+FULL_CAMERA_LOCATIONS = {
+    'homebase': (.5, .85), 'farm': (.15, .15),
+    'lake': (.15, .85), 'market': (.85, .15),
+}
+
+
+def full_camera_config(width=1280, height=720):
+    """Synthetic layout for explicit unguarded testing, not measured geometry."""
+    return TrafficConfig(frame_width=width, frame_height=height,
+        arena=[0,0,width,height], radii={'robot-a':1,'robot-b':1}, margin=1,
+        service_points={name:[x*width,y*height] for name,(x,y) in FULL_CAMERA_LOCATIONS.items()},
+        waiting_points={name:[x*width,(y+.1 if y < .5 else y-.1)*height]
+                        for name,(x,y) in FULL_CAMERA_LOCATIONS.items()})
 
 
 def distance(a, b):
@@ -109,9 +122,10 @@ class TrafficConfig:
 
 
 class TrafficController:
-    def __init__(self, config, *, ignore_arena_boundary=False):
+    def __init__(self, config, *, ignore_arena_boundary=False, disable_avoidance=False):
         self.config = config
         self.ignore_arena_boundary = ignore_arena_boundary
+        self.disable_avoidance = disable_avoidance
         self.owner = None
         self.last_owner = None
         self.route = []
@@ -216,12 +230,16 @@ class TrafficController:
     def update(self, robots, now, shape, phase):
         cfg = self.config
         commands = {r.profile.robot_id: 'S' for r in robots}
-        if not cfg.calibrated:
+        if not cfg.calibrated and not self.disable_avoidance:
             return self.halt(robots, 'Calibrate traffic_config.json before movement')
         if shape != (cfg.frame_height, cfg.frame_width):
             return self.halt(robots, 'Camera resolution differs from traffic calibration')
         if any(r.pose is None for r in robots):
             return self.halt(robots, 'Both markers required; STOP both, then re-arm')
+        if self.disable_avoidance:
+            self.reason, self.blocked = 'AVOIDANCE OFF: direct targets; both robots may move', False
+            self.owner, self.route, self.last_stop = None, [], None
+            return {r.profile.robot_id: (r.desired if phase == 3 else r.command(now)) for r in robots}
         separation = distance(*(self.point(r) for r in robots))
         if separation <= sum(cfg.radii.values()) + cfg.margin:
             return self.halt(robots, 'Too close: separate robots manually, then re-arm')

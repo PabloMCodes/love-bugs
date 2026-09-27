@@ -185,14 +185,21 @@ def main():
     parser.add_argument('--backend-url', help='Hardware backend URL; enables task/pose/chat bridge')
     parser.add_argument('--ignore-arena-boundary', action='store_true',
                         help='Temporarily allow travel outside the saved arena, within the camera frame')
+    parser.add_argument('--disable-avoidance', action='store_true',
+                        help='Direct driving without arena, building or peer avoidance; tracking/BLE stops remain')
+    parser.add_argument('--layout', choices=('calibrated', 'full-camera'), default='calibrated',
+                        help='full-camera uses preset locations across the live image; requires --disable-avoidance')
     sources = parser.add_mutually_exclusive_group()
     sources.add_argument('--camera', type=int)
     sources.add_argument('--video')
     args = parser.parse_args()
     if args.phase == 4 and args.video:
         parser.error('Phase 4 requires a live camera; prerecorded poses cannot control hardware')
-    if (args.traffic_config or args.backend_url or args.ignore_arena_boundary) and not args.robots_config:
+    if (args.traffic_config or args.backend_url or args.ignore_arena_boundary or
+            args.disable_avoidance or args.layout == 'full-camera') and not args.robots_config:
         parser.error('Traffic and backend integration require --robots-config')
+    if args.layout == 'full-camera' and not args.disable_avoidance:
+        parser.error('--layout full-camera requires --disable-avoidance; it has no measured obstacle geometry')
     if args.phase == 4 and not args.robots_config:
         parser.error('Phase 4 requires --robots-config navigation_robots.json; single-robot mode does not enforce saved boundaries')
     if args.backend_url and args.phase != 4:

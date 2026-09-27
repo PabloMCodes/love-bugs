@@ -164,6 +164,7 @@ class AgentConfig:
 
 @dataclass
 class Settings:
+    hardware_layout: str = field(default_factory=lambda: os.getenv('HARDWARE_LAYOUT', 'calibrated'))
     hardware_traffic_config: str | None = field(
         default_factory=lambda: os.getenv('HARDWARE_TRAFFIC_CONFIG') or None,
     )
@@ -195,6 +196,8 @@ class Settings:
 
     def __post_init__(self):
         self.game_mode = self.game_mode.strip().lower()
+        if self.hardware_layout not in ('calibrated', 'full-camera'):
+            raise ValueError('HARDWARE_LAYOUT must be calibrated or full-camera')
         self.autonomy_provider = self.autonomy_provider.strip().lower()
         if self.game_mode not in ('simulation', 'hardware'):
             raise ValueError('GAME_MODE must be either simulation or hardware')

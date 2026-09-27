@@ -398,6 +398,14 @@ Phase 3 sends no BLE commands. Move robots by hand to exercise different routes.
 
 ## 12. Traffic-protected physical movement
 
+For the separately requested **full-camera direct-driving mode**, use
+`--layout full-camera --disable-avoidance` instead of loading traffic geometry.
+This draws a full-frame grid and preset named points; it disables collision and
+boundary avoidance, including camera-edge clearance. Marker-loss, BLE, and SPACE
+stops remain. See [navigation instructions](backend/app/navigation/README.md#full-camera-preset-and-direct-driving)
+for the command, point coordinates, and matching backend setting. The guarded
+instructions below apply when this bypass is not enabled.
+
 To use saved places instead of clicking targets, select W or E, then press
 1 (homebase), 2 (farm), 3 (lake), or 4 (market), followed by A. This uses the selected
 robot's existing navigation loop and the saved service point. Preview the same

@@ -484,6 +484,12 @@ The adapter checks map agreement before following tasks. Waiting points remain
 local navigation configuration and are not additional game locations. See
 [camera setup](CAMERA_SETUP_GUIDE.md#named-service-and-waiting-points).
 
+Alternatively `HARDWARE_LAYOUT=full-camera` selects normalized preset locations:
+homebase (0.50,0.85), farm (0.15,0.15), lake (0.15,0.85), market (0.85,0.15),
+scaled to existing world map units. It overrides HARDWARE_TRAFFIC_CONFIG in
+hardware mode; navigation must use the matching full-camera preset. No payload
+or schema changes are needed. This option does not certify physical clearance.
+
 These implemented routes are for localization/navigation adapters, not browser controls.
 Teammates can use equivalent in-process calls if components share a process. The
 world schema and frontend routes remain unchanged.

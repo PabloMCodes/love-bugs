@@ -2,6 +2,51 @@
 
 ## Drive to saved places without clicking
 
+### Full-camera preset and direct driving
+
+From backend, run:
+
+```sh
+.venv/bin/python -m app.navigation --camera 1 --phase 4 --robots-config navigation_robots.json --layout full-camera --disable-avoidance
+```
+
+Use phase 3 instead for a no-BLE preview. No traffic JSON is loaded or overwritten
+in this mode. A visible grid covers the frame, with larger labeled destination
+circles. Targets scale with the actual capture resolution:
+
+| Key | Place | Image x / y |
+| --- | --- | --- |
+| 1 | homebase | 50% / 85% |
+| 2 | farm | 15% / 15% |
+| 3 | lake | 15% / 85% |
+| 4 | market | 85% / 15% |
+
+Select W or E, then the number, then A. SPACE stops both. Hardcoded normalized
+locations live in `FULL_CAMERA_LOCATIONS` in `traffic.py`. Waiting points are
+displayed but do not dispatch movement. A resolution change clears targets and
+requires selection/re-arming; keep the camera stationary during a run.
+
+`--disable-avoidance` removes arena/frame clearance, building avoidance, peer
+separation, route reservation and predictive stopping-clearance checks. Both
+robots can move at once. This is direct driving, not collision-protected driving.
+Both visible markers, valid on-image targets, BLE connectivity, pulse timing,
+arrival stopping and emergency stop remain required. The preset is not measured
+geometry, so it requires the explicit avoidance-off flag instead of silently
+marking itself calibrated. Existing reviewed-calibration requirements remain in
+normal mode. You may also use --disable-avoidance with the saved layout; it does
+not remove validation of the saved configuration itself.
+
+For agent/backend operation, start the backend with `GAME_MODE=hardware` and
+`HARDWARE_LAYOUT=full-camera`, plus the usual autonomy settings, and add
+`--backend-url http://127.0.0.1:8000` to navigation. This backend setting takes
+precedence over HARDWARE_TRAFFIC_CONFIG and maps the same normalized locations to
+world units. Restart the backend after changing it. In backend mode task following
+replaces local number keys, with the existing deliberate A session enable.
+
+Omit both options to return to the saved calibrated layout and normal avoidance.
+
+### Saved calibrated layout
+
 For temporary local testing, append `--ignore-arena-boundary` to the fleet command.
 This permits travel outside the saved arena rectangle while retaining camera-frame
 clearance, buildings, peer separation, calibration review, marker-loss and BLE stops.

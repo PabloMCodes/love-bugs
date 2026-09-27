@@ -11,6 +11,16 @@ snapshot. Game behavior is unchanged.
 
 ### Named destination selection
 
+Latest user-requested mode: `--layout full-camera --disable-avoidance` draws a
+full-frame grid and preset service points without loading/modifying traffic JSON.
+`FULL_CAMERA_LOCATIONS` defines fractional coordinates; they scale to live capture
+dimensions. Robot targets clear and disarm on resolution changes. Destination
+circles/labels were enlarged. The bypass removes boundary/building/peer/reservation
+and predictive-clearance logic, allowing simultaneous direct driving, while
+tracking/BLE/SPACE/arrival stops remain. Pair backend mode with
+`HARDWARE_LAYOUT=full-camera` (takes priority over the saved config). Omitting the
+options preserves normal calibrated behavior. Physical verification is pending.
+
 Temporary operator-requested override: `--ignore-arena-boundary` permits fleet
 travel outside the saved arena while keeping the robot inside the camera frame
 with clearance. Building/peer checks and all existing stop gates remain. The

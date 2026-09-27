@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.config import NavigationConfig, NavigationRobot
 from app.navigation.fleet import RobotControl
 from app.navigation.controller import steer
-from app.navigation.traffic import TrafficConfig, TrafficController, segment_distance
+from app.navigation.traffic import TrafficConfig, TrafficController, segment_distance, full_camera_config
 from app.navigation.backend import BackendBridge
 from app.state import WorldStore, default_world
 from app.main import create_app
@@ -28,6 +28,27 @@ def config():
 
 
 class TrafficTests(unittest.TestCase):
+    def test_avoidance_off_drives_directly_but_marker_loss_stops_both(self):
+        c = replace(config(),calibrated=False,arena=[200,100,800,700],
+                    obstacles=[[100,150,500,250]])
+        robots = [robot('robot-a',100,200,(700,200)),robot('robot-b',120,200,(700,200))]
+        for r in robots:
+            r.desired = r.geometry.command
+        t = TrafficController(c,disable_avoidance=True)
+        self.assertEqual(t.update(robots,10,(800,1000),4),{'robot-a':'F','robot-b':'F'})
+        self.assertFalse(t.blocked)
+        robots[0].pose = None
+        self.assertEqual(set(t.update(robots,10.1,(800,1000),4).values()),{'S'})
+        self.assertFalse(any(r.gate.armed for r in robots))
+
+    def test_full_camera_preset_scales_to_resolution_and_backend_map(self):
+        for width,height in ((640,480),(1920,1080)):
+            c = full_camera_config(width,height)
+            self.assertEqual(c.arena,[0,0,width,height])
+            self.assertEqual(c.service_points['homebase'],[.5*width,.85*height])
+            self.assertEqual(c.world_locations(100,100)['farm'],{'x':15.,'y':15.})
+            self.assertFalse(c.calibrated)  # A preset is never a measured calibration.
+
     def test_temporary_boundary_override_keeps_peer_building_and_frame_checks(self):
         c = replace(config(),arena=[200,100,800,700],obstacles=[[400,200,450,250]])
         normal = TrafficController(c)

@@ -9,7 +9,7 @@ import cv2
 from app.navigation.__main__ import CameraWorker, draw
 from app.navigation.controller import MotionGate, steer
 from app.robots.client import BleController
-from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, LOCATIONS, TrafficConfig, TrafficController
+from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, LOCATIONS, TrafficConfig, TrafficController, full_camera_config
 from app.navigation.backend import BackendBridge, TaskFollower
 from app.navigation.calibrate import draw_destinations
 
@@ -143,16 +143,22 @@ async def run_fleet(args, profiles):
     robots = [RobotControl(profile, args.phase) for profile in profiles]
     selected = 0
     traffic_path = (getattr(args, 'traffic_config', None) or DEFAULT_TRAFFIC_CONFIG).resolve()
-    config = TrafficConfig.load(traffic_path)
+    full_camera = getattr(args, 'layout', 'calibrated') == 'full-camera'
+    disable_avoidance = getattr(args, 'disable_avoidance', False)
+    config = full_camera_config() if full_camera else TrafficConfig.load(traffic_path)
     ignore_boundary = getattr(args, 'ignore_arena_boundary', False)
-    traffic = TrafficController(config, ignore_arena_boundary=ignore_boundary)
-    if ignore_boundary:
+    traffic = TrafficController(config, ignore_arena_boundary=ignore_boundary,
+                                disable_avoidance=disable_avoidance)
+    if disable_avoidance:
+        logging.warning('AVOIDANCE OFF: no arena, building, peer or stopping-clearance checks')
+    elif ignore_boundary:
         logging.warning('Saved arena boundary DISABLED for this run; camera-frame, building and peer clearance remain active')
     destinations = DestinationController(robots, config)
     logging.info('Traffic configuration: %s | calibrated=%s | arena=%s | buildings=%d | frame=%sx%s',
-                 traffic_path, config.calibrated, config.arena, len(config.obstacles),
+                 'full-camera preset (saved file not loaded)' if full_camera else traffic_path,
+                 config.calibrated, config.arena, len(config.obstacles),
                  config.frame_width, config.frame_height)
-    if not config.calibrated:
+    if not config.calibrated and not disable_avoidance:
         logging.warning('Traffic calibration is not reviewed: all motion will remain STOPPED')
     backend_url = getattr(args, 'backend_url', None)
     if backend_url:
@@ -237,6 +243,18 @@ async def run_fleet(args, profiles):
                 break
             sample = worker.snapshot()
             now = time.monotonic()
+            if full_camera and sample and sample[1].shape[:2] != (config.frame_height, config.frame_width):
+                height, width = sample[1].shape[:2]
+                config = full_camera_config(width, height)
+                traffic.config = destinations.config = config
+                for robot in robots:
+                    robot.gate.stop()
+                    robot.target = None
+                if bridge:
+                    bridge.traffic = config
+                    follower.stop(robots)
+                    follower.keys.clear()
+                logging.info('Full-camera layout: %sx%s; targets cleared, select again and re-arm', width, height)
             for robot in robots:
                 robot.observe(sample, now, args.phase)
             world = bridge.current(now) if bridge else None
@@ -273,7 +291,9 @@ async def run_fleet(args, profiles):
                       'W WALL-Y | E Eeva | 1 home 2 farm 3 lake 4 market | A arm | SPACE stop | Q quit')]
             if traffic:
                 lines.append('TRAFFIC: ' + traffic.reason)
-                if ignore_boundary:
+                if disable_avoidance:
+                    lines.append('AVOIDANCE OFF | SPACE stops BOTH')
+                elif ignore_boundary:
                     lines.append('ARENA BOUNDARY OFF | saved rectangle is reference only')
             if bridge:
                 lines.append('BACKEND: ' + (bridge.error or ('armed for tasks' if follower.session else 'press A to enable tasks')))
@@ -295,6 +315,11 @@ async def run_fleet(args, profiles):
                 last_log, last_state = now, state
             if sample:
                 frame = sample[1].copy()
+                if full_camera:
+                    height, width = frame.shape[:2]
+                    for index in range(1,10):
+                        cv2.line(frame,(width*index//10,0),(width*index//10,height-1),(70,70,70),1)
+                        cv2.line(frame,(0,height*index//10),(width-1,height*index//10),(70,70,70),1)
                 draw_destinations(frame, config)
                 for index, robot in enumerate(robots):
                     target = robot.target if args.phase >= 2 else None
@@ -302,7 +327,7 @@ async def run_fleet(args, profiles):
                     if target:
                         cv2.putText(frame, robot.profile.name, (int(target[0]) + 15, int(target[1])),
                                     cv2.FONT_HERSHEY_SIMPLEX, .6, COLORS[index], 2)
-                if traffic:
+                if traffic and not disable_avoidance:
                     for robot in robots:
                         if robot.pose:
                             cv2.circle(frame, (int(robot.pose.center_x),int(robot.pose.center_y)),

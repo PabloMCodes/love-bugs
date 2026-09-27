@@ -36,6 +36,13 @@ onboard motor watchdog belongs in that firmware.
 
 ## Runtime mode
 
+`HARDWARE_LAYOUT=full-camera` selects preset destinations over the full camera image
+in hardware mode, taking precedence over HARDWARE_TRAFFIC_CONFIG. Pair it with
+navigation `--layout full-camera --disable-avoidance`. Locations are homebase
+(50,85), farm (15,15), lake (15,85), market (85,15) on the 100×100 world map.
+The default `HARDWARE_LAYOUT=calibrated` retains the saved/default map behavior.
+Simulation is unaffected. See navigation README for the direct-driving limitations.
+
 For calibrated physical destinations, set `HARDWARE_TRAFFIC_CONFIG=./traffic_config.json`
 when starting the hardware backend. Use the same saved file with navigation's
 `--traffic-config` (copy it to the backend laptop if needed). The backend loads its

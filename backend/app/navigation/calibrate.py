@@ -25,9 +25,11 @@ def draw_destinations(frame, config):
                                 ('wait', config.waiting_points, (255,200,0))):
         for name, point in points.items():
             x, y = map(int, point)
-            cv2.circle(frame, (x,y), 8, color, 2)
-            cv2.putText(frame, f'{name} {kind}', (x+12,y),
-                        cv2.FONT_HERSHEY_SIMPLEX, .5, color, 2)
+            cv2.circle(frame, (x,y), 16, color, 3)
+            cv2.putText(frame, f'{name} {kind}', (x+20,y),
+                        cv2.FONT_HERSHEY_SIMPLEX, .7, (0,0,0), 5)
+            cv2.putText(frame, f'{name} {kind}', (x+20,y),
+                        cv2.FONT_HERSHEY_SIMPLEX, .7, color, 2)
 
 
 def rectangle(start, end, width, height):

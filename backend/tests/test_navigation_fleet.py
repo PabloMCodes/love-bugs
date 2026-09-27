@@ -175,7 +175,8 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(r.gate.armed)
             r.ble.send.assert_awaited_once_with('S', force=True)
 
-    async def run_ui(self, keys, phase=4, connect_error=False, traffic_config=None):
+    async def run_ui(self, keys, phase=4, connect_error=False, traffic_config=None,
+                     layout='calibrated', disable_avoidance=False):
         worker = Mock(error=None, done=False)
         peer = pose(1)
         peer.center_x, peer.center_y = 500, 300
@@ -207,14 +208,18 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(RuntimeError, 'second connection'):
                     await run_fleet(SimpleNamespace(phase=phase, video=None, camera=0), profiles())
             else:
-                await run_fleet(SimpleNamespace(phase=phase, video=None, camera=0), profiles())
+                await run_fleet(SimpleNamespace(phase=phase, video=None, camera=0,
+                                               layout=layout, disable_avoidance=disable_avoidance), profiles())
             if phase < 4:
                 factory.assert_not_called()
                 connect.assert_not_awaited()
             else:
                 connect.assert_awaited_once()
             worker.thread.start.assert_called_once()
-            load_traffic.assert_called_once_with(DEFAULT_TRAFFIC_CONFIG.resolve())
+            if layout == 'full-camera':
+                load_traffic.assert_not_called()
+            else:
+                load_traffic.assert_called_once_with(DEFAULT_TRAFFIC_CONFIG.resolve())
         return clients
 
     async def test_default_fleet_loads_config_and_blocks_unreviewed_calibration(self):
@@ -283,6 +288,14 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([(call.args[0].profile.robot_id,call.args[1:])
                           for call in select.call_args_list],
                          [('robot-a',(300,100)),('robot-b',(300,300))])
+
+    async def test_full_camera_keys_use_live_dimensions_without_loading_saved_file(self):
+        with patch.object(RobotControl,'set_target',autospec=True) as select:
+            await self.run_ui(['w','1','e','4','q'],phase=3,
+                              layout='full-camera',disable_avoidance=True)
+        self.assertEqual([(call.args[0].profile.robot_id,call.args[1:])
+                          for call in select.call_args_list],
+                         [('robot-a',(300.,340.)),('robot-b',(510.,60.))])
 
 
 if __name__ == '__main__':

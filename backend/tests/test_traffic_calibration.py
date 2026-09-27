@@ -24,6 +24,16 @@ def destinations():
 
 
 class CalibrationTests(unittest.TestCase):
+    def test_full_camera_backend_uses_preset_without_saved_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Settings(game_mode='hardware',hardware_layout='full-camera',
+                hardware_traffic_config='/missing/config.json',database_url=None,
+                sqlite_path=str(Path(directory)/'preset.sqlite3'))
+            with TestClient(create_app(settings=settings,run_simulator=False)) as client:
+                world = client.get('/world').json()
+                self.assertEqual(world['map']['locations']['homebase'],{'x':50.,'y':85.})
+                self.assertEqual(world['map']['locations']['market'],{'x':85.,'y':15.})
+
     def test_reverse_drag_clipping_and_small_boxes(self):
         self.assertEqual(rectangle((120,90),(-5,10),100,80),[0,10,100,80])
         with self.assertRaises(ValueError):
