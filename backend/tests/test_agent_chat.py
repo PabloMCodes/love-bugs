@@ -1,12 +1,13 @@
 import asyncio
 from copy import deepcopy
 import unittest
+from hashlib import sha256
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.agents.__main__ import demo_world
-from app.agents.chat import AgentChat
+from app.agents.chat import AgentChat, conversation_focus
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.planner import Decision, MockPlanner
 from app.api.agent_chat import DiscussionRequest, DiscussionService
@@ -19,8 +20,9 @@ class ChatTests(unittest.TestCase):
         chat = AgentChat()
         world = demo_world()
         decision = Decision(action='WAIT', reason='Planning', message='Can you cover the lake?')
-        for _ in range(105):
-            chat.publish(world, 'robot-a', decision, status='proposed')
+        for index in range(105):
+            unique = decision.model_copy(update={'message': sha256(str(index).encode()).hexdigest()})
+            chat.publish(world, 'robot-a', unique, status='proposed')
         self.assertEqual(len(chat.snapshot()['messages']), 100)
         self.assertEqual(len(chat.context(world)['agent_messages']), 20)
         world['session_id'] = 'new-game'
@@ -45,6 +47,40 @@ class ChatTests(unittest.TestCase):
             {'item': 'seeds', 'plot_id': 'plot-2'},
         )
 
+    def test_repeated_speech_is_silent_but_new_trade_details_are_not(self):
+        chat = AgentChat()
+        world = demo_world()
+        decision = Decision(action='SELL', location='market', item='fish', quantity=1,
+                            reason='Earn gold', message='I’ll sell my fish while you collect.')
+        chat.publish(world, 'robot-a', decision, status='accepted')
+        revision = chat.revision
+        chat.publish(world, 'robot-a', decision.model_copy(update={
+            'message': 'I’ll sell my fish while you collect!',
+        }), status='accepted')
+        self.assertEqual(chat.revision, revision)
+        chat.publish(world, 'robot-a', decision.model_copy(update={'quantity': 2}), status='accepted')
+        chat.publish(world, 'robot-b', decision, status='accepted')
+        self.assertEqual(len(chat.messages), 3)
+        chat.publish(world, 'robot-a', decision.model_copy(update={'message': None}), status='accepted')
+        self.assertEqual(len(chat.messages), 3)
+
+    def test_focus_separates_peer_requests_and_confirmed_events(self):
+        world = demo_world()
+        world['agent_messages'] = [
+            {'robot_id': 'robot-b', 'text': 'Old request'},
+            {'robot_id': 'robot-a', 'text': 'I’ll cover the farm'},
+            {'robot_id': 'robot-b', 'text': 'Can you keep collecting while I sell?', 'status': 'accepted'},
+        ]
+        world['events'] = [{'type': 'task_completed', 'robot_id': 'robot-a', 'message': 'Harvest finished',
+                            'data': {'large_unneeded_payload': 'ignored'}}] * 12
+        before = deepcopy(world)
+        focus = conversation_focus(world, 'robot-a')
+        self.assertEqual(len(focus['peer_messages_since_your_last_public_message']), 1)
+        self.assertEqual(len(focus['your_recent_messages']), 1)
+        self.assertEqual(len(focus['recent_confirmed_events']), 10)
+        self.assertNotIn('data', focus['recent_confirmed_events'][0])
+        self.assertEqual(world, before)
+
     def test_routes_and_websocket_replay(self):
         service = DiscussionService(AgentConfig(interval_seconds=.001))
         with TestClient(create_app(service)) as client:
@@ -63,6 +99,22 @@ class ChatTests(unittest.TestCase):
 
 
 class DiscussionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_duplicate_chat_does_not_prevent_task_submission(self):
+        world = demo_world()
+        orchestrator = AgentOrchestrator(MockPlanner(), interval=.001)
+        submitted = []
+        async def submit(session_id, request):
+            submitted.append(request)
+            return True
+        await orchestrator.tick(lambda: world, submit)
+        await asyncio.sleep(.002)
+        await orchestrator.tick(lambda: world, submit)
+        await asyncio.sleep(.002)
+        before = len(orchestrator.chat.messages)
+        await orchestrator.tick(lambda: world, submit)
+        self.assertEqual(len(submitted), 6)
+        self.assertEqual(len(orchestrator.chat.messages), before)
+
     async def test_peer_message_delivery_without_executing_tasks(self):
         service = DiscussionService(AgentConfig(interval_seconds=.001))
         heard = []

@@ -1,0 +1,24 @@
+{
+  "robot-a": {
+    "name": "WALL-Y",
+    "camera_index": 0,
+    "marker_id": 0,
+    "heading_offset_degrees": 0,
+    "invert_turns": false,
+    "ble_device": "WALL-Y",
+    "ble_direct_address": false,
+    "ble_characteristic": "abcdefab-1234-5678-1234-abcdefabcdef",
+    "ble_write_response": false
+  },
+  "robot-b": {
+    "name": "Eeva",
+    "camera_index": 0,
+    "marker_id": 1,
+    "heading_offset_degrees": 0,
+    "invert_turns": false,
+    "ble_device": "Eeva",
+    "ble_direct_address": false,
+    "ble_characteristic": "abcdefab-1234-5678-1234-abcdefabcdef",
+    "ble_write_response": false
+  }
+}

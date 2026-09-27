@@ -38,7 +38,8 @@ class Decision(BaseModel):
     accepted: bool | None = None
     reason: str = Field(min_length=1, max_length=300)
 
-    message: str | None = Field(default=None, min_length=1, max_length=300)
+    message: str | None = Field(default=None, min_length=1, max_length=300,
+                                description='Optional useful public dialogue; null when there is nothing new to say.')
 
     @model_validator(mode='after')
     def check_parameters(self):
@@ -354,6 +355,21 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
 class MockPlanner:
     """Explicit offline demo policy, never a silent substitute for Gemini."""
 
+    async def converse(self, world, robot_id, opener, topic):
+        pairs = (
+            ('If I had legs, I’d be quite tired by now.', 'Wheels were an excellent life choice.'),
+            ('Do you think a wheel can have a favorite direction?', 'Mine seem pretty attached to forward.'),
+            ('I think I’d look good in a tiny hat.', 'As long as it doesn’t cover your marker.'),
+            ('Would a robot picnic need a blanket?', 'Only if we invite the crumbs.'),
+            ('I could get used to this little world.', 'It’s a good size for the two of us.'),
+            ('If we had pockets, what would you keep in yours?', 'A spare pocket. Just in case.'),
+            ('Do you ever wish you could skip?', 'I’d settle for a dignified little wobble.'),
+            ('I’ve decided rolling counts as dancing.', 'Then we’ve been rehearsing all day.'),
+            ('A tiny bench would look nice here.', 'We could park beside it very thoughtfully.'),
+            ('I wonder if fish think we’re strange.', 'We do bring our own wheels everywhere.'),
+        )
+        return pairs[topic % len(pairs)][1 if opener else 0]
+
     async def decide(self, world: dict, robot_id: str) -> Decision:
         robot = get_robot(world, robot_id)
         pending_unlock = next(
@@ -468,7 +484,7 @@ class MockPlanner:
             if quantity > 0 and valid_price(inventory_sell_price(world, robot, item_id)):
                 return Decision(action='SELL', location='market', item=item_id,
                                 quantity=quantity, reason='Sell inventory toward our shared gold goal.',
-                                message='I propose selling my inventory. Can you keep collecting resources?')
+                                message=f'I’ll sell {quantity} {item_id} from my inventory while you keep collecting.')
         claimed_plots = {
             candidate['task']['parameters'].get('plot_id')
             for candidate in world['robots']
@@ -622,9 +638,19 @@ class MockPlanner:
                         ),
                         reason='Buy one seed for available farm capacity.',
                     )
+        peer = next(
+            (
+                message for message in reversed(heard)
+                if message.get('robot_id') != robot_id
+            ),
+            None,
+        )
+        message = 'I’ll fish while no crop is ready.'
+        if peer and peer.get('action') == 'SELL':
+            message = 'I’ll keep collecting at the lake while you sell.'
         return Decision(
             action='FISH',
             location='lake',
-            message=f'{reply}I propose fishing while no crop is ready.',
+            message=message,
             reason='Collect fish while waiting for a ready farm plot.',
         )

@@ -567,12 +567,31 @@ Messages are broadcasts to teammates and spectators. Sender identity comes from
 the planner's assigned robot, not model-generated IDs. Gemini decisions may include
 an optional `message` string (1–300 characters); it is kept out of task request
 parameters. Planners receive the latest 20 messages as `agent_messages`. The
-in-process orchestrator also exposes `chat.snapshot()`, publishing `accepted` or
+Gemini adapter also highlights the robot's recent speech, peer messages since
+its last public message, and up to ten recent confirmed world events. Public
+speech is optional: unchanged plans may produce no message. Near-duplicate
+speech for the same robot/action/trade/status is suppressed against its six
+most recent messages without suppressing task execution. Consumers must not
+assume one chat message per accepted task or use chat as the task audit trail.
+The in-process orchestrator also exposes `chat.snapshot()`, publishing `accepted` or
 `waiting` messages after validation and task acceptance. Trade proposals carry
 `{ "item": "...", "quantity": 1 }` in `parameters`; other proposals use an empty
 object. The preview emits only `proposed` messages. They are not confirmations of
 execution; clients must submit them through normal task validation and wait for
 the authoritative world snapshot.
+
+Backend autonomy may also publish occasional social exchanges, including while
+robots are busy. These messages add `kind: "banter"` and use
+`status: "conversation"`, `action: "WAIT"`, `location: null`, and empty parameters.
+That WAIT is a compatibility field, not a task decision: banter never submits
+tasks or alters an active task. The UI hides task labels for these messages.
+After roughly 12 seconds without speech, an exchange may start; one peer reply
+is scheduled four seconds after the opener, plus generation/polling latency.
+Exchange starts are spaced at least 35 seconds apart. New assignments or
+coordination interrupt pending banter. Stop, completion, session reset, or
+unhealthy robots cancel it. Timing defaults live in `app/agents/banter.py`.
+Gemini mode uses at most two extra model calls per exchange, with an eight-second
+timeout per line and no tools. Mock mode uses paired scripted dialogue.
 
 The preview has one shared room and retains 100 messages in memory. New session
 IDs, provider switches, or process restarts clear history. Replace received

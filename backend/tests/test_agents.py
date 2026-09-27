@@ -486,6 +486,9 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(captured), 1)
             self.assertIn('robot-a', captured[0].contents[-1].parts[0].text)
             self.assertIn('Can you cover the farm?', captured[0].contents[-1].parts[0].text)
+            payload = json.loads(captured[0].contents[-1].parts[0].text)
+            self.assertEqual(payload['conversation_focus']['peer_messages_since_your_last_public_message'][0]['text'],
+                             'Can you cover the farm?')
             self.assertEqual(decision.action, 'HARVEST')
             sessions = await planner.sessions.list_sessions(app_name='love_bugs', user_id='robot-a')
             self.assertEqual(sessions.sessions, [])

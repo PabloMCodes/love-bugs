@@ -413,6 +413,16 @@ References: [Google ADK](https://google.github.io/adk-docs/agents/llm-agents/) a
 
 ## Live spectator conversation
 
+The autonomous backend also allows occasional short social exchanges during
+quiet stretches, even while robots have active tasks. Coordination takes priority:
+new task activity or work messages cancel pending banter. The default cadence is
+12 seconds of quiet before an opener, four seconds before its reply, and at least
+35 seconds between exchange starts (plus model latency). These defaults are in
+`app/agents/banter.py`. Banter is conversation-only and cannot issue tasks; it
+stops with the game or unhealthy robot state. Gemini generates the dialogue;
+mock mode uses a small rotating set of paired lines. The standalone discussion
+preview does not run this ambient scheduler.
+
 Run the chat API from `backend` in a terminal with your exported Gemini API key:
 
 ```sh

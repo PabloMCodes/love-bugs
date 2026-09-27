@@ -6,7 +6,7 @@ import time
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, Field, ConfigDict
 
 from app.agents.chat import AgentChat
 from app.agents.orchestrator import api_error_summary
@@ -142,8 +142,47 @@ class DiscussionService:
             return self.snapshot()
 
 
-def create_router(service):
+class TrafficReport(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    session_id: str = Field(min_length=1, max_length=100)
+    event_id: str = Field(min_length=1, max_length=100)
+    winner: Literal['robot-a', 'robot-b']
+    yielder: Literal['robot-a', 'robot-b']
+    detour: bool
+
+
+def create_router(service, store=None):
     router = APIRouter(prefix='/agent-chat', tags=['agent-chat'])
+
+    traffic_seen = set()
+    traffic_session = None
+
+    @router.post('/traffic')
+    async def traffic(report: TrafficReport):
+        nonlocal traffic_session
+        if store is None:
+            raise HTTPException(503, 'World store unavailable')
+        world = store.snapshot().model_dump(mode='json')
+        if world['mode'] != 'hardware' or world['session_id'] != report.session_id:
+            raise HTTPException(409, 'Traffic report requires the current hardware session')
+        if report.winner == report.yielder:
+            raise HTTPException(422, 'Traffic participants must be different')
+        if traffic_session != report.session_id:
+            traffic_seen.clear()
+            traffic_session = report.session_id
+        if report.event_id not in traffic_seen:
+            if len(traffic_seen) >= 10000:
+                raise HTTPException(429, 'Traffic event limit reached for this session')
+            from app.agents.planner import Decision
+            names = {r['id']:r['name'] for r in world['robots']}
+            text = (f"{names[report.yielder]}, I'll take the clear route around you. Hold there a moment."
+                    if report.detour else f"{names[report.yielder]}, I'll go first. Could you hold there?")
+            for robot_id, message in ((report.winner, text),
+                    (report.yielder, "You've got it. I'll wait until you're clear, then take my turn.")):
+                service.chat.publish(world, robot_id, Decision(action='WAIT', reason='Local traffic reservation', message=message),
+                                     status='traffic', kind='traffic')
+            traffic_seen.add(report.event_id)
+        return {'accepted': True}
 
     @router.post('/round')
     async def discuss(request: DiscussionRequest):

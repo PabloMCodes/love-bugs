@@ -60,6 +60,7 @@ class NavigationConfig:
     ble_device: str = ''
     ble_characteristic: str = ''
     ble_write_response: bool = True
+    ble_direct_address: bool = False
 
     def __post_init__(self):
         if type(self.marker_id) is not int or not 0 <= self.marker_id < 50:
@@ -84,11 +85,43 @@ class NavigationConfig:
             raise ValueError('Target coordinates must be nonnegative')
         if type(self.invert_turns) is not bool or type(self.ble_write_response) is not bool:
             raise ValueError('Turn inversion and BLE response settings must be booleans')
+        if type(self.ble_direct_address) is not bool:
+            raise ValueError('ble_direct_address must be a boolean')
 
 
 def load_navigation_config(path: str | Path) -> NavigationConfig:
     with open(path) as file:
         return NavigationConfig(**json.load(file))
+
+
+@dataclass(frozen=True)
+class NavigationRobot:
+    robot_id: str
+    name: str
+    config: NavigationConfig
+
+
+def load_navigation_robots(path: str | Path) -> tuple[NavigationRobot, ...]:
+    """Two independent profiles; the existing single-robot config is unchanged."""
+    with open(path) as file:
+        data = json.load(file)
+    if set(data) != {'robot-a', 'robot-b'}:
+        raise ValueError('Two-robot configuration requires robot-a and robot-b')
+    robots = []
+    for robot_id in ('robot-a', 'robot-b'):
+        values = dict(data[robot_id])
+        name = values.pop('name')
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError('Each robot needs a display name')
+        robots.append(NavigationRobot(robot_id, name, NavigationConfig(**values)))
+    if robots[0].config.marker_id == robots[1].config.marker_id:
+        raise ValueError('Robots must have different ArUco marker IDs')
+    devices = [r.config.ble_device.strip().casefold() for r in robots]
+    if not all(devices) or len(set(devices)) != 2:
+        raise ValueError('Robots must have distinct, nonempty BLE devices')
+    if robots[0].config.camera_index != robots[1].config.camera_index:
+        raise ValueError('Both robots must use the same overhead camera')
+    return tuple(robots)
 
 
 def load_vision_config(path: str | Path) -> VisionConfig:

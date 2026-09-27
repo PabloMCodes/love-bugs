@@ -24,20 +24,38 @@ class BleController:
         self.fault = True
         logging.error('BLE disconnected: motion disabled. Firmware must stop motors on link loss.')
 
-    async def connect(self):
+    async def connect(self, *, device=None):
         if not self.config.ble_device or not self.config.ble_characteristic:
             raise ValueError('Set ble_device and ble_characteristic from the working BLE script first')
         if self.client_factory is None:
             from bleak import BleakClient, BleakScanner
             self.client_factory, self.scanner = BleakClient, BleakScanner
         wanted = self.config.ble_device
-        devices = await self.scanner.discover(timeout=5)
-        device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
+        if device is not None:
+            logging.info('BLE connecting to %r (pre-resolved as %s)', wanted, device.address)
+        else:
+            logging.info('BLE connecting to %r (%s)', wanted,
+                         'direct identifier' if self.config.ble_direct_address else 'discovery')
+            if self.config.ble_direct_address:
+                device = wanted
+            else:
+                devices = await self.scanner.discover(timeout=5)
+                device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
         if device is None:
             raise RuntimeError(f'BLE device {wanted!r} not found')
         self.client = self.client_factory(device, disconnected_callback=self._disconnected)
-        await asyncio.wait_for(self.client.connect(), timeout=15)
-        await self.send('S', force=True)
+        try:
+            await asyncio.wait_for(self.client.connect(), timeout=30)
+        except Exception as error:
+            self.fault = True
+            raise RuntimeError(
+                f'BLE connection failed for {wanted!r}: {type(error).__name__}: {error!r}. '
+                'Connection limit is 30s. Check this laptop\'s device ID and close other controllers.'
+            ) from error
+        logging.info('BLE %s connected; sending initial STOP', wanted)
+        # Startup sends only STOP, before any robot can arm. Match the successful
+        # connection-only diagnostic without relaxing deadlines during motion.
+        await self._write('S', timeout=5, stage='initial STOP')
 
     async def send(self, command: str, *, force=False):
         if command not in ('F', 'B', 'L', 'R', 'S'):
@@ -54,17 +72,26 @@ class BleController:
                 return False
             if command == self.last_command and elapsed < self.config.refresh_seconds:
                 return False
+        await self._write(command, timeout=.3, stage=f'command {command}')
+        return True
+
+    async def _write(self, command, *, timeout, stage):
         try:
             await asyncio.wait_for(self.client.write_gatt_char(
                 self.config.ble_characteristic, command.encode('ascii'),
                 response=self.config.ble_write_response,
-            ), timeout=.3)
-        except Exception:
+            ), timeout=timeout)
+        except Exception as error:
             self.fault = True
-            raise
+            detail = (f'BLE {self.config.ble_device!r} {stage} failed '
+                      f'({type(error).__name__}, limit {timeout}s): {error!r}; '
+                      f'characteristic={self.config.ble_characteristic}, '
+                      f'response={self.config.ble_write_response}')
+            if isinstance(error, TimeoutError):
+                raise TimeoutError(detail) from error
+            raise RuntimeError(detail) from error
         self.last_command, self.last_sent = command, self.clock()
-        logging.info('BLE sent %s', command)
-        return True
+        logging.info('BLE %s sent %s', self.config.ble_device, command)
 
     async def close(self):
         if self.client is None:

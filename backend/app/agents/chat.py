@@ -2,7 +2,53 @@
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
+import re
 from uuid import uuid4
+
+
+def conversation_focus(world, robot_id):
+    """Bounded, factual context; public speech is not evidence of task completion."""
+    messages = world.get('agent_messages', [])[-20:]
+    own = [m for m in messages if m.get('robot_id') == robot_id]
+    last_own = next((i for i in range(len(messages) - 1, -1, -1)
+                     if messages[i].get('robot_id') == robot_id), -1)
+    return {
+        'your_recent_messages': own[-4:],
+        'peer_messages_since_your_last_public_message': [
+            m for m in messages[last_own + 1:] if m.get('robot_id') != robot_id
+        ],
+        'recent_confirmed_events': [
+            {key: event[key] for key in ('type', 'robot_id', 'task_id', 'message', 'timestamp')
+             if key in event}
+            for event in world.get('events', [])[-10:]
+        ],
+    }
+
+
+def normalized_message(text):
+    return ' '.join(re.findall(r'\w+', text.casefold()))
+
+
+def decision_parameters(decision):
+    if decision.action in ('BUY', 'SELL'):
+        return {'item': decision.item, 'quantity': decision.quantity}
+    if decision.action == 'HARVEST':
+        return {'plot_id': decision.plot_id}
+    if decision.action == 'PLANT':
+        return {'item': decision.item, 'plot_id': decision.plot_id}
+    if decision.action == 'PROPOSE_UNLOCK':
+        return {'stage': decision.stage, 'contributions': decision.contributions}
+    if decision.action == 'RESPOND_UNLOCK':
+        return {'proposal_id': decision.proposal_id, 'accepted': decision.accepted}
+    if decision.action in ('TRANSFER_MONEY', 'REQUEST_MONEY'):
+        return {'recipient_id': decision.recipient_id, 'amount': decision.amount}
+    if decision.action == 'RESPOND_MONEY':
+        return {
+            'money_request_id': decision.money_request_id,
+            'accepted': decision.accepted,
+        }
+    return {}
 
 
 class AgentChat:
@@ -23,10 +69,20 @@ class AgentChat:
         snapshot['agent_messages'] = deepcopy(self.messages[-20:])
         return snapshot
 
-    def publish(self, world, robot_id, decision, *, status):
+    def publish(self, world, robot_id, decision, *, status, kind=None):
         self.reset(world['session_id'])
         if not decision.message:
             return
+        parameters = decision_parameters(decision)
+        text = normalized_message(decision.message)
+        own = [m for m in self.messages if m['robot_id'] == robot_id][-6:]
+        for previous in ([] if kind == 'traffic' else own):
+            if (previous['action'], previous['location'], previous['parameters'], previous['status']) != (
+                decision.action, decision.location, parameters, status
+            ):
+                continue
+            if SequenceMatcher(None, normalized_message(previous['text']), text).ratio() >= .9:
+                return  # Silence repeated speech, never reject the associated task.
         robot = next(robot for robot in world['robots'] if robot['id'] == robot_id)
         self.messages.append({
             'id': uuid4().hex,
@@ -36,48 +92,9 @@ class AgentChat:
             'text': decision.message,
             'action': decision.action,
             'location': decision.location,
-            'parameters': (
-                {'item': decision.item, 'quantity': decision.quantity}
-                if decision.action in ('BUY', 'SELL')
-                else (
-                    {'plot_id': decision.plot_id}
-                    if decision.action == 'HARVEST'
-                    else (
-                        {'item': decision.item, 'plot_id': decision.plot_id}
-                        if decision.action == 'PLANT'
-                        else (
-                            {
-                                'stage': decision.stage,
-                                'contributions': decision.contributions,
-                            }
-                            if decision.action == 'PROPOSE_UNLOCK'
-                            else (
-                                {
-                                    'proposal_id': decision.proposal_id,
-                                    'accepted': decision.accepted,
-                                }
-                                if decision.action == 'RESPOND_UNLOCK'
-                                else (
-                                    {
-                                        'recipient_id': decision.recipient_id,
-                                        'amount': decision.amount,
-                                    }
-                                    if decision.action in ('TRANSFER_MONEY', 'REQUEST_MONEY')
-                                    else (
-                                        {
-                                            'money_request_id': decision.money_request_id,
-                                            'accepted': decision.accepted,
-                                        }
-                                        if decision.action == 'RESPOND_MONEY'
-                                        else {}
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            ),
+            'parameters': parameters,
             'status': status,
+            **({'kind': kind} if kind else {}),
         })
         self.messages = self.messages[-100:]
         self.revision += 1
