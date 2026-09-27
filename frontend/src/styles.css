@@ -145,3 +145,64 @@ body {
     background: #9c6230;
     border: 2px solid #3a1d0e;
 }
+
+.world-map-board {
+    border: 4px solid #173f1c;
+    background: #4f9f38;
+    box-shadow:
+        0 7px 0 #102d16,
+        inset 0 0 0 3px #86c754;
+    clip-path: polygon(
+        0 4px, 4px 4px, 4px 0,
+        calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
+        100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px),
+        calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px),
+        0 calc(100% - 4px)
+    );
+}
+
+.map-location-marker,
+.map-robot-marker {
+    filter: drop-shadow(0 3px 0 rgb(20 52 25 / 45%));
+    transition: left 180ms linear, top 180ms linear;
+}
+
+.map-location-icon {
+    border: 3px solid #513018;
+    color: #4a2916;
+    background: #e1b96f;
+    box-shadow:
+        inset 0 3px 0 #f2d28e,
+        inset 0 -3px 0 #a36a34;
+    clip-path: polygon(
+        4px 0, calc(100% - 4px) 0,
+        calc(100% - 4px) 4px, 100% 4px,
+        100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px),
+        calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px),
+        0 calc(100% - 4px), 0 4px, 4px 4px
+    );
+}
+
+.map-location-label,
+.map-robot-label {
+    margin-top: -2px;
+    border: 2px solid #422311;
+    color: #fff0c9;
+    background: #75421e;
+    box-shadow: 0 2px 0 #2e170b;
+    white-space: nowrap;
+}
+
+.map-robot-portrait {
+    border: 4px solid #fff3d0;
+    background: #9dd8ef;
+    box-shadow:
+        0 0 0 3px #427a95,
+        inset 0 -5px 0 rgb(55 129 163 / 28%);
+}
+
+.map-robot-label {
+    border-color: #234f66;
+    background: #397b98;
+    box-shadow: 0 2px 0 #173544;
+}
