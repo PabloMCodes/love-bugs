@@ -36,6 +36,63 @@ onboard motor watchdog belongs in that firmware.
 
 ## Runtime mode
 
+### Physical gameplay using the full-camera preset
+
+Use three terminals, preferably on the camera/BLE laptop for the first test. Do
+not run a second vision/navigation/BLE process or standalone agent CLI alongside.
+
+Backend, from `backend`:
+
+```sh
+GAME_MODE=hardware HARDWARE_LAYOUT=full-camera AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock \
+  .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Camera/controller, from `backend`:
+
+```sh
+.venv/bin/python -m app.navigation --camera 1 --phase 4 \
+  --robots-config navigation_robots.json --layout full-camera --disable-avoidance \
+  --backend-url http://127.0.0.1:8000
+```
+
+Frontend, from `frontend`:
+
+```sh
+nvm use
+npm run dev
+```
+
+Wait for both robots to be connected/tracked, click **Start** in the dashboard,
+then focus the camera window and press **A once**. Backend tasks select named
+destinations automatically; no W/E, numbers or clicks are needed. The web map
+follows camera poses. Hardware mode never generates movement. Arrival requires
+fresh frames spanning 0.3 seconds inside target tolerance after STOP was sent.
+Only then do buying/selling/planting happen or fishing/harvesting timers begin.
+Crops grow independently after planting; timers do not estimate travel time.
+
+SPACE stops robots and requests game stop. Q/exit also attempts game stop after
+closing BLE. Failed exit requests are logged; backend telemetry expiry is the
+fallback. After interruption, restart the game as needed and press A again.
+Collision/boundary avoidance is disabled by the command above.
+
+There is no battery/health gameplay or battery display. The existing `/health`
+route supplies only BLE connection/readiness, with battery null. Camera freshness
+and connection checks remain because they are needed for physical control.
+
+For Gemini, change only AUTONOMY_PROVIDER to `gemini` and supply the existing
+GOOGLE_API_KEY/AGENT_MODEL environment. If keys are in ignored `backend/.env`, add
+`--env-file .env` to uvicorn; explicit shell settings above take precedence.
+Both providers use the same task/arrival path.
+
+For multiple laptops, use the backend LAN IP in navigation's --backend-url and
+frontend VITE_API_BASE_URL. Allow the frontend origin via FRONTEND_ORIGINS and
+restart Vite after env changes. The frontend now waits for the backend by default;
+optional offline demos require VITE_LOCAL_DEMO=true. Do not enable that for the
+physical run. Backend simulation mode remains available. No API fields removed.
+
+### Mode and map configuration
+
 `HARDWARE_LAYOUT=full-camera` selects preset destinations over the full camera image
 in hardware mode, taking precedence over HARDWARE_TRAFFIC_CONFIG. Pair it with
 navigation `--layout full-camera --disable-avoidance`. Locations are homebase

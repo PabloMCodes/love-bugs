@@ -1,5 +1,5 @@
 // Compose the game dashboard and share world state with its components.
-import { useWorld } from './hooks/useWorld.js';
+import { useWorld, localDemoEnabled } from './hooks/useWorld.js';
 import MarketPanel from './components/MarketPanel.jsx';
 import RobotPanel from './components/RobotPanel.jsx';
 import WorldMap from './components/WorldMap.jsx';
@@ -17,6 +17,16 @@ export default function App() {
         startSession,
         stopSession,
     } = useWorld();
+
+    if (connection.source !== 'backend' && !localDemoEnabled) {
+        return (
+            <main className="app-background min-h-dvh p-10 text-stone-100">
+                <h1 className="text-3xl font-bold">Love Bugs</h1>
+                <p className="mt-4">Waiting for the game backend…</p>
+                <p className="mt-2 text-sm">{connection.error || 'Connecting to the live world.'}</p>
+            </main>
+        );
+    }
 
     return (
         <main className="app-background h-dvh overflow-hidden px-6 py-4 text-stone-100">
@@ -40,6 +50,11 @@ export default function App() {
                                         : 'Backend reconnecting…'
                             }
                         </p>
+                        {connection.source === 'backend' && (
+                            <p className="text-xs text-stone-300">
+                                {world.mode === 'hardware' ? 'Hardware · camera-driven movement' : 'Backend simulation'}
+                            </p>
+                        )}
                         {connection.error && (
                             <p className="mt-1 max-w-sm text-xs text-stone-400">
                                 {connection.error}

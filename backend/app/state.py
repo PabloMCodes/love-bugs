@@ -1017,6 +1017,10 @@ class WorldStore:
             robot_data['physical']['pose'] = report.pose.model_dump(mode='python')
             robot_data['physical']['pose_updated_at'] = report.timestamp
             robot_data['physical']['tracking'] = 'TRACKED'
+            if (world['mode'] == 'hardware' and robot_data['task'] is not None
+                    and robot_data['task']['status'] == 'ASSIGNED'):
+                robot_data['task']['status'] = 'NAVIGATING'
+                robot_data['game']['location'] = None
             world['revision'] += 1
             world['updated_at'] = now
             self._publish(world, position_source="pose_report")
@@ -1660,6 +1664,12 @@ class WorldStore:
                     'The arrival report does not match the robot\'s active navigation task.',
                 )
 
+            if self._world.mode == 'hardware' and (
+                self._world.game.status != 'RUNNING' or robot.physical.stopped or
+                not robot.physical.online or robot.physical.tracking != 'TRACKED' or
+                robot.physical.pose is None or robot.physical.blocked
+            ):
+                raise WorldStateError('ROBOT_UNAVAILABLE', 'Fresh camera tracking and a connected robot are required for arrival.')
             now = datetime.now(timezone.utc)
             world = self._world.model_dump(mode='python')
             robot_data = next(item for item in world['robots'] if item['id'] == robot_id)

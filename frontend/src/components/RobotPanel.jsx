@@ -1,4 +1,4 @@
-// Show each robot's health, wallet, inventory, location, and current task.
+// Show each robot's connection, wallet, inventory, location, and current task.
 function formatLabel(value) {
     if (!value) {
         return 'Unknown';
@@ -112,9 +112,6 @@ function RobotCard({ robot }) {
     const inventoryItems = Object.entries(robot.game.inventory ?? {})
         .map(([id, item]) => ({ id, ...item }))
         .filter((item) => item.quantity > 0);
-    const battery = robot.physical.battery === null
-        ? 'Unknown'
-        : `${Math.round(robot.physical.battery * 100)}%`;
     const location = robot.task?.status === 'NAVIGATING'
         ? `To ${formatLabel(robot.task.location)}`
         : formatLabel(robot.game.location);
@@ -144,10 +141,6 @@ function RobotCard({ robot }) {
                     <div>
                         <dt className="text-xs text-sky-700">Gold</dt>
                         <dd className="font-semibold">{robot.game.money}</dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-sky-700">Battery</dt>
-                        <dd className="font-semibold">{battery}</dd>
                     </div>
                 </dl>
             </div>

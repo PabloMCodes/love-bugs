@@ -1,6 +1,6 @@
 """Optional, asynchronous hardware-world bridge; camera/BLE never await HTTP."""
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 import math
 import time
@@ -18,6 +18,9 @@ class BackendBridge:
         self.arrivals = []
         self.error = 'Waiting for backend'
         self.pending_stop = None
+        self.observations = {}
+        self.sent_observations = {}
+        self.accepted_arrivals = set()
 
     def request_stop(self):
         """Latch operator intent until acknowledged; no HTTP in the control loop."""
@@ -74,13 +77,19 @@ class BackendBridge:
 
     def capture(self, robots, traffic):
         x1,y1,x2,y2 = self.traffic.arena
+        now = time.monotonic()
+        for r in robots:
+            previous = self.observations.get(r.profile.robot_id)
+            if r.last_seen is not None and (previous is None or previous[0] != r.last_seen):
+                self.observations[r.profile.robot_id] = (r.last_seen,
+                    (datetime.now(timezone.utc)-timedelta(seconds=max(0,now-r.last_seen))).isoformat())
         self.sample = [dict(robot_id=r.profile.robot_id,
             online=bool(r.ble and r.ble.connected), blocked=traffic.blocked,
             pose=({'x': (r.pose.center_x-x1)/(x2-x1),
                    'y': (r.pose.center_y-y1)/(y2-y1),
                    'heading': (r.pose.heading+r.config.heading_offset_degrees)%360}
                   if r.pose else None), captured=r.last_seen,
-            timestamp=datetime.now(timezone.utc).isoformat()) for r in robots]
+            timestamp=self.observations.get(r.profile.robot_id, (None,None))[1]) for r in robots]
         self.events.extend(traffic.events)
         self.events = self.events[-10:]
         traffic.events.clear()
@@ -103,6 +112,8 @@ class BackendBridge:
                     if old_session != world['session_id']:
                         self.events.clear()
                         self.arrivals.clear()
+                        self.sent_observations.clear()
+                        self.accepted_arrivals.clear()
                     self.world, self.updated, self.error = world, time.monotonic(), None
                     session = world['session_id']
                     for sample in self.sample:
@@ -113,11 +124,13 @@ class BackendBridge:
                             'session_id': session, 'online': sample['online'], 'blocked': sample['blocked']})
                         response.raise_for_status()
                         pose = sample['pose']
-                        if pose and sample['captured'] is not None and time.monotonic()-sample['captured'] < .5:
+                        if (pose and sample['captured'] is not None and time.monotonic()-sample['captured'] < .5
+                                and self.sent_observations.get(robot_id) != sample['captured']):
                             response = await client.post(f'/robots/{robot_id}/pose', json={
                                 'session_id': session, 'timestamp': sample['timestamp'],
                                 'pose': {**pose, 'x': pose['x']*world['map']['width'], 'y': pose['y']*world['map']['height']}})
                             response.raise_for_status()
+                            self.sent_observations[robot_id] = sample['captured']
                     if self.pending_stop is not None:
                         continue
                     if self.events:
@@ -128,11 +141,13 @@ class BackendBridge:
                             self.events.pop(0)
                     if self.arrivals and self.pending_stop is None:
                         arrival = self.arrivals[0]
-                        if arrival['session_id'] == session:
+                        if self.arrival_is_current(arrival, world):
                             response = await client.post(f"/robots/{arrival['robot_id']}/arrived",
-                                json={k:v for k,v in arrival.items() if k!='robot_id'})
+                                json={k:arrival[k] for k in ('session_id','task_id','location')})
                             if response.status_code != 409:
                                 response.raise_for_status()
+                                if response.json().get('accepted'):
+                                    self.accepted_arrivals.add((session,arrival['task_id']))
                         if self.arrivals and self.arrivals[0] is arrival:
                             self.arrivals.pop(0)
                 except (httpx.HTTPError, ValueError, KeyError) as error:
@@ -142,6 +157,25 @@ class BackendBridge:
                         logging.warning('Backend bridge stopped: %s', message)
                     self.error = message
                 await asyncio.sleep(.1)
+
+    def arrival_is_current(self, arrival, world):
+        if (self.pending_stop is not None or arrival['session_id'] != world['session_id'] or
+                world['game']['status'] != 'RUNNING'):
+            return False
+        state = next((r for r in world['robots'] if r['id'] == arrival['robot_id']),None)
+        sample = next((s for s in self.sample if s['robot_id'] == arrival['robot_id']),None)
+        task = state and state['task']
+        if (not task or task['id'] != arrival['task_id'] or task['location'] != arrival['location'] or
+                task['status'] not in ('ASSIGNED','NAVIGATING') or not sample or
+                not sample['online'] or sample['blocked'] or not sample['pose'] or
+                sample['captured'] is None or time.monotonic()-sample['captured'] >= .5 or
+                state['physical']['stopped']):
+            return False
+        x1,y1,x2,y2 = self.traffic.arena
+        pose = sample['pose']
+        target = self.target(arrival['location'],world)
+        return math.hypot(x1+pose['x']*(x2-x1)-target[0],
+                          y1+pose['y']*(y2-y1)-target[1]) < arrival['tolerance_pixels']
 
 
 class TaskFollower:
@@ -153,9 +187,12 @@ class TaskFollower:
         self.session = None
         self.keys = {}
         self.arrived = set()
+        self.settling = {}
 
     def stop(self, robots):
         self.session = None
+        self.settling.clear()
+        self.bridge.arrivals.clear()
         for robot in robots:
             robot.gate.stop()
 
@@ -193,13 +230,34 @@ class TaskFollower:
         # Keep idempotency memory bounded to current tasks.
         self.arrived.intersection_update(key for key in self.keys.values() if key)
 
-    def report_arrivals(self, robots, world, traffic):
+    def report_arrivals(self, robots, world, traffic, *, now=None):
+        now = time.monotonic() if now is None else now
         if not world or self.session != world['session_id'] or traffic.blocked:
+            self.settling.clear()
             return
+        current_keys = {key for key in self.keys.values() if key}
+        self.bridge.accepted_arrivals.intersection_update(current_keys)
         for robot in robots:
             identity = self.keys.get(robot.profile.robot_id)
-            if identity and identity not in self.arrived and robot.pose and robot.geometry and robot.geometry.distance < robot.config.stop_distance:
+            queued = any((a['session_id'],a['task_id']) == identity for a in self.bridge.arrivals)
+            if not queued and identity not in self.bridge.accepted_arrivals:
+                self.arrived.discard(identity)
+            settled = bool(identity and robot.pose and robot.geometry and
+                robot.last_seen is not None and now-robot.last_seen < robot.config.marker_timeout and
+                robot.geometry.distance < robot.config.stop_distance and robot.ble and
+                robot.ble.connected and robot.ble.last_command == 'S')
+            if not settled:
+                self.settling.pop(robot.profile.robot_id,None)
+                continue
+            previous = self.settling.get(robot.profile.robot_id)
+            if previous is None or previous[0] != identity:
+                self.settling[robot.profile.robot_id] = (identity,robot.last_seen)
+                continue
+            if robot.last_seen-previous[1] < .3:
+                continue
+            if identity not in self.arrived and identity not in self.bridge.accepted_arrivals:
                 state = next(r for r in world['robots'] if r['id'] == robot.profile.robot_id)
                 self.bridge.arrivals.append({'session_id': identity[0], 'task_id': identity[1],
-                    'robot_id': robot.profile.robot_id, 'location': state['task']['location']})
+                    'robot_id': robot.profile.robot_id, 'location': state['task']['location'],
+                    'tolerance_pixels':robot.config.stop_distance})
                 self.arrived.add(identity)

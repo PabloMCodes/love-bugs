@@ -2,8 +2,9 @@
 
 The React dashboard uses JavaScript, Vite, and Tailwind CSS. It renders the
 authoritative backend world, follows live WebSocket snapshots, provides game
-lifecycle controls and seed purchases, and retains a local simulation fallback
-for offline demos. Autonomous movement, collection, and sales remain backend-owned.
+lifecycle controls and seed purchases. It waits for the backend by default;
+`VITE_LOCAL_DEMO=true` explicitly enables the optional disconnected browser demo.
+Autonomous movement, collection, and sales remain backend-owned.
 
 ## Run locally
 
@@ -25,7 +26,13 @@ npm exec --yes --package=node@24 -- npm ci
 npm exec --yes --package=node@24 -- npm run dev
 ```
 
-`npm run build` creates the production bundle in `dist/`. `npm run preview` serves that bundle locally. The dashboard runs in local demo mode without a backend.
+`npm run build` creates the production bundle in `dist/`. `npm run preview` serves that bundle locally. Without a backend the dashboard waits instead of inventing robot movement. For an offline demo only, set `VITE_LOCAL_DEMO=true` and restart Vite.
+
+In hardware mode, robot positions come only from backend camera telemetry. Robots
+with no camera pose are omitted from the map until seen; stale poses remain the
+last observed positions. The map displays the live tracked count. Battery is not
+displayed or required. For the full hardware/agent commands see the backend
+README's physical gameplay section. Closing a browser does not stop backend agents.
 
 ## Structure
 

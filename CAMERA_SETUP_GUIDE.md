@@ -430,6 +430,13 @@ The system must not auto-resume physical motion.
 
 ## 13. Hardware backend integration
 
+For the current full-camera, avoidance-off game run, use the three commands in
+[backend physical gameplay](backend/README.md#physical-gameplay-using-the-full-camera-preset).
+Start the game in the dashboard, then press A once in the camera window. Agents
+select destinations automatically, and game actions await real camera arrival.
+The browser now waits for backend data by default and does not show battery values.
+The calibrated-geometry instructions below remain available for guarded mode.
+
 Use this only after local traffic-controlled phase 4 works.
 
 ### Terminal 1: hardware backend

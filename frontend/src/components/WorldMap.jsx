@@ -43,6 +43,7 @@ export default function WorldMap({ world }) {
                 })}
 
                 {robots.map((robot) => {
+                    if (!robot.physical.pose) return null;
                     const left = (robot.physical.pose.x / map.width) * 100;
                     const top = (robot.physical.pose.y / map.height) * 100;
                     const portrait = robotPortraits[robot.id];
@@ -71,6 +72,11 @@ export default function WorldMap({ world }) {
                     );
                 })}
             </div>
+            {world.mode === 'hardware' && (
+                <p className="mt-2 text-xs text-stone-400">
+                    Live camera positions · {robots.filter((r) => r.physical.pose && r.physical.tracking === 'TRACKED').length}/{robots.length} robots tracked
+                </p>
+            )}
         </section>
     );
 }

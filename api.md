@@ -476,6 +476,15 @@ Suggested semantic feed types: `agent_decision`, `task_assigned`, `robot_arrived
 
 ## Robotics integration boundary
 
+Hardware camera reports mark assigned tasks NAVIGATING; they do not report arrival
+or advance task rewards. The adapter sends each observed frame timestamp once,
+requires fresh in-tolerance frames spanning 0.3 seconds after STOP before queuing
+arrival, and rechecks task/session/latest pose before delivery. Hardware arrival
+acceptance requires a running game and an online, tracked, non-stopped robot.
+Accepted arrival retries remain idempotent. BUY/SELL/PLANT execute on arrival;
+FISH/HARVEST start backend timers on arrival. Battery remains optional/null and is
+not a planning prerequisite. The legacy /health name carries connection readiness.
+
 The camera adapter can share saved destinations with the hardware backend via
 `HARDWARE_TRAFFIC_CONFIG` at server startup. Its `service_points` are arena pixel
 coordinates converted into the existing `world.map.locations` world units; API

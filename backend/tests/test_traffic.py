@@ -16,7 +16,7 @@ def robot(robot_id, x, y, target):
     r.pose = SimpleNamespace(center_x=x, center_y=y, heading=0)
     r.target, r.target_valid, r.last_seen = target, target is not None, 10
     r.geometry = steer(r.pose, target, r.config) if target else None
-    r.ble = SimpleNamespace(connected=True)
+    r.ble = SimpleNamespace(connected=True,last_command='S')
     r.gate.arm(10, True)
     return r
 
@@ -184,13 +184,16 @@ class TaskFollowerTests(unittest.TestCase):
         self.follower.update(self.robots,self.sample,10,self.world,arm=True)
         self.robots[0].geometry=SimpleNamespace(distance=0)
         traffic=SimpleNamespace(blocked=False)
-        self.follower.report_arrivals(self.robots,self.world,traffic)
-        self.follower.report_arrivals(self.robots,self.world,traffic)
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=10)
+        self.assertEqual(len(self.bridge.arrivals),0)
+        self.robots[0].last_seen=10.31
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=10.31)
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=10.32)
         self.assertEqual(len(self.bridge.arrivals),1)
         self.follower.stop(self.robots)
         self.follower.arrived.clear()
         self.follower.report_arrivals(self.robots,self.world,traffic)
-        self.assertEqual(len(self.bridge.arrivals),1)
+        self.assertEqual(len(self.bridge.arrivals),0)
 
     def test_pending_operator_stop_prevents_rearm_and_discards_queued_arrivals(self):
         self.follower.update(self.robots,self.sample,10,self.world,arm=True)
@@ -202,6 +205,36 @@ class TaskFollowerTests(unittest.TestCase):
         self.assertIsNone(self.follower.session)
         self.assertIsNone(self.bridge.current(10))
         self.assertEqual(self.bridge.arrivals,[])
+
+    def test_arrival_requires_stop_and_distinct_fresh_frames(self):
+        self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        r = self.robots[0]
+        r.geometry = SimpleNamespace(distance=0)
+        traffic = SimpleNamespace(blocked=False)
+        r.ble.last_command = 'F'
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=10)
+        r.ble.last_command = 'S'
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=10.1)
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=10.4)
+        self.assertEqual(self.bridge.arrivals,[])
+        r.last_seen = 10.41
+        self.follower.report_arrivals(self.robots,self.world,traffic,now=11)
+        self.assertEqual(self.bridge.arrivals,[])
+
+    def test_queued_arrival_rechecks_latest_pose_and_task(self):
+        from unittest.mock import patch
+        arrival = {'robot_id':'robot-a','session_id':self.world['session_id'],
+                   'task_id':'one','location':'farm','tolerance_pixels':35}
+        sample = {'robot_id':'robot-a','online':True,'blocked':False,
+                  'captured':10,'pose':{'x':.2,'y':.5}}
+        self.bridge.sample = [sample]
+        with patch('app.navigation.backend.time.monotonic',return_value=10.1):
+            self.assertTrue(self.bridge.arrival_is_current(arrival,self.world))
+            sample['pose']['x'] = .8
+            self.assertFalse(self.bridge.arrival_is_current(arrival,self.world))
+            sample['pose']['x'] = .2
+            self.world['robots'][0]['task']['id'] = 'replacement'
+            self.assertFalse(self.bridge.arrival_is_current(arrival,self.world))
 
 
 class OperatorStopTests(unittest.IsolatedAsyncioTestCase):

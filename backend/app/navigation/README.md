@@ -230,7 +230,7 @@ If a robot is not found, verify that it is powered, advertising under that name,
 and disconnected from other controllers. Direct-address mode remains available
 for diagnostics, but a configured identifier must belong to the current Mac.
 
-The fleet always loads `backend/traffic_config.json`, the same default used by
+The calibrated fleet layout loads `backend/traffic_config.json`, the same default used by
 the setup editor. Startup prints the absolute path, calibration state, arena and
 building count. The camera window shows the boxes and a TRAFFIC status line.
 Missing/invalid configuration fails startup; unreviewed calibration blocks motion.
@@ -240,9 +240,10 @@ behavior must be tested on the camera laptop; tests do not move real robots.
 
 ## Calibrated traffic control and detours
 
-Traffic protection is always enabled in fleet mode. Use `--traffic-config PATH`
+Traffic protection is enabled by default in fleet mode. Use `--traffic-config PATH`
 only to select a different saved file. Use that same path with the setup editor
 (`--config PATH`). There is no automatic fallback to unguarded driving.
+The explicitly selected `--disable-avoidance` mode described above bypasses it.
 
 1. Keep the camera fixed and verify both marker IDs, corrected headings and turn
    directions. In `backend/traffic_config.json`, set the actual image resolution.
@@ -287,6 +288,14 @@ No LLM response authorizes movement. Do not run a second BLE/manual controller
 alongside navigation.
 
 ## Hardware backend and spectator traffic conversation
+
+For the current full-camera physical game, follow the
+[three-terminal runbook](../../README.md#physical-gameplay-using-the-full-camera-preset).
+The backend owns agents and task rules; the camera supplies movement/arrival.
+Arrival reporting waits for fresh frames spanning 0.3 seconds in target tolerance
+after a successful STOP write. Repeated cached frames cannot advance this wait.
+No battery reporting is required. The dashboard shows real positions and waits
+for the backend by default; it does not silently simulate missing robots.
 
 With `--backend-url`, SPACE also queues a session-scoped backend game stop, cancelling
 unfinished activities/tasks when acknowledged. Motor stopping does not await HTTP.

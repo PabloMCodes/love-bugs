@@ -5,6 +5,7 @@ import logging
 import time
 
 import cv2
+import httpx
 
 from app.navigation.__main__ import CameraWorker, draw
 from app.navigation.controller import MotionGate, steer
@@ -271,7 +272,6 @@ async def run_fleet(args, profiles):
                 follower.stop(robots)
             if bridge:
                 bridge.capture(robots, traffic)
-                follower.report_arrivals(robots, world, traffic)
                 if not world or follower.session != world['session_id']:
                     commands = {r.profile.robot_id:'S' for r in robots}
             elif traffic:
@@ -286,6 +286,8 @@ async def run_fleet(args, profiles):
             errors = [result for result in results if isinstance(result, BaseException)]
             if errors:
                 raise RuntimeError(f'BLE write failed; stopping both: {errors[0]}')
+            if follower:
+                follower.report_arrivals(robots, world, traffic)
             lines = [f'Phase {args.phase} | selected robot: {robots[selected].profile.name}',
                      ('A enable backend tasks | SPACE stop BOTH | Q quit' if bridge else
                       'W WALL-Y | E Eeva | 1 home 2 farm 3 lake 4 market | A arm | SPACE stop | Q quit')]
@@ -343,8 +345,6 @@ async def run_fleet(args, profiles):
                 cv2.imshow(WINDOW, frame)
             await asyncio.sleep(.01)
     finally:
-        if bridge and bridge.pending_stop is not None:
-            logging.warning('Exiting with backend stop unacknowledged; stop the game in the dashboard')
         if bridge_task:
             bridge_task.cancel()
             await asyncio.gather(bridge_task, return_exceptions=True)
@@ -355,6 +355,13 @@ async def run_fleet(args, profiles):
             robot.gate.stop()
         # Attempt both stops concurrently before waiting for either disconnect.
         await asyncio.gather(*(r.ble.close() for r in robots if r.ble), return_exceptions=True)
+        if bridge and bridge.world:
+            bridge.request_stop()
+            try:
+                async with httpx.AsyncClient(base_url=bridge.url,timeout=.5) as client:
+                    await asyncio.wait_for(bridge.deliver_stop(client),timeout=1)
+            except (httpx.HTTPError, ValueError, KeyError, TimeoutError) as error:
+                logging.warning('Backend exit stop unacknowledged: %s; stop the game in the dashboard',error)
         worker.stop_event.set()
         if worker.thread.is_alive():
             worker.thread.join(timeout=1)

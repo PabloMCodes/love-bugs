@@ -15,6 +15,7 @@ import { getMarketRobot } from '../utils/marketRobots.js';
 
 const simulationStepDistance = 5;
 const simulationTickMilliseconds = 250;
+export const localDemoEnabled = import.meta.env.VITE_LOCAL_DEMO === 'true';
 
 function createRequestId() {
     return globalThis.crypto?.randomUUID?.()
@@ -171,11 +172,11 @@ export function useWorld() {
                 }
 
                 setConnection((current) => ({
-                    source: backendSelectedRef.current ? 'backend' : 'mock',
+                    source: backendSelectedRef.current ? 'backend' : localDemoEnabled ? 'mock' : 'connecting',
                     connected: current.connected,
                     error: backendSelectedRef.current
                         ? error.message
-                        : 'Backend unavailable. Running the local demo.',
+                        : localDemoEnabled ? 'Backend unavailable. Running the local demo.' : 'Waiting for the backend. No local simulation is running.',
                 }));
             });
 
@@ -219,7 +220,7 @@ export function useWorld() {
                 }
 
                 setConnection((current) => ({
-                    source: backendSelectedRef.current ? 'backend' : 'mock',
+                    source: backendSelectedRef.current ? 'backend' : localDemoEnabled ? 'mock' : 'connecting',
                     connected: false,
                     error: backendSelectedRef.current
                         ? 'Backend connection lost. Reconnecting…'
@@ -267,7 +268,7 @@ export function useWorld() {
     useEffect(() => {
         const simulationTimer = window.setInterval(() => {
             setWorld((currentWorld) => {
-                if (backendSelectedRef.current) {
+                if (backendSelectedRef.current || !localDemoEnabled) {
                     return currentWorld;
                 }
 

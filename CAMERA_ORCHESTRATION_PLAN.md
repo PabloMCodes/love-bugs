@@ -1,6 +1,13 @@
 # Camera-driven agent orchestration: implementation plan
 
 Audit date: 2026-09-27. Code baseline: main at `b62026a`, after the gameLogic merge.
+
+Current scope update: the user now chooses full-camera preset destinations and
+explicitly disables collision/boundary avoidance. Do not treat parking/avoidance
+work below as current requirements. Hardware-paced backend gameplay and the live
+map are integrated; see backend README for the runbook and BACKEND_WORK_HANDOFF.md
+for current verification. Battery display is removed; BLE/camera readiness remains.
+The next acceptance step is the full physical run, not more routing features.
 This document describes **existing code and proposed next work**, not a claim that
 the physical end-to-end demo has passed. No runtime behavior changes accompany
 this audit.

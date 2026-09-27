@@ -9,6 +9,39 @@ snapshot. Game behavior is unchanged.
 
 ## Objective and ownership
 
+### Hardware-paced gameplay integration
+
+The current user wants the web game to follow physical robots, using the tested
+full-camera direct-driving mode without collision/boundary logic or battery
+gameplay. The existing backend owns agents and game rules; no replacement planner
+or motor API was added. See backend README for the three-terminal runbook.
+
+Implemented: distinct camera timestamps, arrival evidence spanning 0.3 seconds
+after STOP, latest pose/task/session checks before delivery, hardware availability
+checks at arrival acceptance, and NAVIGATING status from camera telemetry. Queued
+arrivals clear on disarm. Normal controller exit attempts backend game stop after
+BLE stops. The frontend now waits for backend data by default, safely handles null
+poses, labels camera-driven mode, and removes the battery display. Optional browser
+demo requires VITE_LOCAL_DEMO=true; battery API fields remain compatible and null
+on hardware. /health is only the existing BLE/readiness heartbeat.
+
+The new test_hardware_gameplay.py drives the actual HTTP bridge and task follower
+with synthetic camera frames and fake BLE state. It covers two agent BUY tasks,
+no simulated travel/rewards before arrival, intermediate UI-world poses, planting,
+growth, harvesting, sales, fishing, duplicate arrival and game stop. This is
+software integration evidence, not a physical hardware or live Gemini pass.
+The remaining operator step is a full run on the camera laptop; do not promise
+zero hardware errors from tests. Keep preset locations, camera, heading offsets,
+and robot IDs consistent with the already working local movement test.
+
+Verification for this integration: 239 tests ran successfully (one live Tiger test
+skipped), real HTTP/WebSocket smoke passed, Node 24/Vite production build passed,
+and rendered-component checks passed null-pose startup, measured map coordinates,
+tracked count, and no battery display. Live Gemini, live Tiger and the full physical
+round remain unverified on this implementation laptop. The user has explicitly
+deprioritized avoidance, boundaries, parking and battery/health gameplay: do not
+resume those workstreams merely because the historical plan lists them.
+
 ### Named destination selection
 
 Latest user-requested mode: `--layout full-camera --disable-avoidance` draws a
