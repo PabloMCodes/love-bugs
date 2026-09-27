@@ -1,0 +1,12 @@
+{
+	"servers": {
+		"paper": {
+			"type": "stdio",
+			"command": "${userHome}/.paper/bin/paper",
+			"args": [
+				"mcp"
+			]
+		}
+	},
+	"inputs": []
+}
