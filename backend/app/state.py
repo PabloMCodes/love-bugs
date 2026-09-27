@@ -1518,3 +1518,52 @@ class WorldStore:
             world['events'] = world['events'][-100:]
             self._publish(world)
             return self._world.model_copy(deep=True)
+
+    def advance_crop_growth(
+        self,
+        now: datetime | None = None,
+    ) -> WorldSnapshot:
+        observed_at = datetime.now(timezone.utc) if now is None else now
+        if observed_at.utcoffset() is None:
+            raise ValueError('now must include timezone information')
+
+        with self._lock:
+            if self._world.game.status != 'RUNNING':
+                return self._world.model_copy(deep=True)
+
+            world = self._world.model_dump(mode='python')
+            growing_plots = [
+                plot
+                for plot in world['farm']['plots']
+                if plot['status'] == 'GROWING' and plot['ready_at'] <= observed_at
+            ]
+            if not growing_plots:
+                return self._world.model_copy(deep=True)
+
+            crop_names = {
+                crop['id']: crop['name']
+                for crop in world['farm']['crops']
+            }
+            next_revision = world['revision'] + 1
+            for plot in growing_plots:
+                plot['status'] = 'READY'
+                crop_name = crop_names.get(plot['crop_id'], plot['crop_id'])
+                world['events'].append({
+                    'id': f"event-{plot['id']}-ready-{next_revision}",
+                    'timestamp': observed_at,
+                    'type': 'crop_ready',
+                    'robot_id': plot['planted_by'],
+                    'task_id': None,
+                    'message': f"{crop_name} in {plot['id']} is ready to harvest.",
+                    'data': {
+                        'plot_id': plot['id'],
+                        'crop_id': plot['crop_id'],
+                        'ready_at': plot['ready_at'],
+                    },
+                })
+
+            world['revision'] = next_revision
+            world['updated_at'] = observed_at
+            world['events'] = world['events'][-100:]
+            self._publish(world)
+            return self._world.model_copy(deep=True)

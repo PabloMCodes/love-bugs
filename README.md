@@ -30,7 +30,7 @@ market, an authoritative Crop Queue backed by three shared farm plots, transacti
 notifications, live robot conversation, and session controls.
 
 The immediate product goal is to complete the first authoritative crop lifecycle.
-`PLANT` now consumes one owned Wheat Seed and creates a timestamped growing plot;
-the remaining work is the backend `READY` transition and plot-aware harvesting.
-Until then, the existing `HARVEST` action still grants wheat without reading a
-plot. See `GAME_PLAN.md` for the implementation sequence.
+`PLANT` consumes one owned Wheat Seed, creates a timestamped growing plot, and the
+backend changes it to `READY` when its timer expires. The remaining work is making
+`HARVEST` require and empty a ready plot instead of granting wheat directly. See
+`GAME_PLAN.md` for the implementation sequence.

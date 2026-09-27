@@ -370,9 +370,10 @@ come from the selected robot's inventory entry.
 Canonical schema version 2 exposes `farm.crops` and three shared `farm.plots`.
 `PLANT` atomically consumes one owned Wheat Seed on arrival and creates a
 timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
-duplicate the crop or consume the losing seed. The backend does not yet transition
-elapsed crops to `READY`, and current `HARVEST` still grants wheat directly. Those
-two transitions are the next backend milestone.
+duplicate the crop or consume the losing seed. The backend game loop transitions
+due plots to `READY` exactly once in simulation and hardware modes, even without a
+browser. Current `HARVEST` still grants wheat directly; making it require and empty
+a ready plot is the next backend milestone.
 
 Enable deterministic backend-owned play with:
 

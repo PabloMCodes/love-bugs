@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import time
@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.config import AgentConfig, Settings
 from app.main import create_app
+from app.state import WorldStore, default_world
 
 
 class RuntimeModeTests(unittest.TestCase):
@@ -63,6 +64,34 @@ class RuntimeModeTests(unittest.TestCase):
                 self.assertFalse(app.state.simulator_enabled)
                 self.assertFalse(app.state.game_loop_enabled)
                 self.assertFalse(app.state.autonomy_enabled)
+
+    def test_game_loop_marks_elapsed_crop_ready_without_manual_tick(self):
+        world = default_world()
+        planted_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        world['farm']['plots'][0].update({
+            'status': 'GROWING',
+            'crop_id': 'wheat',
+            'planted_by': 'robot-a',
+            'planted_at': planted_at,
+            'ready_at': planted_at + timedelta(milliseconds=50),
+        })
+        app = create_app(
+            world_store=WorldStore(world),
+            run_simulator=True,
+        )
+
+        with TestClient(app) as client:
+            client.post('/game/start').raise_for_status()
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                current = client.get('/world').json()
+                if current['farm']['plots'][0]['status'] == 'READY':
+                    break
+                time.sleep(.01)
+            else:
+                self.fail('Backend game loop did not mark the crop ready')
+
+        self.assertEqual(current['events'][-1]['type'], 'crop_ready')
 
     def test_backend_mock_autonomy_assigns_tasks_without_chat_round(self):
         with tempfile.TemporaryDirectory() as directory:

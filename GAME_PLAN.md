@@ -105,7 +105,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Individual inventory and wallets | Implemented | The robot tracker exposes each robot's separate wallet and inventory. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
 | Market purchases | Partial | The purchase-only market sells wheat, carrot, and pumpkin seeds; later seeds unlock permanently at 100 and 150 combined gold. Purchases and sales create transient parchment notifications. |
-| Farm plots and Crop Queue | Partial | `PLANT` consumes an owned Wheat Seed and fills a shared plot exactly once; the queue renders it, but elapsed crops do not become ready yet. |
+| Farm plots and Crop Queue | Partial | `PLANT` fills a shared plot exactly once, and the backend changes elapsed crops to `READY`; harvesting is not plot-aware yet. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
@@ -116,15 +116,13 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **The crop lifecycle is incomplete.** Robots can plant Wheat, but there is no
-   growth transition, ready crop, or plot-aware harvest validation yet.
-2. **Planners do not plant yet.** The API can populate the Crop Queue, but mock and
-   Gemini autonomy still follow the legacy free-harvest loop.
-3. **Planners still use the legacy loop.** Mock and Gemini autonomy harvest free
-   wheat or fish, then sell; neither buys, plants, waits for, or harvests a plot.
-4. **Victory presentation is still incomplete.** Completion is enforced by the
+1. **The crop lifecycle is incomplete.** Robots can plant Wheat and wait for it to
+   become ready, but `HARVEST` does not validate or empty a ready plot yet.
+2. **Planners still use the legacy loop.** Mock and Gemini autonomy harvest free
+   wheat or fish, then sell; neither buys, plants, waits for, nor harvests a plot.
+3. **Victory presentation is still incomplete.** Completion is enforced by the
    backend, but the frontend still needs a clear celebration.
-5. **Balancing is still placeholder data.** The target, starting gold, yields,
+4. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
 ## Scope for the first complete demo
@@ -205,7 +203,7 @@ Goal: purchases create a visible decision instead of dead inventory.
 - [x] Add the purchase-only market, transaction notifications, and Crop Queue UI shell.
 - [x] Add the wheat crop definition and three authoritative shared farm plots.
 - [x] Add a validated `PLANT` task that consumes one owned seed exactly once.
-- [ ] Advance crops from `GROWING` to `READY` from backend timestamps and events.
+- [x] Advance crops from `GROWING` to `READY` from backend timestamps and events.
 - [ ] Make `HARVEST` require a ready plot, grant its crop once, and empty that plot.
 - [x] Render ready crops first and growing crops by `ready_at` in the Crop Queue.
 - [ ] Teach both planners to compare seed cost, growth time, and expected crop value.
@@ -245,7 +243,7 @@ Goal: make the proven loop feel polished and demo-ready.
 
 | Workstream | Owns | Builds against | Immediate handoff |
 | --- | --- | --- | --- |
-| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Backend-owned growth transitions, then plot-aware harvest |
+| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Make harvest require a ready plot and resolve exactly once |
 | Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Add plot-aware decisions after the wheat slice is validated |
 | Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add derived crop countdown/progress after backend planting populates plot timestamps |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |

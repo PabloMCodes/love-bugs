@@ -279,10 +279,14 @@ must include `crop_id`, `planted_by`, `planted_at`, and `ready_at`. Clients deri
 the visible queue from these records: omit empty plots, show ready plots first,
 then sort growing plots by `ready_at`.
 
-The `PLANT` action now populates version 2 plots with backend timestamps. The
-backend does not yet transition elapsed plots to `READY`, and `HARVEST` is still
-the version 1-style timed collection that grants wheat without reading a plot.
-Internal `WAIT` behavior still defers task submission.
+The `PLANT` action populates version 2 plots with backend timestamps. While the game
+is running, the backend game loop changes each due `GROWING` plot to `READY` once
+and publishes a `crop_ready` event containing `plot_id`, `crop_id`, and `ready_at`.
+This continues without a connected browser and uses the same rule in simulation
+and hardware modes. If the game is stopped when a timer elapses, the absolute
+timestamp is preserved and the crop becomes ready on the first tick after resume.
+`HARVEST` is still the version 1-style timed collection that grants wheat without
+reading a plot. Internal `WAIT` behavior still defers task submission.
 
 ### Errors
 

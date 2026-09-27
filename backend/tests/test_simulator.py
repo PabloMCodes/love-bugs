@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from app.schemas import Point, Pose, TaskRequest
@@ -254,6 +254,69 @@ class SimulationRunnerTests(unittest.TestCase):
         stopped = store.snapshot()
         self.assertEqual(stopped.robots[0].game.inventory['seeds'].quantity, 1)
         self.assertEqual(stopped.farm.plots[0].status, 'EMPTY')
+
+    def test_crop_becomes_ready_once_at_backend_timestamp(self):
+        world = default_world()
+        planted_at = datetime.now(timezone.utc)
+        ready_at = planted_at + timedelta(seconds=8)
+        world['farm']['plots'][0].update({
+            'status': 'GROWING',
+            'crop_id': 'wheat',
+            'planted_by': 'robot-a',
+            'planted_at': planted_at,
+            'ready_at': ready_at,
+        })
+        store = WorldStore(world)
+        store.start_game()
+        revision = store.snapshot().revision
+
+        too_early = store.advance_crop_growth(ready_at - timedelta(microseconds=1))
+        self.assertEqual(too_early.revision, revision)
+        self.assertEqual(too_early.farm.plots[0].status, 'GROWING')
+
+        ready = store.advance_crop_growth(ready_at)
+        self.assertEqual(ready.revision, revision + 1)
+        self.assertEqual(ready.farm.plots[0].status, 'READY')
+        self.assertEqual(ready.events[-1].type, 'crop_ready')
+        self.assertEqual(ready.events[-1].robot_id, 'robot-a')
+        self.assertEqual(ready.events[-1].data['plot_id'], 'plot-1')
+
+        duplicate = store.advance_crop_growth(ready_at + timedelta(seconds=1))
+        self.assertEqual(duplicate.revision, ready.revision)
+        self.assertEqual(
+            sum(event.type == 'crop_ready' for event in duplicate.events),
+            1,
+        )
+
+    def test_crop_growth_requires_timezone_aware_clock(self):
+        store = WorldStore()
+        store.start_game()
+
+        with self.assertRaisesRegex(ValueError, 'timezone'):
+            store.advance_crop_growth(datetime.now())
+
+    def test_elapsed_crop_becomes_ready_after_game_resumes(self):
+        world = default_world()
+        planted_at = datetime.now(timezone.utc)
+        ready_at = planted_at + timedelta(seconds=8)
+        world['farm']['plots'][0].update({
+            'status': 'GROWING',
+            'crop_id': 'wheat',
+            'planted_by': 'robot-a',
+            'planted_at': planted_at,
+            'ready_at': ready_at,
+        })
+        store = WorldStore(world)
+        store.start_game()
+        store.stop_game()
+
+        stopped = store.advance_crop_growth(ready_at)
+        self.assertEqual(stopped.farm.plots[0].status, 'GROWING')
+
+        store.start_game()
+        resumed = store.advance_crop_growth(ready_at)
+        self.assertEqual(resumed.farm.plots[0].status, 'READY')
+        self.assertEqual(resumed.events[-1].type, 'crop_ready')
 
     def test_sell_executes_once_after_market_arrival(self):
         world = default_world()

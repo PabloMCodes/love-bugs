@@ -19,10 +19,10 @@ permanent farming stages, and complete the shared gold goal without a browser.
 
 The immediate application milestone is Phase 3 of the game plan: use the new
 schema-version-2 shared farm plots to complete the wheat seed → plant → grow →
-harvest → sell slice. `PLANT` is now a valid arrival-time transaction; the Crop
-Queue derives its display from `world.farm` and is never authoritative itself.
-Hardware work should preserve the task and safety contracts while growth and
-plot-aware harvesting are added.
+harvest → sell slice. `PLANT` is a valid arrival-time transaction, and the backend
+game loop owns `GROWING` → `READY` transitions. The Crop Queue derives its display
+from `world.farm` and is never authoritative itself. Hardware work should preserve
+the task and safety contracts while plot-aware harvesting is added.
 
 ## Shared setup
 

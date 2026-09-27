@@ -21,11 +21,11 @@ locks. The frontend has a purchase-only market, market transaction notifications
 and a full-height Crop Queue driven by canonical farm state.
 
 Schema version 2 includes the wheat crop definition and three shared farm plots.
-`PLANT` now consumes one owned Wheat Seed at the farm and atomically creates a
-timestamped `GROWING` plot, which the queue renders. The backend does not yet mark
-elapsed crops `READY`, and `HARVEST` still creates wheat without reading a plot.
-Completing those transitions is the next implementation goal; the intended
-cooperative unlock and transfer mechanics remain later phases.
+`PLANT` consumes one owned Wheat Seed at the farm and atomically creates a
+timestamped `GROWING` plot, which the queue renders. The backend game loop changes
+elapsed plots to `READY` exactly once and publishes `crop_ready`. `HARVEST` still
+creates wheat without reading a plot, so plot-aware harvesting is the next
+implementation goal; cooperative unlock and transfer mechanics remain later phases.
 
 ## Game fantasy
 
