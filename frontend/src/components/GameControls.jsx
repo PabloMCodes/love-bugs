@@ -43,13 +43,20 @@ export default function GameControls({
         >
             <h2
                 id="farm-stage-heading"
-                className="mb-2 text-center text-xl font-extrabold tracking-wide text-sky-950"
+                className="section-title mb-2 text-center text-xl font-extrabold tracking-wide"
             >
                 Farm Stage {game.stage ?? 1}
             </h2>
 
-            <div className="game-status-panel px-5 py-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <div className="game-status-panel relative px-7 py-3">
+                <img
+                    className="game-status-cloud-art pointer-events-none absolute inset-0 h-full w-full"
+                    src="/assets/ui/game-controls-cloud.svg"
+                    alt=""
+                    aria-hidden="true"
+                />
+
+                <div className="relative z-10 flex flex-col gap-3 md:flex-row md:items-end">
                     <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-sky-900">
                             <span>Combined gold</span>
@@ -99,12 +106,12 @@ export default function GameControls({
                 </div>
 
                 {!backendAvailable && (
-                    <p className="mt-2 text-xs font-semibold text-amber-800">
+                    <p className="relative z-10 mt-2 text-xs font-semibold text-amber-800">
                         Connect to the backend to control the game session.
                     </p>
                 )}
                 {error && (
-                    <p className="mt-2 text-xs font-semibold text-red-800" role="alert">
+                    <p className="relative z-10 mt-2 text-xs font-semibold text-red-800" role="alert">
                         {error}
                     </p>
                 )}

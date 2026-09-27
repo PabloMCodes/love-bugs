@@ -18,7 +18,7 @@ export default function MarketPanel({
 
     return (
         <section className="flex h-full min-h-0 w-full flex-col">
-            <h2 className="mb-3 text-lg font-semibold">Market</h2>
+            <h2 className="section-title mb-3 text-lg font-semibold">Market</h2>
 
             <div className="market-crate relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
                 <div

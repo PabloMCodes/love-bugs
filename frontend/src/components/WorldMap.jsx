@@ -16,7 +16,7 @@ export default function WorldMap({ world }) {
 
     return (
         <section className="flex h-full min-h-0 w-full flex-col">
-            <h2 className="mb-3 text-lg font-semibold">World Map</h2>
+            <h2 className="section-title mb-3 text-lg font-semibold">World Map</h2>
             <div className="world-map-board relative min-h-0 w-full flex-1 overflow-hidden">
                 {Object.entries(map.locations).map(([id, location]) => {
                     const left = (location.x / map.width) * 100;
