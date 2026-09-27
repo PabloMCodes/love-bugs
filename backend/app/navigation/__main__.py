@@ -1,4 +1,4 @@
-"""Incremental standalone click-to-drive demo; no backend task dispatch."""
+"""Incremental click-to-drive demo with optional fleet traffic and hardware task bridge."""
 
 import argparse
 import asyncio
@@ -181,12 +181,18 @@ def main():
     parser.add_argument('--config', type=Path, default=Path(__file__).resolve().parents[2] / 'navigation_config.json')
     parser.add_argument('--robots-config', type=Path,
                         help='Two-robot JSON profiles; enables W/E selection and independent targets')
+    parser.add_argument('--traffic-config', type=Path, help='Calibrated fleet collision/detour configuration')
+    parser.add_argument('--backend-url', help='Hardware backend URL; enables task/pose/chat bridge')
     sources = parser.add_mutually_exclusive_group()
     sources.add_argument('--camera', type=int)
     sources.add_argument('--video')
     args = parser.parse_args()
     if args.phase == 4 and args.video:
         parser.error('Phase 4 requires a live camera; prerecorded poses cannot control hardware')
+    if (args.traffic_config or args.backend_url) and not args.robots_config:
+        parser.error('Traffic and backend integration require --robots-config')
+    if args.backend_url and (not args.traffic_config or args.phase != 4):
+        parser.error('--backend-url requires --traffic-config and phase 4')
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     try:
         if args.robots_config:

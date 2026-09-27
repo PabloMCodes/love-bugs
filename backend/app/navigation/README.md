@@ -140,3 +140,99 @@ avoidance**. Use clear, separated paths. It remains separate from backend task
 execution, game autonomy and backend stop controls; use this window's SPACE/Q.
 Physical two-robot behavior must be tested on the camera laptop; automated tests
 use mocked BLE and UI and do not move robots.
+
+## Calibrated traffic control and detours
+
+Add `--traffic-config traffic_config.json` to the **fleet** command to enable
+traffic protection. The old commands above retain independent driving for
+compatibility; they do not enable this protection implicitly.
+
+1. Keep the camera fixed and verify both marker IDs, corrected headings and turn
+   directions. In `backend/traffic_config.json`, set the actual image resolution.
+2. Set `arena` to the usable rectangle `[left, top, right, bottom]` in camera
+   pixels. It must align with the backend map when using backend tasks (map origin
+   upper-left, x right, y down). This simple mapping assumes a perpendicular,
+   unmirrored camera with a rectangular arena; it does not correct perspective.
+3. Set each `radii` value to the distance from its marker center to its furthest
+   chassis corner, including attachments. It must cover the complete turning
+   sweep, not just the ArUco square. Set `margin` for localization error and
+   measured stopping clearance. List fixed obstacles as pixel rectangles.
+4. Measure an upper bound on actual full-command speed in **pixels/second** for
+   `max_speed`. `stop_latency` covers localization delay, BLE stop delivery and
+   coasting (minimum 1 second). The forward guard checks that entire travel
+   envelope plus the next pulse. Increase the bound for slow camera/network
+   conditions; don't lower it just to force a route through a gap.
+5. Only after these measurements, set `calibrated: true`. The supplied values are
+   examples; false or a changed frame resolution blocks all motion.
+
+From `backend`, first inspect dry-run routes:
+
+```sh
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m app.navigation --camera 1 --phase 3 --robots-config navigation_robots.json --traffic-config traffic_config.json
+```
+
+Use W/E and click separate targets. Red circles include chassis + margin; green
+lines show the checked detour. The displayed/logged selected commands include
+traffic overrides. No BLE connection happens in phase 3. Then use the same
+command with `--phase 4`. A arms the selected robot; arm both to queue both trips.
+SPACE disarms both. Missing either marker, insufficient clearance, failed route,
+wrong resolution or BLE failure stops both. Re-arm with A after resolving it.
+
+Only one robot moves at a time. The other holds its position while a small bounded
+camera-grid search finds a route around its footprint and configured obstacles.
+Every segment and the actual forward-heading stopping envelope are checked.
+There is a settling delay before handing movement to the other robot. Priority
+alternates when possible; an impossible route may let the other robot go first.
+Occupied destinations and tight/unmodeled spaces require repositioning. This is
+not contact sensing: actual bumps cannot be diagnosed without extra hardware.
+No LLM response authorizes movement. Do not run a second BLE/manual controller
+alongside navigation.
+
+## Hardware backend and spectator traffic conversation
+
+Start the backend with `GAME_MODE=hardware` (simulation remains available for
+other demos). For example, in a separate terminal in `backend`:
+
+```sh
+GAME_MODE=hardware AUTONOMY_ENABLED=true AUTONOMY_PROVIDER=mock .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Use `AUTONOMY_PROVIDER=gemini` and your existing local key/model settings for real
+Gemini planning. Point the frontend at this same backend as described in the
+backend README. Then on the camera/BLE laptop:
+
+```sh
+.venv/bin/python -m app.navigation --camera 1 --phase 4 --robots-config navigation_robots.json --traffic-config traffic_config.json --backend-url http://127.0.0.1:8000
+```
+
+Replace the URL with the backend laptop's LAN URL when it runs elsewhere. Start
+the game in the UI, wait for fresh telemetry, and press **A** in the camera window
+to enable following backend tasks for both robots. New tasks can then run until
+SPACE, a safety fault, stale backend (>0.75s), game stop/reset, or remote stop
+revokes permission. A is required again after interruptions. Click targets are
+disabled in backend mode. Task cancellation clears its target.
+
+The bridge publishes real pose/health/blocked state and reports arrival once per
+matching task/session. Backend activity timers and transactions remain responsible
+for inventory/coins. Map location points must lie in free, reachable camera space.
+Routes use the whole arena; location labels/zones are not obstacles themselves.
+
+Traffic reservations publish a short deterministic exchange in the existing
+spectator chat, e.g. “I'll take the clear route around you. Hold there a moment.” /
+“You've got it. I'll wait until you're clear, then take my turn.” Messages describe
+the controller's decision; Gemini is not negotiating motor safety. Without
+`--backend-url`, reservations appear only in the local overlay/log.
+
+## Optional ESP32 command-expiry firmware
+
+`firmware/wall_y/wall_y.ino` remains unchanged. The new
+`firmware/wall_y_watchdog/wall_y_watchdog.ino` preserves the BLE UUIDs, commands and
+motor mapping, and stops after 500 ms without F/B/L/R. S, disconnect and boot also
+stop; H never extends motion. Motor callbacks/watchdog share a mutex. Set the
+variant's `DEVICE_NAME` to `Eeva` for that robot and verify its actual motor pins
+before uploading. Existing navigation refreshes every 300 ms; keep refresh below
+500 ms. Manual F now expires unless repeated. Flash this variant before testing
+traffic movement so a frozen laptop cannot leave a connected robot driving.
+The sketch still needs compilation/upload with your installed ESP32 Arduino core;
+it cannot be flashed or physically verified from this development laptop.

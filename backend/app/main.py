@@ -125,7 +125,7 @@ def create_app(
     origins = os.getenv('FRONTEND_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
     app.add_middleware(CORSMiddleware, allow_origins=origins.split(','),
                        allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])
-    app.include_router(create_router(conversation))
+    app.include_router(create_router(conversation, store))
     app.include_router(create_world_router(store))
     app.include_router(create_events_router(store))
     if history is not None:

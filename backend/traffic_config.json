@@ -1,0 +1,12 @@
+{
+  "calibrated": false,
+  "frame_width": 1280,
+  "frame_height": 720,
+  "arena": [0, 0, 1280, 720],
+  "radii": {"robot-a": 55, "robot-b": 55},
+  "margin": 30,
+  "max_speed": 250,
+  "stop_latency": 1.1,
+  "grid": 25,
+  "obstacles": []
+}

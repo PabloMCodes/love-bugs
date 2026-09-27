@@ -1,4 +1,4 @@
-"""Two independently armed robots sharing one overhead camera. No avoidance."""
+"""Two robots sharing a camera, with optional calibrated traffic control."""
 
 import asyncio
 import logging
@@ -9,6 +9,8 @@ import cv2
 from app.navigation.__main__ import CameraWorker, draw
 from app.navigation.controller import MotionGate, steer
 from app.robots.client import BleController
+from app.navigation.traffic import TrafficConfig, TrafficController
+from app.navigation.backend import BackendBridge, TaskFollower
 
 WINDOW = 'Love Bugs navigation'
 COLORS = ((255, 80, 255), (255, 220, 0))
@@ -114,6 +116,14 @@ async def stop_all(robots):
 async def run_fleet(args, profiles):
     robots = [RobotControl(profile, args.phase) for profile in profiles]
     selected = 0
+    traffic_path = getattr(args, 'traffic_config', None)
+    traffic = TrafficController(TrafficConfig.load(traffic_path)) if traffic_path else None
+    backend_url = getattr(args, 'backend_url', None)
+    bridge = BackendBridge(backend_url, traffic.config) if backend_url else None
+    bridge_task = None
+    follower = TaskFollower(bridge) if bridge else None
+    if not traffic:
+        logging.warning('Traffic protection OFF: pass --traffic-config traffic_config.json')
     worker = CameraWorker(args.video if args.video else
                           (args.camera if args.camera is not None else profiles[0].config.camera_index),
                           profiles[0].config, robots=profiles)
@@ -122,13 +132,15 @@ async def run_fleet(args, profiles):
     cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
 
     def click(event, x, y, _flags, _data):
-        if event == cv2.EVENT_LBUTTONDOWN and args.phase >= 2:
+        if event == cv2.EVENT_LBUTTONDOWN and args.phase >= 2 and not bridge:
             robots[selected].set_target(x, y)
 
     cv2.setMouseCallback(WINDOW, click)
     startup = None
     try:
         worker.thread.start()
+        if bridge:
+            bridge_task = asyncio.create_task(bridge.run())
         if args.phase == 4:
             # Keep OpenCV responsive and show camera frames while the one fleet
             # scan and sequential BLE connections run. Robots remain stopped.
@@ -170,6 +182,8 @@ async def run_fleet(args, profiles):
                 selected = 1
             if key == ord(' '):
                 await stop_all(robots)
+                if follower:
+                    follower.stop(robots)
                 logging.info('EMERGENCY STOP: both robots disarmed')
             if worker.error:
                 raise RuntimeError(f'Camera failed: {worker.error}')
@@ -180,23 +194,47 @@ async def run_fleet(args, profiles):
             now = time.monotonic()
             for robot in robots:
                 robot.observe(sample, now, args.phase)
-            if key in (ord('a'), ord('A')):
+            world = bridge.current(now) if bridge else None
+            if bridge:
+                if bridge_task.done():
+                    await bridge_task
+                    raise RuntimeError('Backend bridge stopped')
+                follower.update(robots, sample, now, world, arm=key in (ord('a'), ord('A')))
+            elif key in (ord('a'), ord('A')):
                 robots[selected].arm(now)
-            # One lost link stops the whole session; fresh tracking is per robot.
+            commands = (traffic.update(robots, now, sample[1].shape[:2] if sample else None, args.phase)
+                        if traffic and args.phase >= 3 else {r.profile.robot_id: r.command(now) for r in robots})
+            if traffic and traffic.blocked and bridge:
+                follower.stop(robots)
+            if bridge:
+                bridge.capture(robots, traffic)
+                follower.report_arrivals(robots, world, traffic)
+                if not world or follower.session != world['session_id']:
+                    commands = {r.profile.robot_id:'S' for r in robots}
+            elif traffic:
+                for event in traffic.events:
+                    logging.info('TRAFFIC: %s goes first, %s waits; detour=%s', event['winner'],event['yielder'],event['detour'])
+                traffic.events.clear()
+            # One lost link always stops the whole session.
             if any(r.ble and not r.ble.connected for r in robots):
                 raise RuntimeError('BLE disconnected; stopping both. Restart to reconnect and re-arm.')
-            results = await asyncio.gather(*(r.ble.send(r.command(now)) for r in robots if r.ble),
+            results = await asyncio.gather(*(r.ble.send(commands[r.profile.robot_id]) for r in robots if r.ble),
                                            return_exceptions=True)
             errors = [result for result in results if isinstance(result, BaseException)]
             if errors:
                 raise RuntimeError(f'BLE write failed; stopping both: {errors[0]}')
             lines = [f'Phase {args.phase} | selected robot: {robots[selected].profile.name}',
-                     'W WALL-Y | E Eeva | click target | A arm selected | SPACE stop BOTH | Q quit']
+                     ('A enable backend tasks | SPACE stop BOTH | Q quit' if bridge else
+                      'W WALL-Y | E Eeva | click target | A arm selected | SPACE stop BOTH | Q quit')]
+            if traffic:
+                lines.append('TRAFFIC: ' + traffic.reason)
+            if bridge:
+                lines.append('BACKEND: ' + (bridge.error or ('armed for tasks' if follower.session else 'press A to enable tasks')))
             for robot in robots:
                 ble_status = ('connected' if robot.ble.connected else 'disconnected') if robot.ble else 'off (dry run)'
                 sent = robot.ble.last_command if robot.ble else 'NONE'
                 lines.append(f'{robot.profile.name}: {"ARMED" if robot.gate.armed else "STOPPED"} '
-                             f'BLE={ble_status} selected={robot.desired} sent={sent} | {robot.reason}')
+                             f'BLE={ble_status} selected={commands[robot.profile.robot_id]} sent={sent} | {robot.reason}')
                 if robot.pose:
                     p = robot.pose
                     lines.append(f'  ID={p.marker_id} x={p.center_x:.1f} y={p.center_y:.1f} marker h={p.heading:.1f}')
@@ -216,10 +254,25 @@ async def run_fleet(args, profiles):
                     if target:
                         cv2.putText(frame, robot.profile.name, (int(target[0]) + 15, int(target[1])),
                                     cv2.FONT_HERSHEY_SIMPLEX, .6, COLORS[index], 2)
+                if traffic:
+                    for robot in robots:
+                        if robot.pose:
+                            cv2.circle(frame, (int(robot.pose.center_x),int(robot.pose.center_y)),
+                                       int(traffic.clearance(robot.profile.robot_id)), (0,0,255), 2)
+                    for rect in [traffic.config.arena, *traffic.config.obstacles]:
+                        cv2.rectangle(frame, (int(rect[0]),int(rect[1])), (int(rect[2]),int(rect[3])), (100,100,255), 2)
+                    owner = next((r for r in robots if r.profile.robot_id==traffic.owner), None)
+                    if owner and owner.pose:
+                        points = [traffic.point(owner), *traffic.route]
+                        for start,end in zip(points,points[1:]):
+                            cv2.line(frame, tuple(map(int,start)), tuple(map(int,end)), (0,255,0), 2)
                 draw(frame, None, None, None, lines)
                 cv2.imshow(WINDOW, frame)
             await asyncio.sleep(.01)
     finally:
+        if bridge_task:
+            bridge_task.cancel()
+            await asyncio.gather(bridge_task, return_exceptions=True)
         if startup and not startup.done():
             startup.cancel()
             await asyncio.gather(startup, return_exceptions=True)

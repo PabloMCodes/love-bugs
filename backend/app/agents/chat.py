@@ -56,7 +56,7 @@ class AgentChat:
                       if decision.action in ('BUY', 'SELL') else {})
         text = normalized_message(decision.message)
         own = [m for m in self.messages if m['robot_id'] == robot_id][-6:]
-        for previous in own:
+        for previous in ([] if kind == 'traffic' else own):
             if (previous['action'], previous['location'], previous['parameters'], previous['status']) != (
                 decision.action, decision.location, parameters, status
             ):

@@ -177,3 +177,22 @@ The ESP32 protocol, robot addresses, motor pins, command frequency, camera choic
 calibration values, physical arrival tolerance, deployment/authentication, and
 optional cooperation mechanics remain team decisions. Coordinate any addition,
 but do not change existing MVP v1 fields or meanings silently.
+
+## Optional physical traffic adapter
+
+`python -m app.navigation --phase 4 --robots-config navigation_robots.json
+--traffic-config traffic_config.json --backend-url http://localhost:8000` consumes
+`GET /world` in hardware mode and uses existing pose, health and arrival reports.
+The health `blocked` flag reports local traffic faults. Camera calibration maps
+pixel arena bounds linearly onto map width/height; see the navigation README.
+This adapter owns hardware telemetry: do not run another pose/health writer or
+BLE controller for these robots simultaneously.
+
+Additive endpoint: `POST /agent-chat/traffic` accepts
+`{session_id, event_id, winner, yielder, detour}`. Participants must be distinct
+`robot-a`/`robot-b`; the session must match the hardware world. Repeated event IDs
+are idempotent within a session (bounded at 10,000; then 429). It publishes two
+`kind: "traffic"`, `status: "traffic"` public messages on the existing chat feed;
+these describe a local reservation, not a new game task or proof of arrival.
+Existing world/task/WebSocket schemas are unchanged. Like the current demo APIs,
+this endpoint assumes a trusted local network.
