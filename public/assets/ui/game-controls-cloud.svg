@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1392 68" preserveAspectRatio="none" shape-rendering="crispEdges">
+  <defs>
+    <clipPath id="cloud-shape">
+      <path d="M0 20H12V12H28V8H48V4H140V0H280V4H388V0H506V4H620V0H748V2H870V0H982V4H1098V0H1226V4H1320V8H1352V12H1376V18H1388V24H1392V56H1384V62H1368V66H1280V68H1152V66H1026V68H892V64H766V68H624V66H490V68H350V66H220V68H104V66H40V62H16V56H4V48H0Z"/>
+    </clipPath>
+    <pattern id="blue-dither" width="24" height="16" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" x="0" y="0" fill="#a9d7ed"/>
+      <rect width="4" height="4" x="12" y="4" fill="#a9d7ed"/>
+      <rect width="4" height="4" x="4" y="12" fill="#8fc9e5"/>
+      <rect width="4" height="4" x="20" y="12" fill="#8fc9e5"/>
+    </pattern>
+    <pattern id="white-dither" width="28" height="20" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" x="4" y="4" fill="#ffffff" fill-opacity=".76"/>
+      <rect width="4" height="4" x="20" y="0" fill="#ffffff" fill-opacity=".72"/>
+      <rect width="4" height="4" x="12" y="16" fill="#ffffff" fill-opacity=".62"/>
+    </pattern>
+  </defs>
+
+  <g clip-path="url(#cloud-shape)">
+    <rect width="1392" height="68" fill="#f8fdff"/>
+
+    <path d="M0 40H96V36H184V40H276V34H372V38H474V32H574V38H674V34H778V40H884V34H990V38H1094V32H1192V38H1288V34H1392V68H0Z" fill="#e4f5fc"/>
+    <path d="M0 52H82V48H166V54H260V46H352V52H446V44H542V50H634V46H728V54H824V48H918V52H1014V46H1112V54H1208V48H1304V52H1392V68H0Z" fill="#cbeafa"/>
+    <path d="M0 60H64V56H132V62H214V58H292V64H374V56H450V62H530V58H612V64H696V56H776V62H858V58H940V64H1024V56H1104V62H1188V58H1270V64H1344V58H1392V68H0Z" fill="#a9d7ed"/>
+
+    <rect x="0" y="42" width="1392" height="26" fill="url(#blue-dither)" opacity=".72"/>
+    <rect x="0" y="6" width="1392" height="48" fill="url(#white-dither)" opacity=".82"/>
+
+    <g fill="#ffffff">
+      <rect x="40" y="14" width="116" height="6"/>
+      <rect x="72" y="8" width="56" height="6"/>
+      <rect x="226" y="10" width="126" height="6"/>
+      <rect x="258" y="4" width="62" height="6"/>
+      <rect x="424" y="12" width="142" height="6"/>
+      <rect x="466" y="6" width="72" height="6"/>
+      <rect x="640" y="8" width="130" height="6"/>
+      <rect x="676" y="2" width="62" height="6"/>
+      <rect x="842" y="12" width="132" height="6"/>
+      <rect x="880" y="6" width="64" height="6"/>
+      <rect x="1050" y="8" width="150" height="6"/>
+      <rect x="1094" y="2" width="68" height="6"/>
+      <rect x="1260" y="14" width="96" height="6"/>
+    </g>
+
+    <g fill="#b9e1f3" opacity=".9">
+      <rect x="112" y="44" width="34" height="4"/>
+      <rect x="186" y="54" width="22" height="4"/>
+      <rect x="324" y="42" width="40" height="4"/>
+      <rect x="400" y="56" width="26" height="4"/>
+      <rect x="554" y="46" width="34" height="4"/>
+      <rect x="716" y="54" width="30" height="4"/>
+      <rect x="812" y="44" width="42" height="4"/>
+      <rect x="972" y="56" width="24" height="4"/>
+      <rect x="1128" y="44" width="38" height="4"/>
+      <rect x="1282" y="54" width="30" height="4"/>
+    </g>
+  </g>
+</svg>
