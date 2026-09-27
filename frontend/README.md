@@ -36,7 +36,8 @@ npm exec --yes --package=node@24 -- npm run dev
 - `src/api/`: HTTP requests and the live WebSocket connection.
 
 Use the stable MVP v1 world model and endpoints in [api.md](../api.md), and follow
-the frontend section of the [integration checklist](../INTEGRATION.md). The backend
+the frontend section of the [integration checklist](../INTEGRATION.md). The shared
+objective and UI milestones are tracked in [GAME_PLAN.md](../GAME_PLAN.md). The backend
 owns game rules, prices, rewards, and task completion. The browser talks only to
 the backend and renders the returned robot list without assuming a fixed count.
 

@@ -2,7 +2,17 @@
 
 The application API is ready for frontend, agent, database, localization, and
 robotics teammates to integrate against. [api.md](api.md) is the complete MVP v1
-contract; this file is the practical handoff checklist.
+contract; this file is the practical handoff checklist. Read
+[GAME_PLAN.md](GAME_PLAN.md) first for the shared game objective, current gameplay
+gaps, milestone order, and end-to-end acceptance scenario.
+
+## Current team milestone
+
+The immediate milestone is Phase 1 of the game plan: a complete autonomous
+simulation round in which Wall-y and Eve start at home, collect different
+resources, sell their own inventory, advance the shared repair fund, and trigger
+one clear victory state. Teammate integrations should preserve that scenario in
+hardware mode instead of introducing a second game loop.
 
 ## Shared setup
 

@@ -9,7 +9,10 @@ change; additive endpoints and event types are allowed. Physical hardware adapte
 remain integration work and the provisional ESP32 transport is not frozen.
 
 For the practical subsystem handoff and acceptance checks, see
-[INTEGRATION.md](INTEGRATION.md).
+[INTEGRATION.md](INTEGRATION.md). For gameplay direction, milestone scope, and
+the target demo scenario, see [GAME_PLAN.md](GAME_PLAN.md). The game plan does not
+change this contract by itself; planned contract changes still require coordinated
+updates to this document, tests, and consumers.
 
 Contract version 1 permits additive endpoints, optional response fields, and event
 types. Do not remove or rename fields, change their types or meanings, or alter an
@@ -367,7 +370,7 @@ Initially scripted task requests can exercise this scenario; autonomous agent de
 
 Recommended order: canonical world fixture → `GET /world` and `/events` → frontend rendering → task lifecycle with simulated motion → inventory and market → hardware adapters → autonomous decisions → cooperation. Components can be built concurrently against these contracts; this order assigns no people or ownership.
 
-Keep these decisions open: frontend/backend frameworks, agent provider, process boundaries, robot transport, camera and marker choice, calibration and arena dimensions, actual names/artwork, game balancing, co-op mechanics, optional camera feeds, deployment/authentication, and additional sponsor integrations. Before adding any externally exposed deployment or changing shared formats, agree on the necessary contract updates together.
+Keep these decisions open: frontend/backend frameworks, agent provider, process boundaries, robot transport, camera and marker choice, calibration and arena dimensions, game balancing, co-op mechanics beyond the repair-fund loop, optional camera feeds, deployment/authentication, and additional sponsor integrations. The current robot names are Wall-y and Eve. Before adding any externally exposed deployment or changing shared formats, agree on the necessary contract updates together.
 
 ## Agent conversation preview
 

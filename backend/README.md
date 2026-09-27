@@ -26,7 +26,8 @@ The API and agents submit work to game logic. Game logic owns state changes, tim
 Start with modules in one backend process; separate processes only when integration needs justify it. Keep hardware I/O out of API handlers and game rules. Implement synchronization around shared state and transactions when adding concurrent work.
 
 [api.md](../api.md) is the stable MVP v1 application contract. Teammates should
-start with the practical [integration checklist](../INTEGRATION.md). Hardware
+start with the shared [game plan](../GAME_PLAN.md), then use the practical
+[integration checklist](../INTEGRATION.md). Hardware
 transport, calibration, and ESP32 firmware remain integration decisions; the
 onboard motor watchdog belongs in that firmware.
 
