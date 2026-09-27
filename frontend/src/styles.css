@@ -151,18 +151,16 @@ body {
 }
 
 .world-map-board {
-    border: 4px solid #173f1c;
-    background: #4f9f38;
+    border: 1px solid #285f31;
+    background-color: #367a3b;
+    background-image: url('/assets/ui/world-map.svg');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
     box-shadow:
         0 7px 0 #102d16,
-        inset 0 0 0 3px #86c754;
-    clip-path: polygon(
-        0 4px, 4px 4px, 4px 0,
-        calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
-        100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px),
-        calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px),
-        0 calc(100% - 4px)
-    );
+        inset 0 0 0 2px rgb(126 190 91 / 45%);
+    border-radius: 14px;
 }
 
 .map-location-marker,
