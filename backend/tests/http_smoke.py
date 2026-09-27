@@ -59,17 +59,43 @@ def main():
                             time.sleep(.1)
                         raise AssertionError('Task did not finish')
 
-                    seed_sale_inventory = {
+                    buy_for_planting = {
+                        'request_id': 'buy-for-planting',
+                        'robot_id': 'robot-b',
+                        'action': 'BUY',
+                        'location': 'market',
+                        'parameters': {'item': 'seeds', 'quantity': 1},
+                    }
+                    assert client.post('/tasks', json=buy_for_planting).status_code == 202
+                    assert task_done('robot-b')['game']['money'] == 35
+                    plant = {
+                        'request_id': 'plant-for-sale',
+                        'robot_id': 'robot-b',
+                        'action': 'PLANT',
+                        'location': 'farm',
+                        'parameters': {'item': 'seeds', 'plot_id': 'plot-1'},
+                    }
+                    assert client.post('/tasks', json=plant).status_code == 202
+                    task_done('robot-b')
+                    for _ in range(120):
+                        current = client.get('/world').json()
+                        if current['farm']['plots'][0]['status'] == 'READY':
+                            break
+                        time.sleep(.1)
+                    else:
+                        raise AssertionError('Crop did not become ready')
+                    harvest = {
                         'request_id': 'harvest-for-sale',
                         'robot_id': 'robot-b',
                         'action': 'HARVEST',
                         'location': 'farm',
+                        'parameters': {'plot_id': 'plot-1'},
                     }
-                    assert client.post('/tasks', json=seed_sale_inventory).status_code == 202
-                    assert task_done('robot-b')['game']['inventory']['crop']['quantity'] == 3
+                    assert client.post('/tasks', json=harvest).status_code == 202
+                    assert task_done('robot-b')['game']['inventory']['wheat']['quantity'] == 3
 
-                    for action, params, expected in [('SELL', {'item': 'crop', 'quantity': 1}, 52),
-                                                      ('BUY', {'item': 'seeds', 'quantity': 1}, 47)]:
+                    for action, params, expected in [('SELL', {'item': 'wheat', 'quantity': 1}, 47),
+                                                      ('BUY', {'item': 'seeds', 'quantity': 1}, 42)]:
                         request = {'request_id': action, 'robot_id': 'robot-b', 'action': action,
                                    'location': 'market', 'parameters': params}
                         result = client.post('/tasks', json=request)
@@ -82,26 +108,26 @@ def main():
                         assert retry.json()['status'] == 'COMPLETED'
                         assert client.get('/world').json()['revision'] == revision
                         assert task_done('robot-b')['game']['money'] == expected
-                    request = {'request_id': 'harvest', 'robot_id': 'robot-a', 'action': 'HARVEST', 'location': 'farm'}
+                    request = {'request_id': 'fish', 'robot_id': 'robot-a', 'action': 'FISH', 'location': 'lake'}
                     assert client.post('/tasks', json=request).status_code == 202
-                    assert task_done('robot-a')['game']['inventory']['crop']['quantity'] == 3
+                    assert task_done('robot-a')['game']['inventory']['fish']['quantity'] == 1
                     request = {'request_id': 'return-home', 'robot_id': 'robot-a',
                                'action': 'RETURN_HOME', 'location': 'homebase'}
                     assert client.post('/tasks', json=request).status_code == 202
                     assert task_done('robot-a')['game']['location'] == 'homebase'
                     events = client.get('/events').json()['events']
-                    assert sum(e['type'] == 'task_completed' for e in events) == 5
+                    assert sum(e['type'] == 'task_completed' for e in events) == 7
                     assert len(client.get('/robots').json()['robots']) == 2
                     assert client.get('/robots/robot-a').json()['id'] == 'robot-a'
                     assert len(client.get('/market').json()['items']) == 3
                     tasks = client.get('/tasks').json()['tasks']
-                    assert len(tasks) == 5
+                    assert len(tasks) == 7
                     assert all(task['status'] == 'COMPLETED' for task in tasks)
                     assert client.get(f"/tasks/{tasks[0]['id']}").json() == tasks[0]
                     path = client.get('/robots/robot-a/history').json()
                     assert len(path['position_samples']) > 2
                     assert client.get('/events', params={'session_id': sid}).json()['session_id'] == sid
-                    print('PASS goal/world/start/tasks: movement, return home, harvest, sell, buy, query APIs, retry without duplicate reward, persisted history')
+                    print('PASS goal/world/start/tasks: buy, plant, grow, harvest, sell, fish, retry safety, persisted history')
                     payload = {'session_id': sid, 'timestamp': (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat(),
                                'pose': {'x': 22, 'y': 50, 'heading': 90}}
                     assert client.post('/robots/robot-a/pose', json=payload).json()['accepted']

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from app.agents.orchestrator import AgentOrchestrator
@@ -6,12 +7,21 @@ from app.agents.planner import MockPlanner
 from app.agents.runtime import AutonomyRunner
 from app.schemas import TaskRequest
 from app.simulation.simulator import SimulationRunner
-from app.state import WorldStateError, WorldStore
+from app.state import WorldStateError, WorldStore, default_world
 
 
 class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_mock_autonomy_completes_round_without_browser(self):
-        store = WorldStore()
+        world = default_world()
+        planted_at = datetime.now(timezone.utc) - timedelta(seconds=9)
+        world['farm']['plots'][0].update({
+            'status': 'READY',
+            'crop_id': 'wheat',
+            'planted_by': 'robot-a',
+            'planted_at': planted_at,
+            'ready_at': planted_at + timedelta(seconds=8),
+        })
+        store = WorldStore(world)
         store.start_game()
         orchestrator = AgentOrchestrator(
             MockPlanner(),

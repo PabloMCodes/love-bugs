@@ -13,7 +13,7 @@ export const taskCatalog = Object.freeze({
         requiredLocation: 'farm',
         durationMilliseconds: 2500,
         reward: {
-            itemId: 'crop',
+            itemId: 'wheat',
             name: 'Wheat',
             quantity: 3,
             sellPrice: 12,

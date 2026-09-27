@@ -44,14 +44,17 @@ class GeminiPlanner:
                     'Choose one action: HARVEST at farm, FISH at lake, BUY or SELL at market, '
                     'RETURN_HOME at homebase, MOVE_TO a named location, or WAIT. '
                     'Tasks handle travel automatically. Do not issue motor commands. '
-                    'HARVEST and FISH collect resources without buying seeds. '
+                    'FISH collects fish without another item. HARVEST requires the '
+                    'plot_id of a READY plot from farm.plots; never harvest an EMPTY '
+                    'or GROWING plot. '
                     'BUY uses unlocked item IDs from market.items; compare game.stage with '
                     'each item required_stage. SELL uses sellable item IDs from '
                     'your own inventory. Use only configured locations from the snapshot. '
                     'Sell useful inventory to earn gold; avoid purchases without a clear benefit. '
                     'Inventory entries may be counts or objects with quantity. '
                     'WAIT means defer, with null location/item/quantity. '
-                    'Trades require item and positive integer quantity; other actions use nulls. '
+                    'Trades require item and positive integer quantity. HARVEST requires '
+                    'plot_id. Other actions use null item, quantity, and plot_id. '
                     'Give a short spectator-facing reason. Never invent results or change state. '
                     'Also fill message with a short, friendly public message to your teammates. '
                     'Read agent_messages, acknowledge relevant requests, and coordinate your next move. '
@@ -79,7 +82,10 @@ class GeminiPlanner:
                                            session_id=session_id)
         try:
             # Full camera frames and unbounded event histories are never sent to Gemini.
-            snapshot = {key: world[key] for key in ('session_id', 'game', 'map', 'robots', 'market')}
+            snapshot = {
+                key: world[key]
+                for key in ('session_id', 'game', 'map', 'robots', 'market', 'farm')
+            }
             snapshot['agent_messages'] = world.get('agent_messages', [])[-20:]
             message = types.Content(role='user', parts=[types.Part(text=json.dumps(snapshot))])
             stream = runner.run_async(user_id=robot_id, session_id=session_id,

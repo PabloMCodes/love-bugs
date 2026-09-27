@@ -1,6 +1,6 @@
 # Love Bugs tycoon game design
 
-Status: **partially implemented; crop lifecycle and cooperative economy remain planned**.
+Status: **partially implemented; wheat lifecycle complete, broader progression planned**.
 
 This document records the intended mechanics and the boundary between implemented
 gameplay and planned expansion. It is the product reference for farming progression,
@@ -13,18 +13,17 @@ schema, endpoints, tests, examples, and consumers are updated together.
 
 ## Current implementation checkpoint
 
-The backend currently supports the reliable pre-planting loop: deterministic or
-Gemini autonomy can move, harvest wheat directly, fish, sell robot-owned inventory,
-advance the combined-gold goal, unlock seed stages automatically, and complete a
-round without a browser. The market sells all three seed types and enforces stage
+The backend supports a reliable autonomous resource loop and the complete manual
+wheat crop lifecycle. The market sells all three seed types and enforces stage
 locks. The frontend has a purchase-only market, market transaction notifications,
 and a full-height Crop Queue driven by canonical farm state.
 
 Schema version 2 includes the wheat crop definition and three shared farm plots.
 `PLANT` consumes one owned Wheat Seed at the farm and atomically creates a
 timestamped `GROWING` plot, which the queue renders. The backend game loop changes
-elapsed plots to `READY` exactly once and publishes `crop_ready`. `HARVEST` still
-creates wheat without reading a plot, so plot-aware harvesting is the next
+elapsed plots to `READY` exactly once and publishes `crop_ready`. `HARVEST` requires
+a selected ready plot, grants its Wheat once, publishes `crop_harvested`, and
+returns the plot to `EMPTY`. Teaching planners to buy and plant is the next
 implementation goal; cooperative unlock and transfer mechanics remain later phases.
 
 ## Game fantasy
@@ -151,8 +150,8 @@ The first vertical slice is deliberately wheat-only:
 5. Submit plot-aware `HARVEST`, grant Wheat once, and return the plot to `EMPTY`.
 6. Sell the harvested Wheat through the existing market transaction.
 
-Only after this sequence passes cancellation, retry, reset, and reconnect tests
-should carrot and pumpkin reuse the same rules with different timings and values.
+This sequence now passes cancellation, retry, reset, reconnect, and live HTTP smoke
+tests. Carrot and pumpkin can reuse these rules with different timings and values.
 
 ## Stage progression
 
@@ -434,11 +433,11 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 No implementation begins merely because it appears in this document. When the
 team is ready, the safest order is:
 
-1. Implement the wheat buy → plant → grow → harvest → sell slice deterministically.
+1. Teach mock autonomy, then Gemini, to buy and plant wheat using the validated actions.
 2. Generalize the validated lifecycle to carrot and pumpkin.
-3. Add map stage rendering and richer farm plot state.
+3. Add map stage rendering and richer farm plot presentation.
 4. Implement seeded fishing duration and reward tiers.
 5. Add money request/transfer transactions.
 6. Add cooperative unlock proposal, agreement, contributions, and stage changes.
-7. Expand mock autonomy, then Gemini prompts, against the same validated actions.
-8. Run the complete loop in simulation before connecting it to physical motion.
+7. Expand both planners to reason about crop value, growth time, and progression.
+8. Run the complete autonomous loop in simulation before connecting it to physical motion.

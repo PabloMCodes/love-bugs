@@ -5,7 +5,13 @@ import math
 from threading import RLock
 from uuid import uuid4
 
-from app.game.crops import CropRuleError, apply_planting, quote_planting
+from app.game.crops import (
+    CropRuleError,
+    apply_harvest,
+    apply_planting,
+    quote_harvest,
+    quote_planting,
+)
 from app.game.market import (
     MarketRuleError,
     apply_purchase,
@@ -774,7 +780,7 @@ class WorldStore:
                     'INVALID_REQUEST',
                     'Only MOVE_TO, RETURN_HOME, HARVEST, FISH, BUY, SELL, and PLANT are implemented by the backend task service.',
                 )
-            if request.action not in ('BUY', 'SELL', 'PLANT') and request.parameters:
+            if request.action not in ('BUY', 'SELL', 'PLANT', 'HARVEST') and request.parameters:
                 raise WorldStateError(
                     'INVALID_REQUEST',
                     f'{request.action} does not accept parameters.',
@@ -841,6 +847,14 @@ class WorldStore:
                         self._world.farm.model_dump(mode='python'),
                         request.parameters,
                         current_stage=self._world.game.stage,
+                    )
+                except CropRuleError as error:
+                    raise WorldStateError(error.code, error.message) from error
+            if request.action == 'HARVEST':
+                try:
+                    quote_harvest(
+                        self._world.farm.model_dump(mode='python'),
+                        request.parameters,
                     )
                 except CropRuleError as error:
                     raise WorldStateError(error.code, error.message) from error
@@ -1232,6 +1246,75 @@ class WorldStore:
             },
         ])
 
+    def _complete_harvest(
+        self,
+        world: dict,
+        robot: dict,
+        task: dict,
+        now: datetime,
+    ) -> None:
+        try:
+            quote = apply_harvest(
+                robot['game'],
+                world['farm'],
+                task['parameters'],
+            )
+        except CropRuleError as error:
+            robot['task'] = None
+            world['events'].append({
+                'id': f"event-{task['id']}-failed",
+                'timestamp': now,
+                'type': 'task_failed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} could not harvest the crop: {error.message}",
+                'data': {'code': error.code},
+            })
+            return
+
+        total_quantity = robot['game']['inventory'][quote.crop_id]['quantity']
+        robot['task'] = None
+        world['events'].extend([
+            {
+                'id': f"event-{task['id']}-inventory",
+                'timestamp': now,
+                'type': 'inventory_updated',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': (
+                    f"{robot['name']} collected {quote.quantity} "
+                    f'{quote.crop_name}.'
+                ),
+                'data': {
+                    'item': quote.crop_id,
+                    'quantity': quote.quantity,
+                    'total_quantity': total_quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-harvested",
+                'timestamp': now,
+                'type': 'crop_harvested',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} harvested {quote.crop_name} from {quote.plot_id}.",
+                'data': {
+                    'plot_id': quote.plot_id,
+                    'crop_id': quote.crop_id,
+                    'quantity': quote.quantity,
+                },
+            },
+            {
+                'id': f"event-{task['id']}-completed",
+                'timestamp': now,
+                'type': 'task_completed',
+                'robot_id': robot['id'],
+                'task_id': task['id'],
+                'message': f"{robot['name']} completed harvesting {quote.crop_name}.",
+                'data': {},
+            },
+        ])
+
     def _complete_purchase(self, world: dict, robot: dict, task: dict, now: datetime) -> None:
         try:
             quote = apply_purchase(
@@ -1465,6 +1548,10 @@ class WorldStore:
                 changed = True
 
                 if progress < 1 - 1e-9:
+                    continue
+
+                if task['action'] == 'HARVEST':
+                    self._complete_harvest(world, robot, task, now)
                     continue
 
                 inventory = robot['game']['inventory']

@@ -1,4 +1,4 @@
-"""Validation and mutation helpers for authoritative crop planting."""
+"""Validation and mutation helpers for authoritative planting and harvesting."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -19,6 +19,15 @@ class PlantingQuote:
     crop_name: str
     plot_id: str
     grow_seconds: float
+
+
+@dataclass(frozen=True)
+class HarvestQuote:
+    plot_id: str
+    crop_id: str
+    crop_name: str
+    quantity: int
+    sell_price: int
 
 
 def planting_parameters(parameters: dict) -> tuple[str, str]:
@@ -121,5 +130,83 @@ def apply_planting(
         'planted_by': planted_by,
         'planted_at': planted_at,
         'ready_at': planted_at + timedelta(seconds=quote.grow_seconds),
+    })
+    return quote
+
+
+def harvest_parameters(parameters: dict) -> str:
+    if set(parameters) != {'plot_id'}:
+        raise CropRuleError(
+            'INVALID_REQUEST',
+            'HARVEST requires only a plot_id parameter.',
+        )
+    plot_id = parameters['plot_id']
+    if not isinstance(plot_id, str) or not plot_id:
+        raise CropRuleError(
+            'INVALID_REQUEST',
+            'HARVEST plot_id must be a nonempty string.',
+        )
+    return plot_id
+
+
+def quote_harvest(farm: dict, parameters: dict) -> HarvestQuote:
+    plot_id = harvest_parameters(parameters)
+    plot = next(
+        (candidate for candidate in farm['plots'] if candidate['id'] == plot_id),
+        None,
+    )
+    if plot is None:
+        raise CropRuleError('NOT_FOUND', f'Unknown farm plot {plot_id}.')
+    if plot['status'] != 'READY':
+        raise CropRuleError(
+            'PLOT_NOT_READY',
+            f'Farm plot {plot_id} is not ready to harvest.',
+        )
+
+    crop = next(
+        (candidate for candidate in farm['crops'] if candidate['id'] == plot['crop_id']),
+        None,
+    )
+    if crop is None:
+        raise CropRuleError('NOT_FOUND', f"Unknown crop {plot['crop_id']}.")
+
+    return HarvestQuote(
+        plot_id=plot_id,
+        crop_id=crop['id'],
+        crop_name=crop['name'],
+        quantity=crop['harvest_quantity'],
+        sell_price=crop['sell_price'],
+    )
+
+
+def apply_harvest(game: dict, farm: dict, parameters: dict) -> HarvestQuote:
+    quote = quote_harvest(farm, parameters)
+    inventory_item = game['inventory'].get(quote.crop_id)
+    total_quantity = (
+        inventory_item['quantity'] if inventory_item is not None else 0
+    ) + quote.quantity
+    game['inventory'][quote.crop_id] = {
+        'name': (
+            inventory_item['name']
+            if inventory_item is not None
+            else quote.crop_name
+        ),
+        'quantity': total_quantity,
+        'sell_price': (
+            inventory_item['sell_price']
+            if inventory_item is not None
+            else quote.sell_price
+        ),
+    }
+
+    plot = next(
+        candidate for candidate in farm['plots'] if candidate['id'] == quote.plot_id
+    )
+    plot.update({
+        'status': 'EMPTY',
+        'crop_id': None,
+        'planted_by': None,
+        'planted_at': None,
+        'ready_at': None,
     })
     return quote

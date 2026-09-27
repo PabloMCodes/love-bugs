@@ -130,7 +130,7 @@ class RuntimeModeTests(unittest.TestCase):
 
                 self.assertEqual(
                     {task['action'] for task in tasks[:2]},
-                    {'HARVEST', 'FISH'},
+                    {'FISH'},
                 )
                 self.assertTrue(
                     all(message['status'] == 'accepted'

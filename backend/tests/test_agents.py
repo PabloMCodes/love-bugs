@@ -24,7 +24,16 @@ class DecisionTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValidationError):
                 Decision(reason='test', **values)
         with self.assertRaises(ValueError):
-            validate_decision(demo_world(), 'robot-a', Decision(action='HARVEST', location='lake', reason='test'))
+            validate_decision(
+                demo_world(),
+                'robot-a',
+                Decision(
+                    action='HARVEST',
+                    location='lake',
+                    plot_id='plot-1',
+                    reason='test',
+                ),
+            )
 
     def test_inventory_formats_and_trade_validation(self):
         world = demo_world()
@@ -112,7 +121,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
                 return await super().decide(world, robot_id)
         orchestrator = AgentOrchestrator(Planner())
         outcomes = await orchestrator.tick(lambda: self.world, self.submit)
-        self.assertEqual([r['action'] for r in self.requests], ['HARVEST', 'FISH'])
+        self.assertEqual([r['action'] for r in self.requests], ['FISH', 'FISH'])
         self.assertEqual([o.status for o in outcomes], ['accepted', 'accepted'])
         self.assertIsNotNone(seen[1]['robots'][0]['task'])
         self.assertEqual(await orchestrator.tick(lambda: self.world, self.submit), [])
@@ -143,6 +152,25 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             {'item': 'crop', 'quantity': 3},
         )
         self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
+
+    async def test_mock_planner_claims_ready_plot(self):
+        self.world['farm']['plots'] = [{
+            'id': 'plot-1',
+            'status': 'READY',
+            'crop_id': 'wheat',
+            'planted_by': 'robot-a',
+            'planted_at': '2026-09-27T12:00:00Z',
+            'ready_at': '2026-09-27T12:00:08Z',
+        }]
+
+        outcomes = await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(self.requests[0]['action'], 'HARVEST')
+        self.assertEqual(self.requests[0]['parameters'], {'plot_id': 'plot-1'})
+        self.assertEqual(outcomes[0].status, 'accepted')
 
     async def test_unavailable_robots_and_stopped_game_skip_model(self):
         class FailPlanner:
@@ -245,7 +273,8 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('additional_properties', wire_schema)
         with self.assertRaises(ValidationError):
             Decision.model_validate_json(json.dumps({
-                'action': 'HARVEST', 'location': 'farm', 'reason': 'Earn gold',
+                'action': 'HARVEST', 'location': 'farm', 'plot_id': 'plot-1',
+                'reason': 'Earn gold',
                 'motor_speed': 1,
             }))
 
@@ -267,7 +296,12 @@ class GeminiAdapterTests(unittest.IsolatedAsyncioTestCase):
                 async def generate_content_async(inner, llm_request, stream=False):
                     captured.append(llm_request)
                     yield LlmResponse(content=types.Content(role='model', parts=[types.Part(
-                        text=json.dumps({'action': 'HARVEST', 'location': 'farm', 'reason': 'Earn gold'})
+                        text=json.dumps({
+                            'action': 'HARVEST',
+                            'location': 'farm',
+                            'plot_id': 'plot-1',
+                            'reason': 'Earn gold',
+                        })
                     )]))
             first.agent.model = FakeModel(model='test-model')
             world = demo_world()

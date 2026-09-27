@@ -26,6 +26,7 @@ def demo_world():
                    for robot_id, name in [('robot-a', 'Wall-y'), ('robot-b', 'Eeva')]],
         'market': {'items': [{'id': 'crop', 'name': 'Wheat', 'buy_price': None, 'sell_price': 12, 'stock': None},
                              {'id': 'fish', 'name': 'Fish', 'buy_price': None, 'sell_price': 18, 'stock': None}]},
+        'farm': {'crops': [], 'plots': []},
     }
 
 

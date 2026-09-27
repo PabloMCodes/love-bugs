@@ -1,9 +1,23 @@
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.state import WorldStore, default_world
+
+
+def ready_wheat_plot(world: dict, plot_index: int = 0) -> str:
+    planted_at = datetime.now(timezone.utc) - timedelta(seconds=9)
+    plot = world['farm']['plots'][plot_index]
+    plot.update({
+        'status': 'READY',
+        'crop_id': 'wheat',
+        'planted_by': 'robot-a',
+        'planted_at': planted_at,
+        'ready_at': planted_at + timedelta(seconds=8),
+    })
+    return plot['id']
 
 
 class TaskRouteTests(unittest.TestCase):
@@ -60,15 +74,19 @@ class TaskRouteTests(unittest.TestCase):
         self.assertEqual(response.json()['error']['code'], 'REQUEST_ID_CONFLICT')
 
     def test_collection_task_is_accepted_for_its_required_location(self):
-        self.client.post('/game/start')
+        world = default_world()
+        plot_id = ready_wheat_plot(world)
         request = {
             **self.request,
             'request_id': 'request-harvest-001',
             'action': 'HARVEST',
             'location': 'farm',
+            'parameters': {'plot_id': plot_id},
         }
 
-        response = self.client.post('/tasks', json=request)
+        with TestClient(create_app(world_store=WorldStore(world))) as client:
+            client.post('/game/start')
+            response = client.post('/tasks', json=request)
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()['action'], 'HARVEST')
@@ -113,20 +131,29 @@ class TaskRouteTests(unittest.TestCase):
             'action': 'FISH',
             'location': 'farm',
         }
-        parameters = {
+        malformed_parameters = {
             **self.request,
             'request_id': 'request-harvest-parameters',
             'action': 'HARVEST',
             'parameters': {'item': 'crop'},
         }
+        not_ready = {
+            **self.request,
+            'request_id': 'request-harvest-not-ready',
+            'action': 'HARVEST',
+            'parameters': {'plot_id': 'plot-1'},
+        }
 
         location_response = self.client.post('/tasks', json=wrong_location)
-        parameters_response = self.client.post('/tasks', json=parameters)
+        parameters_response = self.client.post('/tasks', json=malformed_parameters)
+        not_ready_response = self.client.post('/tasks', json=not_ready)
 
         self.assertEqual(location_response.status_code, 400)
         self.assertEqual(location_response.json()['error']['code'], 'INVALID_REQUEST')
         self.assertEqual(parameters_response.status_code, 400)
         self.assertEqual(parameters_response.json()['error']['code'], 'INVALID_REQUEST')
+        self.assertEqual(not_ready_response.status_code, 409)
+        self.assertEqual(not_ready_response.json()['error']['code'], 'PLOT_NOT_READY')
 
     def test_plant_task_requires_owned_seed_empty_plot_and_exact_parameters(self):
         self.client.post('/game/start')

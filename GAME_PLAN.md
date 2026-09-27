@@ -28,8 +28,8 @@ The first cohesive scenario is **The Repair Fund**:
 
 1. A new session begins with both robots at `homebase` and the game in `READY`.
 2. The game starts and autonomous planning becomes active.
-3. Wall-y primarily harvests wheat at the `farm`; Eeva primarily catches salmon at
-   the `lake`. Either robot may take another valid task when coordination requires it.
+3. A robot buys and plants Wheat Seeds, waits for a farm plot to become ready, and
+   harvests that exact plot; fishing remains useful while crops grow.
 4. Each robot owns its inventory and wallet. Items never teleport between robots.
 5. A robot carrying sellable resources travels to the `market` and sells them.
 6. The sum of both wallets advances the shared repair-fund goal.
@@ -47,9 +47,9 @@ READY
   ↓ start
 Choose complementary work
   ↓
-Travel to farm / lake
+Buy seed, plant, or travel to lake
   ↓
-Harvest wheat / catch salmon
+Grow and harvest wheat / catch salmon
   ↓
 Carry resources to market
   ↓
@@ -105,7 +105,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Individual inventory and wallets | Implemented | The robot tracker exposes each robot's separate wallet and inventory. |
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
 | Market purchases | Partial | The purchase-only market sells wheat, carrot, and pumpkin seeds; later seeds unlock permanently at 100 and 150 combined gold. Purchases and sales create transient parchment notifications. |
-| Farm plots and Crop Queue | Partial | `PLANT` fills a shared plot exactly once, and the backend changes elapsed crops to `READY`; harvesting is not plot-aware yet. |
+| Wheat crop lifecycle | Implemented | Buy, plant, backend-owned growth, plot-aware harvest, and sale resolve through authoritative state and exactly-once task handling. |
 | Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
@@ -116,10 +116,10 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **The crop lifecycle is incomplete.** Robots can plant Wheat and wait for it to
-   become ready, but `HARVEST` does not validate or empty a ready plot yet.
-2. **Planners still use the legacy loop.** Mock and Gemini autonomy harvest free
-   wheat or fish, then sell; neither buys, plants, waits for, nor harvests a plot.
+1. **Planners do not run the full crop loop yet.** They can harvest a ready plot,
+   but neither planner buys seeds or plants autonomously.
+2. **Later crops are catalog-only.** Carrot and pumpkin seeds unlock in the market,
+   but their crop definitions and planting lifecycles are not implemented yet.
 3. **Victory presentation is still incomplete.** Completion is enforced by the
    backend, but the frontend still needs a clear celebration.
 4. **Balancing is still placeholder data.** The target, starting gold, yields,
@@ -204,10 +204,10 @@ Goal: purchases create a visible decision instead of dead inventory.
 - [x] Add the wheat crop definition and three authoritative shared farm plots.
 - [x] Add a validated `PLANT` task that consumes one owned seed exactly once.
 - [x] Advance crops from `GROWING` to `READY` from backend timestamps and events.
-- [ ] Make `HARVEST` require a ready plot, grant its crop once, and empty that plot.
+- [x] Make `HARVEST` require a ready plot, grant its crop once, and empty that plot.
 - [x] Render ready crops first and growing crops by `ready_at` in the Crop Queue.
 - [ ] Teach both planners to compare seed cost, growth time, and expected crop value.
-- [ ] Test that purchases, planting, growth, harvesting, and sales resolve exactly once.
+- [x] Test that purchases, planting, growth, harvesting, and sales resolve exactly once.
 
 Exit criterion: spectators can understand why a robot chose a seed, and every
 purchase contributes to a complete farming loop instead of dead inventory.
@@ -243,8 +243,8 @@ Goal: make the proven loop feel polished and demo-ready.
 
 | Workstream | Owns | Builds against | Immediate handoff |
 | --- | --- | --- | --- |
-| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Make harvest require a ready plot and resolve exactly once |
-| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Add plot-aware decisions after the wheat slice is validated |
+| Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Generalize the proven wheat lifecycle to later crops |
+| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Add autonomous seed purchase and planting decisions |
 | Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add derived crop countdown/progress after backend planting populates plot timestamps |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |
 | Navigation/control | Destination following, arrival, cancellation, blocked handling | Active task plus map locations | Safe adapter from tasks to robot commands |

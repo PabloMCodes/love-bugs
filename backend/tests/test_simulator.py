@@ -6,6 +6,19 @@ from app.simulation.simulator import SimulationRunner, move_pose_toward
 from app.state import WorldStateError, WorldStore, default_world
 
 
+def ready_wheat_plot(world: dict, plot_index: int = 0) -> str:
+    planted_at = datetime.now(timezone.utc) - timedelta(seconds=9)
+    plot = world['farm']['plots'][plot_index]
+    plot.update({
+        'status': 'READY',
+        'crop_id': 'wheat',
+        'planted_by': 'robot-a',
+        'planted_at': planted_at,
+        'ready_at': planted_at + timedelta(seconds=8),
+    })
+    return plot['id']
+
+
 class MovementTests(unittest.TestCase):
     def test_move_pose_toward_uses_fixed_steps_and_snaps_on_arrival(self):
         pose, arrived = move_pose_toward(
@@ -132,14 +145,18 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(store.snapshot().robots[0].game.inventory['fish'].quantity, 1)
 
     def test_harvest_travels_to_farm_before_activity(self):
-        store = WorldStore()
+        world = default_world()
+        plot_id = ready_wheat_plot(world)
+        store = WorldStore(world)
         store.start_game()
-        store.assign_task(TaskRequest(
+        request = TaskRequest(
             request_id='simulation-harvest-001',
             robot_id='robot-b',
             action='HARVEST',
             location='farm',
-        ))
+            parameters={'plot_id': plot_id},
+        )
+        task = store.assign_task(request)
         simulator = SimulationRunner(store, interval_seconds=.25, step_distance=100)
 
         simulator.tick()
@@ -152,7 +169,64 @@ class SimulationRunnerTests(unittest.TestCase):
 
         milo = store.snapshot().robots[1]
         self.assertIsNone(milo.task)
-        self.assertEqual(milo.game.inventory['crop'].quantity, 3)
+        self.assertEqual(milo.game.inventory['wheat'].quantity, 3)
+        self.assertEqual(store.snapshot().farm.plots[0].status, 'EMPTY')
+
+        revision = store.snapshot().revision
+        retried = store.assign_task(request)
+        simulator.tick()
+        self.assertEqual(retried.id, task.id)
+        self.assertEqual(retried.status, 'COMPLETED')
+        self.assertEqual(store.snapshot().revision, revision)
+        self.assertEqual(store.snapshot().robots[1].game.inventory['wheat'].quantity, 3)
+
+    def test_competing_harvest_rechecks_plot_before_granting_crop(self):
+        world = default_world()
+        plot_id = ready_wheat_plot(world)
+        store = WorldStore(world)
+        store.start_game()
+        for robot_id in ('robot-a', 'robot-b'):
+            store.assign_task(TaskRequest(
+                request_id=f'simulation-harvest-{robot_id}',
+                robot_id=robot_id,
+                action='HARVEST',
+                location='farm',
+                parameters={'plot_id': plot_id},
+            ))
+        simulator = SimulationRunner(
+            store,
+            interval_seconds=2.5,
+            step_distance=100,
+        )
+
+        simulator.tick()
+        simulator.tick()
+
+        harvested = store.snapshot()
+        self.assertEqual(harvested.robots[0].game.inventory['wheat'].quantity, 3)
+        self.assertNotIn('wheat', harvested.robots[1].game.inventory)
+        self.assertEqual(harvested.farm.plots[0].status, 'EMPTY')
+        self.assertEqual(harvested.events[-1].type, 'task_failed')
+        self.assertEqual(harvested.events[-1].data['code'], 'PLOT_NOT_READY')
+
+    def test_cancelled_harvest_keeps_ready_plot_and_grants_no_crop(self):
+        world = default_world()
+        plot_id = ready_wheat_plot(world)
+        store = WorldStore(world)
+        store.start_game()
+        store.assign_task(TaskRequest(
+            request_id='simulation-harvest-cancelled',
+            robot_id='robot-a',
+            action='HARVEST',
+            location='farm',
+            parameters={'plot_id': plot_id},
+        ))
+
+        store.stop_game()
+
+        stopped = store.snapshot()
+        self.assertEqual(stopped.farm.plots[0].status, 'READY')
+        self.assertNotIn('wheat', stopped.robots[0].game.inventory)
 
     def test_plant_consumes_one_seed_and_populates_plot_once(self):
         world = default_world()
@@ -389,7 +463,12 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(completed.events[-1].type, 'game_completed')
 
     def test_clean_round_collects_sells_and_completes_shared_goal_once(self):
-        store = WorldStore()
+        world = default_world()
+        ready_plot_ids = [
+            ready_wheat_plot(world, plot_index)
+            for plot_index in range(2)
+        ]
+        store = WorldStore(world)
         initial = store.snapshot()
         self.assertEqual(initial.game.status, 'READY')
         self.assertEqual(initial.game.stage, 1)
@@ -407,7 +486,7 @@ class SimulationRunnerTests(unittest.TestCase):
 
         request_number = 0
 
-        def collect(robot_id, action, location):
+        def collect(robot_id, action, location, parameters=None):
             nonlocal request_number
             request_number += 1
             store.assign_task(TaskRequest(
@@ -415,17 +494,18 @@ class SimulationRunnerTests(unittest.TestCase):
                 robot_id=robot_id,
                 action=action,
                 location=location,
+                parameters=parameters or {},
             ))
             simulator.tick()
             simulator.tick()
 
-        for _ in range(2):
-            collect('robot-a', 'HARVEST', 'farm')
+        for plot_id in ready_plot_ids:
+            collect('robot-a', 'HARVEST', 'farm', {'plot_id': plot_id})
         for _ in range(3):
             collect('robot-b', 'FISH', 'lake')
 
         collected = store.snapshot()
-        self.assertEqual(collected.robots[0].game.inventory['crop'].quantity, 6)
+        self.assertEqual(collected.robots[0].game.inventory['wheat'].quantity, 6)
         self.assertEqual(collected.robots[1].game.inventory['fish'].quantity, 3)
         self.assertEqual(collected.game.goal.current, 80)
 
@@ -434,14 +514,14 @@ class SimulationRunnerTests(unittest.TestCase):
             robot_id='robot-a',
             action='SELL',
             location='market',
-            parameters={'item': 'crop', 'quantity': 6},
+            parameters={'item': 'wheat', 'quantity': 6},
         ))
         simulator.tick()
         after_wheat = store.snapshot()
         self.assertEqual(after_wheat.game.status, 'RUNNING')
         self.assertEqual(after_wheat.game.goal.current, 152)
         self.assertEqual(after_wheat.game.stage, 3)
-        self.assertNotIn('crop', after_wheat.robots[0].game.inventory)
+        self.assertNotIn('wheat', after_wheat.robots[0].game.inventory)
 
         store.assign_task(TaskRequest(
             request_id='clean-round-sell-fish',

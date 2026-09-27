@@ -13,6 +13,7 @@ class Decision(BaseModel):
     location: str | None = None
     item: str | None = None
     quantity: int | None = Field(default=None, strict=True, ge=1)
+    plot_id: str | None = None
     reason: str = Field(min_length=1, max_length=300)
 
     message: str | None = Field(default=None, min_length=1, max_length=300)
@@ -24,15 +25,27 @@ class Decision(BaseModel):
         if not self.reason.strip():
             raise ValueError('A decision must explain its purpose')
         if self.action == 'WAIT':
-            if any(value is not None for value in (self.location, self.item, self.quantity)):
+            if any(value is not None for value in (
+                self.location,
+                self.item,
+                self.quantity,
+                self.plot_id,
+            )):
                 raise ValueError('WAIT has no task parameters')
         elif not self.location:
             raise ValueError('A task requires a location')
         if self.action in ('BUY', 'SELL'):
             if not self.item or self.quantity is None:
                 raise ValueError('Trades require an item and positive integer quantity')
-        elif self.item is not None or self.quantity is not None:
-            raise ValueError('Only trades accept item/quantity')
+            if self.plot_id is not None:
+                raise ValueError('Trades do not accept plot_id')
+        elif self.action == 'HARVEST':
+            if not self.plot_id:
+                raise ValueError('HARVEST requires a plot_id')
+            if self.item is not None or self.quantity is not None:
+                raise ValueError('HARVEST accepts only plot_id')
+        elif any(value is not None for value in (self.item, self.quantity, self.plot_id)):
+            raise ValueError('This action does not accept item, quantity, or plot_id')
         return self
 
 
@@ -100,6 +113,19 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
                 'SELL': 'market', 'RETURN_HOME': 'homebase'}
     if decision.action in required and decision.location != required[decision.action]:
         raise ValueError('Action does not match its destination')
+    if decision.action == 'HARVEST':
+        plot = next(
+            (
+                plot for plot in world['farm']['plots']
+                if plot['id'] == decision.plot_id
+            ),
+            None,
+        )
+        if plot is None:
+            raise ValueError('Unknown farm plot')
+        if plot['status'] != 'READY':
+            raise ValueError('Farm plot is not ready')
+        return
     if decision.action not in ('BUY', 'SELL'):
         return
     if decision.action == 'BUY':
@@ -136,10 +162,32 @@ class MockPlanner:
                 return Decision(action='SELL', location='market', item=item_id,
                                 quantity=quantity, reason='Sell inventory toward our shared gold goal.',
                                 message='I propose selling my inventory. Can you keep collecting resources?')
-        index = [robot['id'] for robot in world['robots']].index(robot_id)
-        action, location = ('HARVEST', 'farm') if index % 2 == 0 else ('FISH', 'lake')
+        claimed_plots = {
+            candidate['task']['parameters'].get('plot_id')
+            for candidate in world['robots']
+            if candidate.get('task')
+            and candidate['task'].get('action') == 'HARVEST'
+        }
+        ready_plot = next(
+            (
+                plot for plot in world.get('farm', {}).get('plots', [])
+                if plot['status'] == 'READY' and plot['id'] not in claimed_plots
+            ),
+            None,
+        )
         heard = world.get('agent_messages', [])
         reply = 'Got it, teammate! ' if heard else 'Team, here is my plan: '
-        return Decision(action=action, location=location,
-                        message=f'{reply}I propose collecting at the {location}. Let’s cover both spots.',
-                        reason='Collect resources while my teammate covers the other location.')
+        if ready_plot is not None:
+            return Decision(
+                action='HARVEST',
+                location='farm',
+                plot_id=ready_plot['id'],
+                message=f"{reply}I propose harvesting {ready_plot['id']} while it is ready.",
+                reason='Harvest a ready crop before starting other work.',
+            )
+        return Decision(
+            action='FISH',
+            location='lake',
+            message=f'{reply}I propose fishing while no crop is ready.',
+            reason='Collect fish while waiting for a ready farm plot.',
+        )

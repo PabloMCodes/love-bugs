@@ -39,7 +39,11 @@ class AgentChat:
             'parameters': (
                 {'item': decision.item, 'quantity': decision.quantity}
                 if decision.action in ('BUY', 'SELL')
-                else {}
+                else (
+                    {'plot_id': decision.plot_id}
+                    if decision.action == 'HARVEST'
+                    else {}
+                )
             ),
             'status': status,
         })

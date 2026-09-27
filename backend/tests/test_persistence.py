@@ -22,8 +22,8 @@ class PersistenceTests(unittest.TestCase):
             sid = first['session_id']
             self.assertEqual(first['map']['locations']['homebase'], {'x': 50.0, 'y': 30.0})
             client.post('/game/start').raise_for_status()
-            request = {'request_id': 'harvest', 'robot_id': 'robot-a', 'action': 'HARVEST',
-                       'location': 'farm', 'reason': 'Collect wheat together.'}
+            request = {'request_id': 'fish', 'robot_id': 'robot-a', 'action': 'FISH',
+                       'location': 'lake', 'reason': 'Collect fish together.'}
             task = client.post('/tasks', json=request)
             self.assertEqual(task.status_code, 202)
             revision = client.get('/world').json()['revision']
@@ -33,7 +33,7 @@ class PersistenceTests(unittest.TestCase):
                 app.state.simulator.tick()
             final = client.get('/world').json()
             self.assertIsNone(final['robots'][0]['task'])
-            self.assertEqual(final['robots'][0]['game']['inventory']['crop']['quantity'], 3)
+            self.assertEqual(final['robots'][0]['game']['inventory']['fish']['quantity'], 1)
             self.assertEqual(Store(self.settings).world(sid), final)
             events = client.get('/events').json()['events']
             self.assertEqual(events, final['events'])

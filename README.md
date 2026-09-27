@@ -29,8 +29,8 @@ and complete the shared gold goal. The dashboard now includes a purchase-only se
 market, an authoritative Crop Queue backed by three shared farm plots, transaction
 notifications, live robot conversation, and session controls.
 
-The immediate product goal is to complete the first authoritative crop lifecycle.
-`PLANT` consumes one owned Wheat Seed, creates a timestamped growing plot, and the
-backend changes it to `READY` when its timer expires. The remaining work is making
-`HARVEST` require and empty a ready plot instead of granting wheat directly. See
+The first authoritative wheat lifecycle is complete in the task service: buy a
+seed, plant it, wait for backend-owned readiness, harvest the selected plot once,
+and sell the resulting Wheat. The next product goal is teaching the autonomous
+planners to choose that full loop, then reusing it for carrots and pumpkins. See
 `GAME_PLAN.md` for the implementation sequence.

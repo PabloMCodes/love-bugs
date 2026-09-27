@@ -18,7 +18,7 @@ ACTIVITIES = {
     'HARVEST': ActivityDefinition(
         location='farm',
         duration_seconds=2.5,
-        item_id='crop',
+        item_id='wheat',
         item_name='Wheat',
         quantity=3,
         sell_price=12,

@@ -309,10 +309,10 @@ Install the updated `requirements.txt`, then run one offline planning round:
 python -m app.agents --provider mock
 ```
 
-This explicit mock policy proposes harvesting for Wall-y and fishing for Eeva.
-It accepts tasks into a temporary in-memory demo snapshot only; it does not run
-movement, harvest timers, or the frontend simulation. Output is labeled `dry_run`.
-No API key or network access is used in mock mode.
+This explicit mock policy proposes harvesting when an unclaimed ready plot exists;
+otherwise it fishes. It accepts tasks into a temporary in-memory demo snapshot
+only; it does not run movement, activity timers, or the frontend simulation.
+Output is labeled `dry_run`. No API key or network access is used in mock mode.
 
 For real Gemini decisions, set `GOOGLE_API_KEY` in your shell to an AI Studio API
 key, set `GOOGLE_GENAI_USE_VERTEXAI=FALSE`, and run:
@@ -372,8 +372,9 @@ Canonical schema version 2 exposes `farm.crops` and three shared `farm.plots`.
 timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
 duplicate the crop or consume the losing seed. The backend game loop transitions
 due plots to `READY` exactly once in simulation and hardware modes, even without a
-browser. Current `HARVEST` still grants wheat directly; making it require and empty
-a ready plot is the next backend milestone.
+browser. `HARVEST` requires a `READY` plot ID, rechecks it at completion, grants the
+defined crop exactly once, and returns the plot to `EMPTY`. The next backend
+milestone is generalizing this proven wheat lifecycle to later crops.
 
 Enable deterministic backend-owned play with:
 

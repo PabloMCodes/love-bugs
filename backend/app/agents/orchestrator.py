@@ -113,8 +113,15 @@ class AgentOrchestrator:
                     self.chat.publish(latest, robot_id, decision, status='waiting')
                     outcomes.append(Outcome(robot_id, 'waiting', decision.reason))
                     continue
-                parameters = ({'item': decision.item, 'quantity': decision.quantity}
-                              if decision.action in ('BUY', 'SELL') else {})
+                if decision.action in ('BUY', 'SELL'):
+                    parameters = {
+                        'item': decision.item,
+                        'quantity': decision.quantity,
+                    }
+                elif decision.action == 'HARVEST':
+                    parameters = {'plot_id': decision.plot_id}
+                else:
+                    parameters = {}
                 request = {'request_id': uuid4().hex, 'robot_id': robot_id,
                            'action': decision.action, 'location': decision.location,
                            'parameters': parameters, 'reason': decision.reason}

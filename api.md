@@ -107,7 +107,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
         "location": "farm",
         "money": 40,
         "inventory": {
-          "wheat": { "name": "Wheat", "quantity": 2, "sell_price": 10 },
+          "wheat": { "name": "Wheat", "quantity": 2, "sell_price": 12 },
           "seeds": { "name": "Wheat Seeds", "quantity": 1, "sell_price": null }
         }
       },
@@ -118,7 +118,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
         "location": "farm",
         "status": "ACTIVE",
         "progress": 0.67,
-        "parameters": {},
+        "parameters": { "plot_id": "plot-1" },
         "reason": "Harvest wheat to sell at the market.",
         "error": null
       }
@@ -155,7 +155,7 @@ Proposed gameplay defaults: each robot has its own wallet and inventory; the sha
       { "id": "wheat", "name": "Wheat", "seed_item_id": "seeds", "grow_seconds": 8, "harvest_quantity": 3, "sell_price": 12, "required_stage": 1 }
     ],
     "plots": [
-      { "id": "plot-1", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null },
+      { "id": "plot-1", "status": "READY", "crop_id": "wheat", "planted_by": "robot-a", "planted_at": "2026-09-25T13:59:45.000Z", "ready_at": "2026-09-25T13:59:53.000Z" },
       { "id": "plot-2", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null },
       { "id": "plot-3", "status": "EMPTY", "crop_id": null, "planted_by": null, "planted_at": null, "ready_at": null }
     ]
@@ -232,7 +232,7 @@ checks replay before checking whether the robot is busy.
 | MVP action | Location | Parameters | Completion |
 | --- | --- | --- | --- |
 | `MOVE_TO` | Any configured location | `{}` | Confirmed arrival |
-| `HARVEST` | `farm` | `{}` | Arrival plus backend activity timer; adds crop |
+| `HARVEST` | `farm` | `plot_id` | Arrival plus backend activity timer; empties one ready plot and grants its crop |
 | `FISH` | `lake` | `{}` | Arrival plus backend activity timer; adds fish |
 | `BUY` | `market` | `item`, `quantity` | Arrival plus validated transaction |
 | `SELL` | `market` | `item`, `quantity` | Arrival plus validated transaction |
@@ -257,6 +257,12 @@ those checks atomically before removing the seed and setting `crop_id`,
 `planted_by`, `planted_at`, `ready_at`, and status `GROWING`. If another robot
 claims the plot first, execution fails with `PLOT_OCCUPIED` and keeps the seed.
 Cancellation before arrival also keeps the seed.
+
+`HARVEST` accepts exactly `{ "plot_id": "plot-1" }`. Assignment requires that the
+plot exists and is `READY`. Completion repeats that check before granting the crop
+and atomically returning the plot to `EMPTY`. If another robot harvests it first,
+the losing task fails with `PLOT_NOT_READY` and receives no inventory. Cancellation
+keeps the plot ready, and retrying the same completed request cannot grant it twice.
 
 Task lifecycle:
 
@@ -285,8 +291,10 @@ and publishes a `crop_ready` event containing `plot_id`, `crop_id`, and `ready_a
 This continues without a connected browser and uses the same rule in simulation
 and hardware modes. If the game is stopped when a timer elapses, the absolute
 timestamp is preserved and the crop becomes ready on the first tick after resume.
-`HARVEST` is still the version 1-style timed collection that grants wheat without
-reading a plot. Internal `WAIT` behavior still defers task submission.
+`HARVEST` then consumes one ready plot through a backend activity timer, grants the
+crop definition's `harvest_quantity` and `sell_price`, publishes `crop_harvested`,
+and clears all plot crop metadata. Internal `WAIT` behavior still defers task
+submission.
 
 ### Errors
 
@@ -307,8 +315,8 @@ schema-invalid payloads handled by FastAPI, and `503` for an unavailable require
 subsystem. Examples of stable codes: `INVALID_REQUEST`, `NOT_FOUND`, `ROBOT_BUSY`,
 `GAME_NOT_READY`, `GAME_NOT_RUNNING`, `ROBOT_STOPPED`, `TASK_MISMATCH`,
 `INSUFFICIENT_FUNDS`, `INSUFFICIENT_INVENTORY`, `OUT_OF_STOCK`, `SEED_LOCKED`,
-`PLOT_OCCUPIED`, and `PERSISTENCE_UNAVAILABLE`. Do not expose secrets or stack
-traces in errors.
+`PLOT_OCCUPIED`, `PLOT_NOT_READY`, and `PERSISTENCE_UNAVAILABLE`. Do not expose
+secrets or stack traces in errors.
 
 ## Live updates: WebSocket /events
 
@@ -407,13 +415,14 @@ Build a simulator behind the same backend interface. It supplies pose, arrival, 
 Suggested first demo scenario:
 
 1. Seed two robots at home with a small wallet; game starts in `READY`.
-2. Start the game and assign robot A to harvest and robot B to fish.
-3. Simulate changing positions and confirmed arrivals.
-4. Advance backend activity progress, complete tasks, and grant resources once.
-5. Assign a sell task; travel to market, remove inventory, and increase gold.
-6. Verify that the map, task view, shop, wallets, and event feed agree.
-7. Disconnect/reconnect the browser and confirm that the next snapshot restores current state.
-8. Stop during navigation and confirm that no activity or reward occurs for the cancelled task.
+2. Buy Wheat Seeds, plant an empty plot, and wait for backend-owned readiness.
+3. Harvest that ready plot while the second robot fishes.
+4. Simulate changing positions and confirmed arrivals.
+5. Advance backend activity progress and grant each resource once.
+6. Assign sell tasks; remove inventory and increase gold.
+7. Verify that the map, Crop Queue, task view, shop, wallets, and event feed agree.
+8. Disconnect/reconnect the browser and confirm that the next snapshot restores current state.
+9. Stop during navigation or activity and confirm that no cancelled task grants a reward.
 
 Initially scripted task requests can exercise this scenario; autonomous agent decisions replace those requests later. Simulation is a development tool, while the final physical demo still requires genuine navigation and arrival.
 
@@ -451,7 +460,7 @@ A chat snapshot contains `session_id`, `revision`, `provider`, `mode: "discussio
   "text": "I propose harvesting at the farm. Eeva, can you cover the lake?",
   "action": "HARVEST",
   "location": "farm",
-  "parameters": {},
+  "parameters": { "plot_id": "plot-1" },
   "status": "proposed"
 }
 ```

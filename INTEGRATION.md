@@ -22,7 +22,8 @@ schema-version-2 shared farm plots to complete the wheat seed → plant → grow
 harvest → sell slice. `PLANT` is a valid arrival-time transaction, and the backend
 game loop owns `GROWING` → `READY` transitions. The Crop Queue derives its display
 from `world.farm` and is never authoritative itself. Hardware work should preserve
-the task and safety contracts while plot-aware harvesting is added.
+the task and safety contracts; `HARVEST` now requires a ready `plot_id` and clears
+that plot only when its activity completes successfully.
 
 ## Shared setup
 
@@ -153,6 +154,9 @@ team's chosen private transport to reach the ESP32.
 - Submit `PLANT` at `farm` with exactly `item` and `plot_id`. It completes on
   confirmed arrival and may still fail if the seed or empty plot is no longer
   available.
+- Submit `HARVEST` at `farm` with exactly `plot_id`. The plot must be `READY` at
+  assignment and completion; a competing winner causes `PLOT_NOT_READY` without a
+  duplicate reward.
 - Generate one stable `request_id` per intended task and reuse it only when retrying
   that identical request. A retry returns the same task in its latest state.
 - Respect the required locations and trade parameters documented in `api.md`.

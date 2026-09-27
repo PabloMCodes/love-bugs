@@ -527,7 +527,7 @@ export function useWorld() {
         });
     }
 
-    async function startActivity(robotId, action) {
+    async function startActivity(robotId, action, parameters = {}) {
         const taskDefinition = getTaskDefinition(action);
 
         if (taskDefinition?.type !== 'activity') {
@@ -548,7 +548,7 @@ export function useWorld() {
                     robot_id: robotId,
                     action: taskDefinition.action,
                     location: taskDefinition.requiredLocation,
-                    parameters: {},
+                    parameters,
                     reason: `${taskDefinition.label} to earn resources.`,
                 });
                 setConnection((current) => ({
@@ -605,7 +605,7 @@ export function useWorld() {
                         location: taskDefinition.requiredLocation,
                         status: needsTravel ? 'NAVIGATING' : 'ACTIVE',
                         progress: 0,
-                        parameters: { item: taskDefinition.reward.itemId },
+                        parameters,
                         reason: `${taskDefinition.label} to earn resources.`,
                         error: null,
                     },
@@ -989,7 +989,11 @@ export function useWorld() {
         }
 
         if (taskDefinition.type === 'activity') {
-            startActivity(proposal.robot_id, proposal.action);
+            startActivity(
+                proposal.robot_id,
+                proposal.action,
+                proposal.parameters ?? {},
+            );
             return;
         }
 
