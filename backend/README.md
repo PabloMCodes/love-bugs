@@ -4,8 +4,10 @@ The Python backend uses FastAPI and Pydantic for HTTP, WebSocket updates, and AP
 `GET /world`, live `/events` snapshots, goal configuration, game lifecycle
 controls, simulated `MOVE_TO`, `RETURN_HOME`, `HARVEST`, `FISH`, `BUY`, and `SELL`
 tasks, robot stop/resume, pose, arrival, health, and blocked-state ingestion,
-spectator agent chat, and standalone overhead vision are implemented. Hardware
-navigation and motor communication remain placeholders.
+spectator agent chat, and standalone overhead vision are implemented.
+[Standalone WALL-Y click-to-drive](app/navigation/README.md) provides phased
+camera/BLE bring-up. Connecting this local controller to backend tasks, pose
+ingestion and lifecycle controls remains integration work.
 
 - `app/main.py`: application composition and background-work lifecycle.
 - `app/config.py`: runtime settings and hardware configuration.

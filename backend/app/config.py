@@ -30,6 +30,55 @@ class VisionConfig:
     zones: tuple[Zone, ...]
 
 
+@dataclass(frozen=True)
+class NavigationConfig:
+    camera_index: int = 0
+    marker_id: int = 0
+    target_x: float = 500
+    target_y: float = 300
+    heading_offset_degrees: float = 0
+    invert_turns: bool = False
+    stop_distance: float = 35
+    angle_threshold: float = 15
+    command_hz: float = 10
+    refresh_seconds: float = .3
+    marker_timeout: float = .5
+    pulse_seconds: float = .12
+    pause_seconds: float = .3
+    ble_device: str = ''
+    ble_characteristic: str = ''
+    ble_write_response: bool = True
+
+    def __post_init__(self):
+        if type(self.marker_id) is not int or not 0 <= self.marker_id < 50:
+            raise ValueError('marker_id must be 0–49 (DICT_4X4_50)')
+        if type(self.camera_index) is not int or self.camera_index < 0:
+            raise ValueError('camera_index must be a nonnegative integer')
+        for name in ('stop_distance', 'angle_threshold', 'command_hz', 'refresh_seconds',
+                     'marker_timeout', 'pulse_seconds', 'pause_seconds'):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f'{name} must be positive and finite')
+        if not 5 <= self.command_hz <= 10 or self.angle_threshold >= 180:
+            raise ValueError('command_hz must be 5–10; angle_threshold must be below 180')
+        if self.marker_timeout > .5:
+            raise ValueError('marker_timeout must be at most 0.5 seconds')
+        if min(self.pulse_seconds, self.pause_seconds, self.refresh_seconds) < 1 / self.command_hz:
+            raise ValueError('Pulse, pause and refresh must be at least one command period')
+        if any(not math.isfinite(v) for v in
+               (self.target_x, self.target_y, self.heading_offset_degrees)):
+            raise ValueError('Target and heading offset must be finite')
+        if min(self.target_x, self.target_y) < 0:
+            raise ValueError('Target coordinates must be nonnegative')
+        if type(self.invert_turns) is not bool or type(self.ble_write_response) is not bool:
+            raise ValueError('Turn inversion and BLE response settings must be booleans')
+
+
+def load_navigation_config(path: str | Path) -> NavigationConfig:
+    with open(path) as file:
+        return NavigationConfig(**json.load(file))
+
+
 def load_vision_config(path: str | Path) -> VisionConfig:
     with open(path) as file:
         data = json.load(file)

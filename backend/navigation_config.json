@@ -1,0 +1,18 @@
+{
+  "camera_index": 0,
+  "marker_id": 0,
+  "target_x": 500,
+  "target_y": 300,
+  "heading_offset_degrees": 0,
+  "invert_turns": false,
+  "stop_distance": 35,
+  "angle_threshold": 15,
+  "command_hz": 10,
+  "refresh_seconds": 0.3,
+  "marker_timeout": 0.5,
+  "pulse_seconds": 0.12,
+  "pause_seconds": 0.3,
+  "ble_device": "WALL-Y",
+  "ble_characteristic": "abcdefab-1234-5678-1234-abcdefabcdef",
+  "ble_write_response": true
+}

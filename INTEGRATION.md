@@ -8,6 +8,11 @@ gaps, milestone order, and end-to-end acceptance scenario.
 
 ## Current team milestone
 
+WALL-Y now has a separate [click-to-drive bring-up tool](backend/app/navigation/README.md)
+using the supplied BLE protocol and existing ArUco tracker. It deliberately does
+not consume backend tasks or publish poses yet. Do not run it alongside another
+motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
+
 The immediate milestone is Phase 1 of the game plan: a complete autonomous
 simulation round in which Wall-y and Eve start at home, collect different
 resources, sell their own inventory, advance the shared repair fund, and trigger
