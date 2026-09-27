@@ -182,7 +182,7 @@ body {
 }
 
 .chat-message-bubble {
-    background-image: url('/assets/ui/chatbubble.svg');
+    background-image: url('/assets/ui/chatbubble-wide.svg');
     background-position: center;
     background-repeat: no-repeat;
     background-size: 100% 100%;
