@@ -67,18 +67,22 @@ export default function GameControls({
     return (
         <section
             className="game-status-panel w-full shrink-0 px-5 py-3 text-sky-950"
-            aria-labelledby="game-status-heading"
+            aria-labelledby="farm-stage-heading"
         >
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <h2
+                id="farm-stage-heading"
+                className="text-center text-xl font-extrabold tracking-wide text-sky-950"
+            >
+                Farm Stage {game.stage ?? 1}
+            </h2>
+
+            <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="flex items-center gap-2">
-                    <h2 id="game-status-heading" className="text-sm font-bold uppercase tracking-wide text-sky-800">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-sky-800">
                         Repair Fund
-                    </h2>
+                    </h3>
                     <span className={`rounded-full px-2 py-1 text-xs font-bold ${status.className}`}>
                         {status.label}
-                    </span>
-                    <span className="rounded-full bg-sky-200 px-2 py-1 text-xs font-bold text-sky-900">
-                        Farm Stage {game.stage ?? 1}
                     </span>
                 </div>
                 <p className="min-w-0 text-xs text-sky-800 sm:truncate sm:text-right" aria-live="polite">
