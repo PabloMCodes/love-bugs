@@ -93,23 +93,23 @@ export default function AgentChat({ onTaskProposal, world }) {
                     className="market-scrollbar mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
                 >
                     {messages.length === 0 && (
-                        <p className="market-parchment-card p-4 text-sm text-[#805431]">
+                        <p className="chat-message-bubble px-5 pb-7 pt-4 text-sm text-[#46677c]">
                             Start chat to hear the robots coordinate. Mock demo works without an API key.
                         </p>
                     )}
                     {messages.map((message) => (
                         <article
                             key={message.id}
-                            className="market-parchment-card p-3 text-[#422313]"
+                            className="chat-message-bubble px-5 pb-7 pt-4 text-[#15364a]"
                         >
                             <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                                <span className="font-bold text-[#7e351f]">{message.name}</span>
-                                <time dateTime={message.timestamp} className="text-[#805431]">
+                                <span className="font-bold text-[#287aa2]">{message.name}</span>
+                                <time dateTime={message.timestamp} className="text-[#5b7990]">
                                     {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </time>
                             </div>
                             <p className="break-words text-sm">{message.text}</p>
-                            <p className="mt-2 text-xs text-[#805431]">
+                            <p className="mt-2 text-xs text-[#5b7990]">
                                 Proposed: {message.action.toLowerCase().replaceAll('_', ' ')}
                                 {message.location ? ` · ${message.location}` : ''}
                                 {message.parameters?.item
