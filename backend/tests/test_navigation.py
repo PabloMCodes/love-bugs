@@ -115,6 +115,30 @@ class BleTests(unittest.IsolatedAsyncioTestCase):
             await self.ble.send('F')
         self.assertFalse(self.ble.connected)
 
+    async def test_connection_timeout_identifies_device_and_stage(self):
+        self.client.connect.side_effect = TimeoutError()
+        with self.assertRaisesRegex(RuntimeError, 'connection failed.*WALL-Y.*TimeoutError'):
+            await self.ble.connect()
+        self.assertFalse(self.ble.connected)
+
+    async def test_startup_stop_has_longer_deadline_without_relaxing_motion(self):
+        deadlines = []
+        original = asyncio.wait_for
+        async def recorded(awaitable, timeout):
+            deadlines.append(timeout)
+            return await original(awaitable, timeout)
+        with patch('app.robots.client.asyncio.wait_for', side_effect=recorded):
+            await self.ble.connect()
+            self.now = 1
+            await self.ble.send('F')
+        self.assertEqual(deadlines, [30, 5, .3])
+
+    async def test_initial_stop_timeout_is_distinct_from_connection_failure(self):
+        self.client.write_gatt_char.side_effect = TimeoutError()
+        with self.assertRaisesRegex(TimeoutError, 'initial STOP failed.*limit 5s'):
+            await self.ble.connect()
+        self.assertFalse(self.ble.connected)
+
     async def test_write_failure_stops_and_disconnects(self):
         self.now = 1
         self.client.write_gatt_char.side_effect = RuntimeError('link error')

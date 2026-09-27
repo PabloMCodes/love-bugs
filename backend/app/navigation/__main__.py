@@ -191,13 +191,14 @@ def main():
     try:
         if args.robots_config:
             from app.navigation.fleet import run_fleet
+            logging.info('Loading robot configuration: %s', args.robots_config.resolve())
             asyncio.run(run_fleet(args, load_navigation_robots(args.robots_config)))
         else:
             asyncio.run(run(args, load_navigation_config(args.config)))
     except KeyboardInterrupt:
         return 0
     except Exception as error:
-        logging.error('%s', error)
+        logging.error('%s: %s', type(error).__name__, error or repr(error))
         return 1
     return 0
 

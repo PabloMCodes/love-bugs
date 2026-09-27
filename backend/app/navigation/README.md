@@ -35,7 +35,12 @@ reacquisition does not re-arm. Capture/detection runs in a separate thread so a
 stalled camera read cannot block the UI and stop checks.
 
 BLE failure ends the run. Restart to reconnect; connection begins with S and
-requires A plus fresh tracking again. The supplied firmware stops on detected
+requires A plus fresh tracking again. BLE startup allows 30 seconds to connect and five seconds for the
+initial STOP (before arming), matching the connection-only diagnostic. Motion
+writes retain their 0.3-second deadline. Errors include the device, failing
+operation, exception type and write settings; two-robot startup also prints the
+configuration path so laptop-specific identifiers can be checked.
+The supplied firmware stops on detected
 disconnect. A laptop cannot deliver S over a lost link. This firmware has **no
 connected command-expiry watchdog**: a frozen host with a lingering connection
 cannot be guaranteed to stop in 0.5 s. Firmware is unchanged. OS, GUI and BLE
