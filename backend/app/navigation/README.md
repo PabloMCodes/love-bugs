@@ -397,3 +397,22 @@ and run phase 3 before phase 4 as above. A changed image resolution clears old
 building/arena boxes; remeasure both robots as well. If the camera moves or zoom
 changes, rerun setup even if resolution is unchanged. Buildings moved during a
 game require stopping navigation and updating this static map.
+## Diagnosing movement that stops
+
+In backend mode, `LAST DISARM` retains the first stop cause even after tracking
+or the backend connection recovers. Check that line before pressing A again.
+An unsuccessful A press logs `Backend ARM REJECTED` with the current reason.
+Normal HTTP request logs are suppressed in navigation so control messages remain
+visible. BLE, camera and backend stop conditions are unchanged.
+
+Missing either marker currently stops and disarms both robots immediately in
+fleet mode, including with avoidance disabled. A backend world older than 0.75s
+also disarms the session. Recovery requires a deliberate A press; repeated arming
+does not fix the underlying tracking or connection issue.
+
+Steering is separate: if a turn increases the absolute heading error, verify
+that robot's `invert_turns` in `navigation_robots.json`. If the heading arrow
+does not point toward the robot's physical front, calibrate its
+`heading_offset_degrees`. A forward command that physically drives backward is
+a motor-direction issue, not something `invert_turns` changes. Do not guess
+these settings from a log containing only STOP commands.

@@ -235,7 +235,8 @@ class TrafficController:
         if shape != (cfg.frame_height, cfg.frame_width):
             return self.halt(robots, 'Camera resolution differs from traffic calibration')
         if any(r.pose is None for r in robots):
-            return self.halt(robots, 'Both markers required; STOP both, then re-arm')
+            missing = ', '.join(r.profile.name for r in robots if r.pose is None)
+            return self.halt(robots, f'Both markers required; missing/stale: {missing}; STOP both, then re-arm')
         if self.disable_avoidance:
             self.reason, self.blocked = 'AVOIDANCE OFF: direct targets; both robots may move', False
             self.owner, self.route, self.last_stop = None, [], None

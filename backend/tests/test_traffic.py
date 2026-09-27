@@ -180,6 +180,44 @@ class TaskFollowerTests(unittest.TestCase):
             self.follower.update(self.robots,self.sample,10,world)
             self.assertFalse(self.robots[0].gate.armed,change)
 
+    def test_disarm_reason_survives_recovery_until_explicit_arm(self):
+        self.bridge.error = None
+        self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        with self.assertLogs(level='WARNING') as logs:
+            self.follower.update(self.robots,self.sample,10,None)
+        self.assertIn('Backend world expired', logs.output[0])
+        self.follower.update(self.robots,self.sample,10,self.world)
+        self.assertIn('Backend world expired', self.follower.stop_reason)
+        self.assertIsNone(self.follower.session)
+        self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        self.assertIsNone(self.follower.stop_reason)
+        self.assertTrue(self.robots[0].gate.armed)
+
+    def test_first_local_fault_is_not_overwritten_by_later_backend_block(self):
+        self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        self.follower.stop(self.robots, 'Marker missing: WALL-Y')
+        self.world['robots'][0]['physical']['blocked'] = True
+        self.follower.update(self.robots,self.sample,10,self.world)
+        self.assertEqual(self.follower.stop_reason, 'Marker missing: WALL-Y')
+        with self.assertLogs(level='WARNING') as logs:
+            self.follower.update(self.robots,self.sample,10,self.world,arm=True)
+        self.assertIn('backend reports controller blocked', logs.output[0])
+        self.assertIsNone(self.follower.session)
+
+    def test_readiness_reports_each_backend_stop_condition(self):
+        physical = self.world['robots'][0]['physical']
+        for field, value, expected in (
+            ('online', False, 'BLE offline'),
+            ('tracking', 'LOST', 'tracking is LOST'),
+            ('blocked', True, 'controller blocked'),
+            ('stopped', True, 'stopped by backend'),
+        ):
+            with self.subTest(field=field):
+                previous = physical[field]
+                physical[field] = value
+                self.assertIn(expected, self.follower.readiness_error(self.robots, self.world))
+                physical[field] = previous
+
     def test_arrival_only_current_session_once(self):
         self.follower.update(self.robots,self.sample,10,self.world,arm=True)
         self.robots[0].geometry=SimpleNamespace(distance=0)

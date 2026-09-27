@@ -9,6 +9,22 @@ snapshot. Game behavior is unchanged.
 
 ## Objective and ownership
 
+### Physical run: unexpected disarming diagnostics
+
+The latest camera-laptop log starts after both robots stopped: BLE connected,
+both markers tracked, targets still hundreds of pixels away, backend session
+disabled, and only S commands sent. It cannot establish motor direction or the
+original stop trigger. Navigation now preserves `LAST DISARM` until successful
+explicit backend arming, logs current backend arm rejection reasons, identifies
+missing markers by name, and suppresses routine HTTP request logging. This is a
+diagnostic improvement, not a verified fix to the physical stoppage. Existing
+stop rules remain: fleet marker loss immediately disarms both, and backend world
+expiry (0.75 seconds) also revokes permission. Next test: capture the first
+`DISARMED`/`LAST DISARM` line after movement. Separately verify physical front,
+heading offset and turn direction on WALL-Y before changing robot calibration.
+Verification: 242 backend tests completed successfully (one live database test
+skipped); no physical camera/BLE test available on the implementation laptop.
+
 ### Hardware-paced gameplay integration
 
 The current user wants the web game to follow physical robots, using the tested

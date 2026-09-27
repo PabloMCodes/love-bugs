@@ -188,25 +188,53 @@ class TaskFollower:
         self.keys = {}
         self.arrived = set()
         self.settling = {}
+        self.stop_reason = None
 
-    def stop(self, robots):
+    def stop(self, robots, reason='Operator stop'):
+        # Preserve the triggering fault after tracking/HTTP recover. Otherwise
+        # the display only says "press A" and hides why moving robots stopped.
+        if self.session is not None or self.stop_reason is None:
+            self.stop_reason = reason
+            logging.warning('Backend tasks DISARMED: %s; resolve then press A', reason)
         self.session = None
         self.settling.clear()
         self.bridge.arrivals.clear()
         for robot in robots:
             robot.gate.stop()
 
+    def readiness_error(self, robots, world):
+        if self.bridge.pending_stop is not None:
+            return 'Emergency stop awaiting backend acknowledgement'
+        if not world:
+            return self.bridge.error or 'Backend world expired (no fresh response within 0.75s)'
+        if world['game']['status'] != 'RUNNING':
+            return f"Backend game is {world['game']['status']}"
+        states = {r['id']: r for r in world['robots']}
+        for robot in robots:
+            physical = states[robot.profile.robot_id]['physical']
+            name = robot.profile.name
+            if not physical['online']:
+                return f'{name}: backend reports BLE offline'
+            if physical['tracking'] != 'TRACKED':
+                return f"{name}: backend tracking is {physical['tracking']}"
+            if physical['blocked']:
+                return f'{name}: backend reports controller blocked'
+            if physical['stopped']:
+                return f'{name}: stopped by backend'
+        return None
+
     def update(self, robots, sample, now, world, *, arm=False):
         states = {r['id']: r for r in world['robots']} if world else {}
-        healthy = bool(self.bridge.pending_stop is None and world and world['game']['status'] == 'RUNNING' and all(
-            states[r.profile.robot_id]['physical']['online'] and
-            states[r.profile.robot_id]['physical']['tracking'] == 'TRACKED' and
-            not states[r.profile.robot_id]['physical']['blocked'] and
-            not states[r.profile.robot_id]['physical']['stopped'] for r in robots))
+        error = self.readiness_error(robots, world)
+        healthy = error is None
         if not healthy or (self.session is not None and self.session != world['session_id']):
-            self.stop(robots)
+            self.stop(robots, error or 'Backend session changed')
+        if arm and error:
+            logging.warning('Backend ARM REJECTED: %s', error)
         if arm and healthy:
             self.session = world['session_id']
+            self.stop_reason = None
+            logging.info('Backend tasks ENABLED for this session')
         if not world:
             return
         for robot in robots:

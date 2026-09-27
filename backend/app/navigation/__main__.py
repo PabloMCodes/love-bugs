@@ -205,6 +205,7 @@ def main():
     if args.backend_url and args.phase != 4:
         parser.error('--backend-url requires phase 4')
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    logging.getLogger('httpx').setLevel(logging.WARNING)
     try:
         if args.robots_config:
             from app.navigation.fleet import run_fleet

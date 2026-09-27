@@ -233,7 +233,7 @@ async def run_fleet(args, profiles):
                     logging.warning('Destination rejected: %s', error)
             if key == ord(' '):
                 if follower:
-                    follower.stop(robots)
+                    follower.stop(robots, 'SPACE emergency stop')
                     bridge.request_stop()
                 await stop_all(robots)
                 logging.info('EMERGENCY STOP: both robots disarmed')
@@ -253,7 +253,7 @@ async def run_fleet(args, profiles):
                     robot.target = None
                 if bridge:
                     bridge.traffic = config
-                    follower.stop(robots)
+                    follower.stop(robots, 'Camera resolution changed')
                     follower.keys.clear()
                 logging.info('Full-camera layout: %sx%s; targets cleared, select again and re-arm', width, height)
             for robot in robots:
@@ -269,7 +269,7 @@ async def run_fleet(args, profiles):
             commands = (traffic.update(robots, now, sample[1].shape[:2] if sample else None, args.phase)
                         if args.phase >= 3 else {r.profile.robot_id: r.command(now) for r in robots})
             if traffic and traffic.blocked and bridge:
-                follower.stop(robots)
+                follower.stop(robots, traffic.reason)
             if bridge:
                 bridge.capture(robots, traffic)
                 if not world or follower.session != world['session_id']:
@@ -299,6 +299,8 @@ async def run_fleet(args, profiles):
                     lines.append('ARENA BOUNDARY OFF | saved rectangle is reference only')
             if bridge:
                 lines.append('BACKEND: ' + (bridge.error or ('armed for tasks' if follower.session else 'press A to enable tasks')))
+                if follower.stop_reason:
+                    lines.append('LAST DISARM: ' + follower.stop_reason)
             for robot in robots:
                 ble_status = ('connected' if robot.ble.connected else 'disconnected') if robot.ble else 'off (dry run)'
                 sent = robot.ble.last_command if robot.ble else 'NONE'
