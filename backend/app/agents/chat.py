@@ -42,7 +42,11 @@ class AgentChat:
                 else (
                     {'plot_id': decision.plot_id}
                     if decision.action == 'HARVEST'
-                    else {}
+                    else (
+                        {'item': decision.item, 'plot_id': decision.plot_id}
+                        if decision.action == 'PLANT'
+                        else {}
+                    )
                 )
             ),
             'status': status,

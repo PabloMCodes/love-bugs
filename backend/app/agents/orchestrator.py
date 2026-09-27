@@ -120,6 +120,11 @@ class AgentOrchestrator:
                     }
                 elif decision.action == 'HARVEST':
                     parameters = {'plot_id': decision.plot_id}
+                elif decision.action == 'PLANT':
+                    parameters = {
+                        'item': decision.item,
+                        'plot_id': decision.plot_id,
+                    }
                 else:
                     parameters = {}
                 request = {'request_id': uuid4().hex, 'robot_id': robot_id,

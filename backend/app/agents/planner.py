@@ -1,5 +1,6 @@
 """Per-robot decisions and deterministic checks against the shared task contract."""
 
+from collections import Counter
 import math
 from typing import Literal, Protocol
 
@@ -9,7 +10,16 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class Decision(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    action: Literal['MOVE_TO', 'HARVEST', 'FISH', 'BUY', 'SELL', 'RETURN_HOME', 'WAIT']
+    action: Literal[
+        'MOVE_TO',
+        'HARVEST',
+        'FISH',
+        'BUY',
+        'SELL',
+        'PLANT',
+        'RETURN_HOME',
+        'WAIT',
+    ]
     location: str | None = None
     item: str | None = None
     quantity: int | None = Field(default=None, strict=True, ge=1)
@@ -39,6 +49,11 @@ class Decision(BaseModel):
                 raise ValueError('Trades require an item and positive integer quantity')
             if self.plot_id is not None:
                 raise ValueError('Trades do not accept plot_id')
+        elif self.action == 'PLANT':
+            if not self.item or not self.plot_id:
+                raise ValueError('PLANT requires an item and plot_id')
+            if self.quantity is not None:
+                raise ValueError('PLANT does not accept quantity')
         elif self.action == 'HARVEST':
             if not self.plot_id:
                 raise ValueError('HARVEST requires a plot_id')
@@ -109,8 +124,14 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
         return
     if decision.location not in world['map']['locations']:
         raise ValueError('Unknown destination')
-    required = {'HARVEST': 'farm', 'FISH': 'lake', 'BUY': 'market',
-                'SELL': 'market', 'RETURN_HOME': 'homebase'}
+    required = {
+        'HARVEST': 'farm',
+        'FISH': 'lake',
+        'BUY': 'market',
+        'SELL': 'market',
+        'PLANT': 'farm',
+        'RETURN_HOME': 'homebase',
+    }
     if decision.action in required and decision.location != required[decision.action]:
         raise ValueError('Action does not match its destination')
     if decision.action == 'HARVEST':
@@ -125,6 +146,48 @@ def validate_decision(world: dict, robot_id: str, decision: Decision, *, discuss
             raise ValueError('Unknown farm plot')
         if plot['status'] != 'READY':
             raise ValueError('Farm plot is not ready')
+        if any(
+            candidate.get('task')
+            and candidate['task'].get('action') == 'HARVEST'
+            and candidate['task'].get('parameters', {}).get('plot_id')
+            == decision.plot_id
+            for candidate in world['robots']
+        ):
+            raise ValueError('Farm plot is already claimed for harvest')
+        return
+    if decision.action == 'PLANT':
+        crop = next(
+            (
+                crop for crop in world['farm']['crops']
+                if crop['seed_item_id'] == decision.item
+            ),
+            None,
+        )
+        if crop is None:
+            raise ValueError('Unknown crop seed')
+        if world['game'].get('stage', 1) < crop.get('required_stage', 1):
+            raise ValueError('Crop is locked for the current farming stage')
+        if inventory_quantity(robot, decision.item) < 1:
+            raise ValueError('Seed is not in this robot inventory')
+        plot = next(
+            (
+                plot for plot in world['farm']['plots']
+                if plot['id'] == decision.plot_id
+            ),
+            None,
+        )
+        if plot is None:
+            raise ValueError('Unknown farm plot')
+        if plot['status'] != 'EMPTY':
+            raise ValueError('Farm plot is not empty')
+        if any(
+            candidate.get('task')
+            and candidate['task'].get('action') == 'PLANT'
+            and candidate['task'].get('parameters', {}).get('plot_id')
+            == decision.plot_id
+            for candidate in world['robots']
+        ):
+            raise ValueError('Farm plot is already claimed for planting')
         return
     if decision.action not in ('BUY', 'SELL'):
         return
@@ -185,6 +248,118 @@ class MockPlanner:
                 message=f"{reply}I propose harvesting {ready_plot['id']} while it is ready.",
                 reason='Harvest a ready crop before starting other work.',
             )
+
+        plant_claims = {
+            candidate['task']['parameters'].get('plot_id')
+            for candidate in world['robots']
+            if candidate.get('task')
+            and candidate['task'].get('action') == 'PLANT'
+        }
+        empty_plots = [
+            plot for plot in world.get('farm', {}).get('plots', [])
+            if plot['status'] == 'EMPTY' and plot['id'] not in plant_claims
+        ]
+        stage = world['game'].get('stage', 1)
+        crops = [
+            crop for crop in world.get('farm', {}).get('crops', [])
+            if stage >= crop.get('required_stage', 1)
+        ]
+        crops.sort(
+            key=lambda crop: (
+                crop.get('required_stage', 1),
+                crop.get('harvest_quantity', 0) * crop.get('sell_price', 0),
+            ),
+            reverse=True,
+        )
+        if empty_plots:
+            owned_crop = next(
+                (
+                    crop for crop in crops
+                    if inventory_quantity(robot, crop['seed_item_id']) > 0
+                ),
+                None,
+            )
+            if owned_crop is not None:
+                plot = empty_plots[0]
+                return Decision(
+                    action='PLANT',
+                    location='farm',
+                    item=owned_crop['seed_item_id'],
+                    plot_id=plot['id'],
+                    message=(
+                        f"{reply}I propose planting {owned_crop['name']} "
+                        f"in {plot['id']}."
+                    ),
+                    reason='Fill an empty plot with an owned seed.',
+                )
+
+            reserved_seeds = Counter(
+                candidate['task']['parameters'].get('item')
+                for candidate in world['robots']
+                if candidate.get('task')
+                and candidate['task'].get('action') == 'PLANT'
+            )
+            pending_buys = Counter(
+                candidate['task']['parameters'].get('item')
+                for candidate in world['robots']
+                if candidate.get('task')
+                and candidate['task'].get('action') == 'BUY'
+            )
+            seed_ids = {crop['seed_item_id'] for crop in crops}
+            available_seeds = sum(
+                max(
+                    0,
+                    sum(
+                        inventory_quantity(candidate, seed_id)
+                        for candidate in world['robots']
+                    )
+                    - reserved_seeds[seed_id],
+                )
+                + pending_buys[seed_id]
+                for seed_id in seed_ids
+            )
+            if available_seeds < len(empty_plots):
+                market_by_id = {
+                    item['id']: item
+                    for item in world.get('market', {}).get('items', [])
+                }
+                crop_to_buy = next(
+                    (
+                        crop for crop in crops
+                        if crop['seed_item_id'] in market_by_id
+                        and valid_price(
+                            market_by_id[crop['seed_item_id']].get('buy_price')
+                        )
+                        and stage >= market_by_id[crop['seed_item_id']].get(
+                            'required_stage',
+                            1,
+                        )
+                        and crop.get('harvest_quantity', 0)
+                        * crop.get('sell_price', 0)
+                        > market_by_id[crop['seed_item_id']]['buy_price']
+                        and robot['game']['money']
+                        >= market_by_id[crop['seed_item_id']]['buy_price']
+                        and (
+                            market_by_id[crop['seed_item_id']].get('stock') is None
+                            or market_by_id[crop['seed_item_id']]['stock']
+                            > pending_buys[crop['seed_item_id']]
+                        )
+                    ),
+                    None,
+                )
+                if crop_to_buy is not None:
+                    seed = market_by_id[crop_to_buy['seed_item_id']]
+                    return Decision(
+                        action='BUY',
+                        location='market',
+                        item=seed['id'],
+                        quantity=1,
+                        message=(
+                            f"{reply}I propose buying one {seed['name']} "
+                            'for an empty plot.'
+                        ),
+                        reason='Buy one seed for available farm capacity.',
+                    )
         return Decision(
             action='FISH',
             location='lake',

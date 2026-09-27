@@ -241,10 +241,12 @@ checks replay before checking whether the robot is busy.
 
 `location` is required and validated against the action. One nonterminal task per robot; competing requests receive `409`. The game must be running and the robot available. A robot already confirmed in the required zone can skip navigation.
 
-The shipped Market UI submits `BUY` tasks only. Autonomous agents may submit both
-`BUY` and `SELL`; they are not yet taught to choose `PLANT`. Successful purchases
-and sales appear as transient frontend notifications derived from authoritative
-world events. A task does not immediately alter a wallet from anywhere on the map.
+The shipped Market UI submits `BUY` tasks only. Autonomous agents can submit
+`BUY`, `PLANT`, `HARVEST`, and `SELL` to maintain the wheat crop loop. The mock
+planner accounts for owned seeds, pending purchases, and claimed plots before
+buying or planting. Successful purchases and sales appear as transient frontend
+notifications derived from authoritative world events. A task does not immediately
+alter a wallet from anywhere on the map.
 Check stage access, stock, prices, funds, and inventory again when the transaction
 executes; apply inventory and currency changes atomically and only once. Use
 execution-time prices for the MVP. A locked item returns `SEED_LOCKED`; a failed

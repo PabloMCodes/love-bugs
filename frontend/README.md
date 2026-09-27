@@ -37,7 +37,7 @@ npm exec --yes --package=node@24 -- npm run dev
 - `src/hooks/useWorld.js`: current snapshot and session/revision handling.
 - `src/api/`: HTTP requests and the live WebSocket connection.
 
-Use the stable MVP v1 world model and endpoints in [api.md](../api.md), and follow
+Use the stable schema-version-2 world model and endpoints in [api.md](../api.md), and follow
 the frontend section of the [integration checklist](../INTEGRATION.md). The shared
 objective and UI milestones are tracked in [GAME_PLAN.md](../GAME_PLAN.md). The backend
 owns game rules, prices, rewards, and task completion. The browser talks only to
@@ -50,8 +50,8 @@ and the wider World Map share the lower center row.
 ## Current gameplay UI
 
 - **Crop Queue:** derives nonempty entries from `world.farm.plots`, showing ready
-  crops first and growing crops ordered by `ready_at`; backend `PLANT` tasks now
-  populate these entries.
+  crops first and growing crops ordered by `ready_at`; each growing card animates
+  a countdown and progress bar derived from authoritative backend timestamps.
 - **Market:** purchase-only list of all three seeds with backend-enforced stage locks.
 - **Transactions:** successful purchases and sales create small parchment notices
   on a transparent right-edge overlay. The notices are derived from paired
@@ -60,9 +60,9 @@ and the wider World Map share the lower center row.
   manual scrolling away from the bottom pauses auto-follow.
 - **Game controls:** start, stop, reset, Farm Stage, and combined-gold progress.
 
-The next frontend crop milestone is to add derived countdown/progress presentation
-from the timestamps now populated by backend planting. The browser may animate
-from those timestamps but must never decide that a crop is ready.
+The browser animates crop progress from timestamps but never decides that a crop
+is ready. The next frontend crop milestone is later-crop artwork after carrot and
+pumpkin definitions and balance values are finalized.
 
 ## Robot conversation
 

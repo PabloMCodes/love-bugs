@@ -373,8 +373,10 @@ timestamped `GROWING` plot; retries, cancellation, and competing robots cannot
 duplicate the crop or consume the losing seed. The backend game loop transitions
 due plots to `READY` exactly once in simulation and hardware modes, even without a
 browser. `HARVEST` requires a `READY` plot ID, rechecks it at completion, grants the
-defined crop exactly once, and returns the plot to `EMPTY`. The next backend
-milestone is generalizing this proven wheat lifecycle to later crops.
+defined crop exactly once, and returns the plot to `EMPTY`. Mock autonomy buys only
+for unreserved empty capacity, assigns distinct plots, and runs this complete loop
+without a browser. Gemini decisions support the same `PLANT` and `HARVEST` contract.
+The next backend milestone is generalizing the proven lifecycle to later crops.
 
 Enable deterministic backend-owned play with:
 

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.agents.__main__ import demo_world
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.planner import Decision, MockPlanner, validate_decision
+from app.state import default_world
 
 
 class DecisionTests(unittest.TestCase):
@@ -20,6 +21,14 @@ class DecisionTests(unittest.TestCase):
             {'action': 'SELL', 'location': 'market', 'item': 'crop', 'quantity': 0},
             {'action': 'WAIT', 'location': 'farm'},
             {'action': 'HARVEST', 'location': 'farm', 'robot_id': 'robot-b'},
+            {'action': 'PLANT', 'location': 'farm', 'item': 'seeds'},
+            {
+                'action': 'PLANT',
+                'location': 'farm',
+                'item': 'seeds',
+                'plot_id': 'plot-1',
+                'quantity': 1,
+            },
         ):
             with self.subTest(values=values), self.assertRaises(ValidationError):
                 Decision(reason='test', **values)
@@ -34,6 +43,39 @@ class DecisionTests(unittest.TestCase):
                     reason='test',
                 ),
             )
+
+    def test_plant_validation_uses_owned_seed_and_empty_plot(self):
+        world = default_world()
+        world['game']['status'] = 'RUNNING'
+        decision = Decision(
+            action='PLANT',
+            location='farm',
+            item='seeds',
+            plot_id='plot-1',
+            reason='Start the crop queue',
+        )
+
+        with self.assertRaisesRegex(ValueError, 'not in this robot inventory'):
+            validate_decision(world, 'robot-a', decision)
+
+        world['robots'][0]['game']['inventory']['seeds'] = {
+            'name': 'Wheat Seeds',
+            'quantity': 1,
+            'sell_price': None,
+        }
+        validate_decision(world, 'robot-a', decision)
+
+        world['farm']['plots'][0]['status'] = 'GROWING'
+        with self.assertRaisesRegex(ValueError, 'not empty'):
+            validate_decision(world, 'robot-a', decision)
+
+        world['farm']['plots'][0]['status'] = 'EMPTY'
+        world['robots'][1]['task'] = {
+            'action': 'PLANT',
+            'parameters': {'item': 'seeds', 'plot_id': 'plot-1'},
+        }
+        with self.assertRaisesRegex(ValueError, 'already claimed'):
+            validate_decision(world, 'robot-a', decision)
 
     def test_inventory_formats_and_trade_validation(self):
         world = demo_world()
@@ -171,6 +213,69 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.requests[0]['action'], 'HARVEST')
         self.assertEqual(self.requests[0]['parameters'], {'plot_id': 'plot-1'})
         self.assertEqual(outcomes[0].status, 'accepted')
+
+    async def test_mock_planner_buys_seeds_for_empty_capacity(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+
+        outcomes = await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(
+            [request['action'] for request in self.requests],
+            ['BUY', 'BUY'],
+        )
+        self.assertTrue(
+            all(
+                request['parameters'] == {'item': 'seeds', 'quantity': 1}
+                for request in self.requests
+            )
+        )
+        self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
+
+    async def test_mock_planner_claims_distinct_empty_plots(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+        for robot in self.world['robots']:
+            robot['game']['inventory']['seeds'] = {
+                'name': 'Wheat Seeds',
+                'quantity': 1,
+                'sell_price': None,
+            }
+
+        await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(
+            [request['action'] for request in self.requests],
+            ['PLANT', 'PLANT'],
+        )
+        self.assertEqual(
+            [request['parameters']['plot_id'] for request in self.requests],
+            ['plot-1', 'plot-2'],
+        )
+        self.assertTrue(
+            all(request['parameters']['item'] == 'seeds' for request in self.requests)
+        )
+
+    async def test_pending_seed_purchase_prevents_excess_buying(self):
+        self.world = default_world()
+        self.world['game']['status'] = 'RUNNING'
+        self.world['farm']['plots'] = [self.world['farm']['plots'][0]]
+
+        await AgentOrchestrator(MockPlanner()).tick(
+            lambda: self.world,
+            self.submit,
+        )
+
+        self.assertEqual(
+            [request['action'] for request in self.requests],
+            ['BUY', 'FISH'],
+        )
 
     async def test_unavailable_robots_and_stopped_game_skip_model(self):
         class FailPlanner:

@@ -13,8 +13,8 @@ schema, endpoints, tests, examples, and consumers are updated together.
 
 ## Current implementation checkpoint
 
-The backend supports a reliable autonomous resource loop and the complete manual
-wheat crop lifecycle. The market sells all three seed types and enforces stage
+The backend supports a reliable autonomous resource loop and the complete wheat
+crop lifecycle. The market sells all three seed types and enforces stage
 locks. The frontend has a purchase-only market, market transaction notifications,
 and a full-height Crop Queue driven by canonical farm state.
 
@@ -23,8 +23,10 @@ Schema version 2 includes the wheat crop definition and three shared farm plots.
 timestamped `GROWING` plot, which the queue renders. The backend game loop changes
 elapsed plots to `READY` exactly once and publishes `crop_ready`. `HARVEST` requires
 a selected ready plot, grants its Wheat once, publishes `crop_harvested`, and
-returns the plot to `EMPTY`. Teaching planners to buy and plant is the next
-implementation goal; cooperative unlock and transfer mechanics remain later phases.
+returns the plot to `EMPTY`. Mock autonomy maintains the queue by buying only for
+unreserved empty capacity, planting owned seeds into distinct plots, harvesting
+ready crops, and selling the result. Gemini uses the same validated decisions and
+coordination contract. Cooperative unlock and transfer mechanics remain later phases.
 
 ## Game fantasy
 
@@ -138,8 +140,9 @@ The Crop Queue is a view of authoritative plots, not a second queue stored in th
 browser. The backend world exposes each plot's stable ID, state (`EMPTY`, `GROWING`,
 or `READY`), crop type, planter, planted timestamp, and ready timestamp. The
 frontend omits empty plots from the active queue, shows ready crops first, then
-sorts growing crops by `ready_at`. A successful `PLANT` task now creates those
-growing entries from backend state.
+sorts growing crops by `ready_at`. Growing cards derive a live countdown and
+progress bar from `planted_at` and `ready_at`; they never advance backend state.
+A successful `PLANT` task creates those growing entries from backend state.
 
 The first vertical slice is deliberately wheat-only:
 
@@ -426,18 +429,17 @@ resolved exactly once so reconnects and retries cannot reroll or duplicate them.
 - Fish-tier probabilities.
 - Whether one robot can have multiple pending money requests.
 - Which cooperation actions are tasks versus separate transaction endpoints.
-- Final queue-card treatment after authoritative planted/growing/ready data exists.
+- Whether harvested crops need a short completed-history section in the queue.
 
 ## Suggested implementation order
 
 No implementation begins merely because it appears in this document. When the
 team is ready, the safest order is:
 
-1. Teach mock autonomy, then Gemini, to buy and plant wheat using the validated actions.
-2. Generalize the validated lifecycle to carrot and pumpkin.
+1. Generalize the validated lifecycle to carrot and pumpkin.
+2. Expand both planners to compare crop value, growth time, and progression.
 3. Add map stage rendering and richer farm plot presentation.
 4. Implement seeded fishing duration and reward tiers.
 5. Add money request/transfer transactions.
 6. Add cooperative unlock proposal, agreement, contributions, and stage changes.
-7. Expand both planners to reason about crop value, growth time, and progression.
-8. Run the complete autonomous loop in simulation before connecting it to physical motion.
+7. Tune the complete autonomous loop in simulation before connecting physical motion.

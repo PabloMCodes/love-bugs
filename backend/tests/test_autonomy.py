@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
 import unittest
 
 from app.agents.orchestrator import AgentOrchestrator
@@ -13,14 +12,7 @@ from app.state import WorldStateError, WorldStore, default_world
 class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_mock_autonomy_completes_round_without_browser(self):
         world = default_world()
-        planted_at = datetime.now(timezone.utc) - timedelta(seconds=9)
-        world['farm']['plots'][0].update({
-            'status': 'READY',
-            'crop_id': 'wheat',
-            'planted_by': 'robot-a',
-            'planted_at': planted_at,
-            'ready_at': planted_at + timedelta(seconds=8),
-        })
+        world['farm']['crops'][0]['grow_seconds'] = .01
         store = WorldStore(world)
         store.start_game()
         orchestrator = AgentOrchestrator(
@@ -39,7 +31,7 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
             step_distance=100,
         )
 
-        for _ in range(12):
+        for _ in range(100):
             await runner.tick()
             simulator.tick()
             simulator.tick()
@@ -53,8 +45,9 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         actions = [task.action for task in store.tasks()]
         self.assertEqual(world.game.status, 'COMPLETED')
         self.assertGreaterEqual(world.game.goal.current, world.game.goal.target)
+        self.assertIn('BUY', actions)
+        self.assertIn('PLANT', actions)
         self.assertIn('HARVEST', actions)
-        self.assertIn('FISH', actions)
         self.assertIn('SELL', actions)
         self.assertTrue(all(robot.task is None for robot in world.robots))
         self.assertIn('agent_decision', [event.type for event in world.events])

@@ -106,7 +106,7 @@ busy, blocked, offline, or already carrying valuable inventory.
 | Shared gold goal | Implemented | Combined wallet balance completes the current `earn_gold` goal. |
 | Market purchases | Partial | The purchase-only market sells wheat, carrot, and pumpkin seeds; later seeds unlock permanently at 100 and 150 combined gold. Purchases and sales create transient parchment notifications. |
 | Wheat crop lifecycle | Implemented | Buy, plant, backend-owned growth, plot-aware harvest, and sale resolve through authoritative state and exactly-once task handling. |
-| Autonomous decisions | Implemented | The backend can host one mock or Gemini orchestrator for the authoritative session. |
+| Autonomous decisions | Implemented | Mock autonomy runs the full wheat loop and coordinates plot/seed reservations; Gemini uses the same validated action contract. |
 | Robot conversation | Implemented | Backend autonomy publishes accepted decisions to a read-only frontend spectator feed. |
 | Goal presentation | Partial | The dashboard presents Farm Stage, combined-gold progress, and lifecycle controls; a dedicated victory presentation remains. |
 | Hardware boundary | Ready for integration | Pose, health, blocked, arrival, freshness, and safety contracts exist; real adapters remain teammate work. |
@@ -116,13 +116,11 @@ busy, blocked, offline, or already carrying valuable inventory.
 
 These are the highest-value gaps to close before adding more content:
 
-1. **Planners do not run the full crop loop yet.** They can harvest a ready plot,
-   but neither planner buys seeds or plants autonomously.
-2. **Later crops are catalog-only.** Carrot and pumpkin seeds unlock in the market,
+1. **Later crops are catalog-only.** Carrot and pumpkin seeds unlock in the market,
    but their crop definitions and planting lifecycles are not implemented yet.
-3. **Victory presentation is still incomplete.** Completion is enforced by the
+2. **Victory presentation is still incomplete.** Completion is enforced by the
    backend, but the frontend still needs a clear celebration.
-4. **Balancing is still placeholder data.** The target, starting gold, yields,
+3. **Balancing is still placeholder data.** The target, starting gold, yields,
    prices, travel speed, and activity duration need one measured demo pass.
 
 ## Scope for the first complete demo
@@ -205,8 +203,9 @@ Goal: purchases create a visible decision instead of dead inventory.
 - [x] Add a validated `PLANT` task that consumes one owned seed exactly once.
 - [x] Advance crops from `GROWING` to `READY` from backend timestamps and events.
 - [x] Make `HARVEST` require a ready plot, grant its crop once, and empty that plot.
-- [x] Render ready crops first and growing crops by `ready_at` in the Crop Queue.
-- [ ] Teach both planners to compare seed cost, growth time, and expected crop value.
+- [x] Render ready crops first and show live timestamp-derived growth progress.
+- [x] Teach planners to buy Wheat Seeds, reserve distinct plots, plant, and harvest.
+- [ ] Compare value and growth time when carrot and pumpkin definitions are added.
 - [x] Test that purchases, planting, growth, harvesting, and sales resolve exactly once.
 
 Exit criterion: spectators can understand why a robot chose a seed, and every
@@ -244,8 +243,8 @@ Goal: make the proven loop feel polished and demo-ready.
 | Workstream | Owns | Builds against | Immediate handoff |
 | --- | --- | --- | --- |
 | Game/backend | Goal rules, task effects, rewards, market, lifecycle | Existing state and task services | Generalize the proven wheat lifecycle to later crops |
-| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Add autonomous seed purchase and planting decisions |
-| Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add derived crop countdown/progress after backend planting populates plot timestamps |
+| Agent orchestration | Mock/Gemini choices, coordination, scheduling | World snapshots and `POST /tasks` semantics | Tune crop selection once later crop definitions are balanced |
+| Frontend | Objective, progress, robot state, market, Crop Queue, conversation, victory | `GET /world`, `/events`, lifecycle/task routes | Add later crop art and a clearer victory presentation |
 | Localization | Camera-to-world pose and zone calibration | Pose ingestion contract | Continuous fresh pose reports in hardware mode |
 | Navigation/control | Destination following, arrival, cancellation, blocked handling | Active task plus map locations | Safe adapter from tasks to robot commands |
 | ESP32/robot | Motor execution, health reporting, local watchdog | Private navigation transport | Stop on stale commands and publish health |
