@@ -30,10 +30,14 @@ body {
 }
 
 .market-crate {
-    border: 4px solid #30170a;
+    background-color: #6f3e20;
+    background-image: url('/assets/ui/market-crate.svg');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
     box-shadow:
         0 7px 0 #1d0e07,
-        inset 0 0 0 3px #b17334;
+        inset 0 0 0 2px #2e170d;
 }
 
 .market-paper-tab,
