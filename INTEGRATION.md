@@ -12,6 +12,9 @@ WALL-Y now has a separate [click-to-drive bring-up tool](backend/app/navigation/
 using the supplied BLE protocol and existing ArUco tracker. It deliberately does
 not consume backend tasks or publish poses yet. Do not run it alongside another
 motor controller. The original firmware is archived in `firmware/wall_y/wall_y.ino`.
+The tool also supports two independent robots via `--robots-config
+navigation_robots.json`, with per-robot calibration/targets and a shared emergency
+stop. This local mode is still separate from backend autonomy and task execution.
 
 The immediate milestone is Phase 1 of the game plan: a complete autonomous
 simulation round in which Wall-y and Eeva start at home, collect different

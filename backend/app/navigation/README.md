@@ -81,3 +81,51 @@ sketch is copied unchanged to `firmware/wall_y/wall_y.ino`. Its service UUID is
 Tests use generated ArUco frames and mocked BLE/UI; physical turning, camera
 latency and stopping distance still require the staged hardware checks above.
 BLE reference: [Bleak client](https://bleak.readthedocs.io/en/latest/api/client.html).
+
+## Two robots on one camera
+
+Use `--robots-config navigation_robots.json` to enable independent WALL-Y/Eeva
+control. Existing commands without this option still run the single-robot mode.
+The profiles use the supplied working device IDs and `response=False` writes:
+
+- WALL-Y (`robot-a`): `571428DD-3B56-FF4E-54BA-A73448E06B73`
+- Eeva (`robot-b`): `71B05F81-AE15-C863-43FD-B8A0D4E0C920`
+
+**Before driving**, set each profile's actual `marker_id`, calibrated
+`heading_offset_degrees`, and `invert_turns`. The sample assumes IDs 0 and 1 and
+zero offsets; it does not import calibration from the single-robot file. Each
+profile accepts all the existing navigation settings (thresholds, pulses, etc.).
+Duplicate marker IDs or BLE devices are rejected.
+
+```sh
+python -m app.navigation --camera 1 --phase 1 --robots-config navigation_robots.json
+python -m app.navigation --camera 1 --phase 2 --robots-config navigation_robots.json
+python -m app.navigation --camera 1 --phase 3 --robots-config navigation_robots.json
+python -m app.navigation --camera 1 --phase 4 --robots-config navigation_robots.json
+```
+
+Verify both identities/headings in phases 1–3. In the **camera window**, press
+**W** for WALL-Y or **E** for Eeva, then click that robot's target. Magenta marks
+WALL-Y's target and cyan marks Eeva's. Both start without targets and stopped.
+Press **A** to arm only the selected robot. Select the other robot, click its
+target, and press A again to run both. Switching selection does not stop the
+other robot. Clicking a new target disarms only the selected robot.
+
+SPACE stops/disarms **both**, and Q/window close/error stops and disconnects both.
+Arrival and marker loss stop only the affected robot; stale camera frames affect
+both. Neither resumes after a timeout without A. Any BLE disconnect/write failure
+ends the entire session and attempts stop/cleanup on both connections. If the
+second connection fails, the first is also stopped and disconnected. Restart to
+reconnect. No automatic re-arming occurs.
+
+Device identifiers can differ between Macs. If a supplied ID cannot connect on
+the camera laptop, replace it with that laptop's working identifier. Alternatively,
+set `ble_direct_address` to false and `ble_device` to the exact, unique advertised
+name for discovery. Direct-address mode follows the user's working dual-robot
+script; name-discovery mode preserves the original single-robot behavior.
+
+This is simultaneous independent point-to-point driving, **not collision
+avoidance**. Use clear, separated paths. It remains separate from backend task
+execution, game autonomy and backend stop controls; use this window's SPACE/Q.
+Physical two-robot behavior must be tested on the camera laptop; automated tests
+use mocked BLE and UI and do not move robots.

@@ -31,8 +31,11 @@ class BleController:
             from bleak import BleakClient, BleakScanner
             self.client_factory, self.scanner = BleakClient, BleakScanner
         wanted = self.config.ble_device
-        devices = await self.scanner.discover(timeout=5)
-        device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
+        if self.config.ble_direct_address:
+            device = wanted
+        else:
+            devices = await self.scanner.discover(timeout=5)
+            device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
         if device is None:
             raise RuntimeError(f'BLE device {wanted!r} not found')
         self.client = self.client_factory(device, disconnected_callback=self._disconnected)
@@ -63,7 +66,7 @@ class BleController:
             self.fault = True
             raise
         self.last_command, self.last_sent = command, self.clock()
-        logging.info('BLE sent %s', command)
+        logging.info('BLE %s sent %s', self.config.ble_device, command)
         return True
 
     async def close(self):

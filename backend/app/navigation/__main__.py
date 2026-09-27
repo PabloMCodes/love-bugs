@@ -10,7 +10,7 @@ import time
 
 import cv2
 
-from app.config import VisionConfig, load_navigation_config
+from app.config import VisionConfig, load_navigation_config, load_navigation_robots
 from app.navigation.controller import MotionGate, steer
 from app.robots.client import BleController
 from app.vision.capture import VideoSource
@@ -26,8 +26,9 @@ class CameraWorker:
     slow acquisition is treated as stale, not as a newly localized robot.
     """
 
-    def __init__(self, source, config):
+    def __init__(self, source, config, *, robots=None):
         self.source, self.config = source, config
+        self.robots = robots
         self.lock = threading.Lock()
         self.latest = None
         self.error = None
@@ -37,7 +38,9 @@ class CameraWorker:
 
     def run(self):
         try:
-            tracker = ArucoTracker(VisionConfig({self.config.marker_id: 'robot-a'}, ()))
+            mapping = ({r.config.marker_id: r.robot_id for r in self.robots} if self.robots
+                       else {self.config.marker_id: 'robot-a'})
+            tracker = ArucoTracker(VisionConfig(mapping, ()))
             with VideoSource(self.source) as source:
                 fps = source.capture.get(cv2.CAP_PROP_FPS)
                 interval = 1 / fps if 0 < fps < 240 else 1 / 30
@@ -50,7 +53,8 @@ class CameraWorker:
                         self.stop_event.wait(.03)
                         continue
                     poses, _ = tracker.process(frame, draw=True)
-                    pose = next((p for p in poses if p.marker_id == self.config.marker_id), None)
+                    pose = ({p.robot_id: p for p in poses if p.marker_id in mapping} if self.robots
+                            else next((p for p in poses if p.marker_id == self.config.marker_id), None))
                     with self.lock:
                         self.latest = (captured, frame, pose)
                     if not source.live:
@@ -65,14 +69,14 @@ class CameraWorker:
             return self.latest
 
 
-def draw(frame, pose, target, geometry, lines):
+def draw(frame, pose, target, geometry, lines, *, color=(255, 0, 255)):
     if target is not None:
         point = tuple(round(v) for v in target)
-        cv2.drawMarker(frame, point, (255, 0, 255), cv2.MARKER_CROSS, 24, 2)
-        cv2.circle(frame, point, 12, (255, 0, 255), 2)
+        cv2.drawMarker(frame, point, color, cv2.MARKER_CROSS, 24, 2)
+        cv2.circle(frame, point, 12, color, 2)
         if pose is not None:
             origin = (round(pose.center_x), round(pose.center_y))
-            cv2.line(frame, origin, point, (255, 0, 255), 1)
+            cv2.line(frame, origin, point, color, 1)
             heading = radians(geometry.heading)
             tip = (round(origin[0] + 60 * cos(heading)), round(origin[1] + 60 * sin(heading)))
             cv2.arrowedLine(frame, origin, tip, (0, 255, 255), 2)
@@ -175,6 +179,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--phase', type=int, choices=(1, 2, 3, 4), default=1)
     parser.add_argument('--config', type=Path, default=Path(__file__).resolve().parents[2] / 'navigation_config.json')
+    parser.add_argument('--robots-config', type=Path,
+                        help='Two-robot JSON profiles; enables W/E selection and independent targets')
     sources = parser.add_mutually_exclusive_group()
     sources.add_argument('--camera', type=int)
     sources.add_argument('--video')
@@ -183,7 +189,11 @@ def main():
         parser.error('Phase 4 requires a live camera; prerecorded poses cannot control hardware')
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     try:
-        asyncio.run(run(args, load_navigation_config(args.config)))
+        if args.robots_config:
+            from app.navigation.fleet import run_fleet
+            asyncio.run(run_fleet(args, load_navigation_robots(args.robots_config)))
+        else:
+            asyncio.run(run(args, load_navigation_config(args.config)))
     except KeyboardInterrupt:
         return 0
     except Exception as error:
