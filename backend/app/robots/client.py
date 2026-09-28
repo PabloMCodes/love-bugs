@@ -5,6 +5,23 @@ import logging
 import time
 
 
+def advertised_name(device, advertisement=None):
+    """Prefer the current advertisement over CoreBluetooth's cached name."""
+    return getattr(advertisement, 'local_name', None) or getattr(device, 'name', None)
+
+
+async def discover_devices(scanner, *, timeout):
+    """Return ``(device, advertisement)`` pairs from one BLE scan."""
+    try:
+        discovered = await scanner.discover(timeout=timeout, return_adv=True)
+    except TypeError:
+        # Retain compatibility with injected/older scanner implementations.
+        discovered = await scanner.discover(timeout=timeout)
+    if isinstance(discovered, dict):
+        return list(discovered.values())
+    return [(device, None) for device in discovered]
+
+
 class BleController:
     def __init__(self, config, *, client_factory=None, scanner=None, clock=time.monotonic):
         self.config = config
@@ -39,8 +56,9 @@ class BleController:
             if self.config.ble_direct_address:
                 device = wanted
             else:
-                devices = await self.scanner.discover(timeout=5)
-                device = next((d for d in devices if d.name == wanted or d.address == wanted), None)
+                devices = await discover_devices(self.scanner, timeout=5)
+                device = next((d for d, advertisement in devices
+                               if advertised_name(d, advertisement) == wanted or d.address == wanted), None)
         if device is None:
             raise RuntimeError(f'BLE device {wanted!r} not found')
         self.client = self.client_factory(device, disconnected_callback=self._disconnected)

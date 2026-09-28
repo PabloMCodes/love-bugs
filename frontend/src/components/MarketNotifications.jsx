@@ -86,20 +86,20 @@ export default function MarketNotifications({ world }) {
 
     return (
         <aside
-            className="pointer-events-none fixed inset-y-0 right-0 z-50 flex w-full max-w-[17rem] flex-col items-end gap-2 overflow-hidden px-3 pt-20"
+            className="pointer-events-none fixed inset-y-0 right-0 z-50 flex w-full max-w-[19rem] flex-col items-end gap-2 overflow-hidden px-3 pt-20"
             aria-label="Market notifications"
             aria-live="polite"
         >
             {notifications.map((notification) => (
                 <div
                     key={notification.id}
-                    className="market-notification-paper market-parchment-card w-full max-w-[14rem] p-3 text-[#422313]"
+                    className="market-notification-paper market-parchment-card w-full max-w-[16rem] p-3.5 text-[#422313]"
                     role="status"
                 >
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#805431]">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#805431]">
                         {notification.label}
                     </p>
-                    <p className={`market-notification-copy mt-0.5 text-xs font-bold ${
+                    <p className={`market-notification-copy mt-0.5 text-sm font-bold ${
                         notification.kind === 'sale'
                             ? 'market-notification-sale'
                             : 'market-notification-purchase'

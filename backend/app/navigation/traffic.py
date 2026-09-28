@@ -13,14 +13,21 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
 
-from app.navigation.controller import steer
+from app.navigation.controller import normalize_angle, steer
 
 DEFAULT_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / 'traffic_config.json'
 LOCATIONS = ('homebase', 'farm', 'lake', 'market')
 FULL_CAMERA_LOCATIONS = {
-    'homebase': (.5, .85), 'farm': (.15, .15),
-    'lake': (.15, .85), 'market': (.85, .15),
+    'homebase': (.5, .75), 'farm': (.25, .25),
+    'lake': (.25, .75), 'market': (.75, .25),
 }
+DIRECT_PEER_RADIUS_SCALE = 3.0
+DIRECT_PEER_RELEASE_SCALE = 1.2
+DIRECT_PEER_BACKOFF_SECONDS = .6
+DIRECT_PEER_PASS_SECONDS = .6
+DIRECT_HEAD_ON_ANGLE = 55
+DIRECT_CAMERA_INSET_SCALE = .6
+DIRECT_MARKER_REACQUIRE_SECONDS = 1.5
 
 
 def full_camera_config(width=1280, height=720):
@@ -28,7 +35,7 @@ def full_camera_config(width=1280, height=720):
     return TrafficConfig(frame_width=width, frame_height=height,
         arena=[0,0,width,height], radii={'robot-a':1,'robot-b':1}, margin=1,
         service_points={name:[x*width,y*height] for name,(x,y) in FULL_CAMERA_LOCATIONS.items()},
-        waiting_points={name:[x*width,(y+.1 if y < .5 else y-.1)*height]
+        waiting_points={name:[x*width,(.45 if y < .5 else .55)*height]
                         for name,(x,y) in FULL_CAMERA_LOCATIONS.items()})
 
 
@@ -136,6 +143,246 @@ class TrafficController:
         self.blocked = True
         self.release_at = 0
         self.last_stop = None
+        self.peer_escaping = False
+        self.peer_escape_started = None
+        self.peer_head_on = False
+        self.peer_turn_started = None
+        self.peer_pass_started = None
+
+    def peer_radius(self, robot, shape):
+        """Small camera-scaled bubble around a tag; no physical calibration."""
+        marker_radius = getattr(robot.pose, 'marker_radius', 0) if robot.pose else 0
+        if not marker_radius:
+            marker_radius = min(shape) * .025
+        return marker_radius * DIRECT_PEER_RADIUS_SCALE
+
+    def camera_recovery_target(self, robot, shape):
+        """Return the frame center when most of a tag bubble leaves the image."""
+        height, width = shape
+        inset = self.camera_inset(robot, shape)
+        x, y = self.point(robot)
+        if x < inset or x > width - inset or y < inset or y > height - inset:
+            return (width / 2, height / 2)
+        return None
+
+    def camera_inset(self, robot, shape):
+        return self.peer_radius(robot, shape) * DIRECT_CAMERA_INSET_SCALE
+
+    def robots_head_on(self, robots):
+        """True when each robot is pointed roughly toward the other robot."""
+        first, second = robots
+        toward_second = math.degrees(math.atan2(
+            second.pose.center_y - first.pose.center_y,
+            second.pose.center_x - first.pose.center_x,
+        )) % 360
+        toward_first = (toward_second + 180) % 360
+        headings = [
+            (first.pose.heading + first.config.heading_offset_degrees) % 360,
+            (second.pose.heading + second.config.heading_offset_degrees) % 360,
+        ]
+        return (
+            abs(normalize_angle(toward_second - headings[0])) <= DIRECT_HEAD_ON_ANGLE
+            and abs(normalize_angle(toward_first - headings[1])) <= DIRECT_HEAD_ON_ANGLE
+        )
+
+    @staticmethod
+    def restart_armed_pulses(robots, now):
+        for robot in robots:
+            if robot.gate.armed:
+                robot.gate.arm(now, True)
+
+    @staticmethod
+    def temporary_commands(robots, desired, now, phase):
+        """Apply task authorization/pulse timing to temporary safety motion."""
+        if phase == 3:
+            return desired
+        armed = next((robot for robot in robots if robot.gate.armed), None)
+        pulse_active = bool(armed and (
+            (now - armed.gate.started)
+            % (armed.config.pulse_seconds + armed.config.pause_seconds)
+            < armed.config.pulse_seconds
+        ))
+        commands = {}
+        for robot in robots:
+            command = desired[robot.profile.robot_id]
+            if robot.gate.armed:
+                commands[robot.profile.robot_id] = robot.gate.command(
+                    command, now, robot.last_seen, True, robot.ble.connected)
+            else:
+                # An idle peer may block an active robot. Move it only during
+                # the already-authorized task pulse, never on its own.
+                commands[robot.profile.robot_id] = (
+                    command if pulse_active and robot.ble.connected else 'S'
+                )
+        return commands
+
+    def direct_commands(self, robots, now, shape, phase):
+        """Drive directly with small peer and camera-edge recovery behaviors."""
+        separation = distance(*(self.point(robot) for robot in robots))
+        contact = sum(self.peer_radius(robot, shape) for robot in robots)
+        if not self.peer_escaping and separation <= contact:
+            self.peer_escaping = True
+            self.peer_escape_started = now
+            self.peer_head_on = self.robots_head_on(robots)
+            self.peer_turn_started = None
+            self.peer_pass_started = None
+            # Start a fresh movement pulse so contact response is immediate,
+            # even if the normal task happened to be in its pause interval.
+            self.restart_armed_pulses(robots, now)
+
+        edge_targets = {
+            robot.profile.robot_id: self.camera_recovery_target(robot, shape)
+            for robot in robots
+        }
+
+        if self.peer_escaping:
+            elapsed = now - (self.peer_escape_started if self.peer_escape_started is not None else now)
+            # Reverse immediately on contact. Close to a camera edge, turn
+            # inward instead so backing up cannot make the marker disappear.
+            if elapsed < DIRECT_PEER_BACKOFF_SECONDS:
+                desired = {}
+                for robot in robots:
+                    recovery = edge_targets[robot.profile.robot_id]
+                    desired[robot.profile.robot_id] = (
+                        steer(robot.pose, recovery,
+                              replace(robot.config, stop_distance=1)).command
+                        if recovery else 'B'
+                    )
+                self.reason = (f'PEER BUBBLES: backing apart '
+                               f'({separation:.0f}px / contact {contact:.0f}px)')
+                if any(edge_targets.values()):
+                    self.reason += '; edge robot turns toward camera center'
+                return self.temporary_commands(robots, desired, now, phase)
+
+            if self.peer_head_on and self.robots_head_on(robots):
+                if self.peer_turn_started is None:
+                    self.peer_turn_started = now
+                    self.restart_armed_pulses(robots, now)
+                desired = {}
+                for robot in robots:
+                    recovery = edge_targets[robot.profile.robot_id]
+                    desired[robot.profile.robot_id] = (
+                        steer(robot.pose, recovery,
+                              replace(robot.config, stop_distance=1)).command
+                        if recovery else ('L' if robot.config.invert_turns else 'R')
+                    )
+                self.reason = 'PEER BUBBLES: head-on turn before passing'
+                if any(edge_targets.values()):
+                    self.reason += '; edge robot turns toward camera center'
+                return self.temporary_commands(robots, desired, now, phase)
+
+            if self.peer_head_on:
+                # Both robots now face different sides of the encounter. Give
+                # them a complete forward pulse stage before restoring tasks,
+                # even if reversing already made the circles stop overlapping.
+                self.peer_head_on = False
+                self.peer_pass_started = now
+                self.restart_armed_pulses(robots, now)
+
+            if self.peer_pass_started is not None:
+                pass_elapsed = now - self.peer_pass_started
+                if (pass_elapsed < DIRECT_PEER_PASS_SECONDS or
+                        separation < contact * DIRECT_PEER_RELEASE_SCALE):
+                    desired = {
+                        robot.profile.robot_id: (
+                            steer(robot.pose, edge_targets[robot.profile.robot_id],
+                                  replace(robot.config, stop_distance=1)).command
+                            if edge_targets[robot.profile.robot_id] else 'F'
+                        )
+                        for robot in robots
+                    }
+                    self.reason = 'PEER BUBBLES: passing apart before resuming tasks'
+                    if any(edge_targets.values()):
+                        self.reason += '; edge robot turns toward camera center'
+                    return self.temporary_commands(robots, desired, now, phase)
+
+            if separation >= contact * DIRECT_PEER_RELEASE_SCALE:
+                self.peer_escaping = False
+                self.peer_escape_started = None
+                self.peer_turn_started = None
+                self.peer_pass_started = None
+
+        if self.peer_escaping:
+
+            self.reason = (f'PEER BUBBLES: turning apart '
+                           f'({separation:.0f}px / release {contact * DIRECT_PEER_RELEASE_SCALE:.0f}px)')
+            desired = {}
+            first, second = robots
+            dx = first.pose.center_x - second.pose.center_x
+            dy = first.pose.center_y - second.pose.center_y
+            if not dx and not dy:
+                dx = -1
+            length = math.hypot(dx, dy)
+            unit = (dx / length, dy / length)
+            escape_distance = contact * DIRECT_PEER_RELEASE_SCALE
+            for index, robot in enumerate(robots):
+                recovery = edge_targets[robot.profile.robot_id]
+                direction = 1 if index == 0 else -1
+                target = recovery or (
+                    robot.pose.center_x + direction * unit[0] * escape_distance,
+                    robot.pose.center_y + direction * unit[1] * escape_distance,
+                )
+                desired[robot.profile.robot_id] = steer(
+                    robot.pose, target, replace(robot.config, stop_distance=1)
+                ).command
+            if any(edge_targets.values()):
+                self.reason += '; edge robot turns toward camera center'
+            return self.temporary_commands(robots, desired, now, phase)
+
+        if any(edge_targets.values()):
+            desired = {}
+            recovering = []
+            for robot in robots:
+                recovery = edge_targets[robot.profile.robot_id]
+                if recovery:
+                    recovering.append(robot.profile.name)
+                    desired[robot.profile.robot_id] = steer(
+                        robot.pose, recovery, replace(robot.config, stop_distance=1)
+                    ).command
+                else:
+                    desired[robot.profile.robot_id] = robot.desired
+            self.reason = ('CAMERA EDGE: ' + ', '.join(recovering)
+                           + ' turns toward center; task target retained')
+            return self.temporary_commands(robots, desired, now, phase)
+
+        shared_target = bool(
+            all(robot.target_valid and robot.target for robot in robots)
+            and distance(robots[0].target, robots[1].target)
+            < max(robot.config.stop_distance for robot in robots)
+        )
+        if shared_target:
+            winner = min(robots, key=lambda robot: (
+                robot.geometry.distance if robot.geometry else math.inf,
+                robot.profile.robot_id,
+            ))
+            yielder = next(robot for robot in robots if robot is not winner)
+            commands = {robot.profile.robot_id: 'S' for robot in robots}
+            commands[winner.profile.robot_id] = (
+                winner.desired if phase == 3 else winner.command(now)
+            )
+            location = next((name for name, point in self.config.service_points.items()
+                             if distance(point, winner.target) < 1), None)
+            waiting = self.config.waiting_points.get(location) if location else None
+            if waiting:
+                wait_command = steer(
+                    yielder.pose, tuple(waiting),
+                    replace(yielder.config, stop_distance=max(8, yielder.config.stop_distance / 2)),
+                ).command
+                if phase == 3:
+                    commands[yielder.profile.robot_id] = wait_command
+                elif wait_command != 'S':
+                    commands[yielder.profile.robot_id] = yielder.gate.command(
+                        wait_command, now, yielder.last_seen, True, yielder.ble.connected)
+                # Direct S at the waiting point preserves the arm state so the
+                # original task can resume when the service point clears.
+            self.reason = (f'PEER BUBBLES: {winner.profile.name} uses '
+                           f'{location or "shared target"} first; '
+                           f'{yielder.profile.name} moves to waiting point')
+            return commands
+        self.reason = 'DIRECT + PEER BUBBLES: tasks drive directly'
+        return {robot.profile.robot_id:
+                (robot.desired if phase == 3 else robot.command(now))
+                for robot in robots}
 
     def point(self, robot):
         return (robot.pose.center_x, robot.pose.center_y)
@@ -234,13 +481,26 @@ class TrafficController:
             return self.halt(robots, 'Calibrate traffic_config.json before movement')
         if shape != (cfg.frame_height, cfg.frame_width):
             return self.halt(robots, 'Camera resolution differs from traffic calibration')
-        if any(r.pose is None for r in robots):
-            missing = ', '.join(r.profile.name for r in robots if r.pose is None)
+        missing_robots = [r for r in robots if r.pose is None]
+        if missing_robots:
+            missing = ', '.join(r.profile.name for r in missing_robots)
+            # Direct mode still sends STOP immediately, but a momentary blur or
+            # missed ArUco frame does not revoke the operator's authorization.
+            # The backend's pose timeout is 2s, so keep this grace period lower.
+            if (self.disable_avoidance and
+                    all(r.last_seen is not None and
+                        now - r.last_seen < DIRECT_MARKER_REACQUIRE_SECONDS
+                        for r in missing_robots)):
+                self.reason = (f'Brief marker dropout: {missing}; STOPPED while '
+                               'waiting to reacquire')
+                self.blocked = False
+                self.owner, self.route, self.last_stop = None, [], None
+                return commands
             return self.halt(robots, f'Both markers required; missing/stale: {missing}; STOP both, then re-arm')
         if self.disable_avoidance:
-            self.reason, self.blocked = 'AVOIDANCE OFF: direct targets; both robots may move', False
+            self.blocked = False
             self.owner, self.route, self.last_stop = None, [], None
-            return {r.profile.robot_id: (r.desired if phase == 3 else r.command(now)) for r in robots}
+            return self.direct_commands(robots, now, shape, phase)
         separation = distance(*(self.point(r) for r in robots))
         if separation <= sum(cfg.radii.values()) + cfg.margin:
             return self.halt(robots, 'Too close: separate robots manually, then re-arm')

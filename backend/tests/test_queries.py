@@ -15,6 +15,8 @@ class QueryRouteTests(unittest.TestCase):
             item for item in world['market']['items']
             if item['id'] == 'pumpkin_seeds'
         )['stock'] = 1
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
         self.store = WorldStore(world)
         self.client = TestClient(create_app(world_store=self.store))
 

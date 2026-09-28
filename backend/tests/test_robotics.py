@@ -4,7 +4,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from app.state import WorldStore
+from app.state import WorldStore, default_world
 
 
 class PoseRouteTests(unittest.TestCase):
@@ -155,7 +155,10 @@ class HealthRouteTests(unittest.TestCase):
 
 class ArrivalRouteTests(unittest.TestCase):
     def setUp(self):
-        self.store = WorldStore()
+        world = default_world()
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
+        self.store = WorldStore(world)
         self.client = TestClient(create_app(world_store=self.store))
         self.client.post('/game/start')
 

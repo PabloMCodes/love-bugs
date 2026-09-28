@@ -126,8 +126,8 @@ These are implemented defaults, not promises that balancing is finished.
 | --- | --- |
 | Robots | `robot-a` / Wall-y and `robot-b` / Eeva |
 | Starting location | `homebase` |
-| Starting wallet | 40 gold per robot; 80 combined |
-| Starting inventory | Empty |
+| Starting wallet | Wall-y: 40 gold; Eeva: 0 gold; 40 combined |
+| Starting inventory | Wall-y: empty; Eeva: 1 Wheat Seed |
 | Starting farm stage | Stage 1 |
 | Final goal | 200 combined wallet gold after Stage 3 is active |
 | Farm capacity | Three shared plots |

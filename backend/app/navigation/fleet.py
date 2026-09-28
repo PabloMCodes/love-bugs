@@ -9,7 +9,7 @@ import httpx
 
 from app.navigation.__main__ import CameraWorker, draw
 from app.navigation.controller import MotionGate, steer
-from app.robots.client import BleController
+from app.robots.client import BleController, advertised_name, discover_devices
 from app.navigation.traffic import DEFAULT_TRAFFIC_CONFIG, LOCATIONS, TrafficConfig, TrafficController, full_camera_config
 from app.navigation.backend import BackendBridge, TaskFollower
 from app.navigation.calibrate import draw_destinations
@@ -101,17 +101,19 @@ async def discover_fleet_devices(profiles, *, scanner=None):
         from bleak import BleakScanner
         scanner = BleakScanner
     logging.info('Scanning once for %s', ', '.join(profile.name for profile in profiles))
-    discovered = await scanner.discover(timeout=10)
+    discovered = await discover_devices(scanner, timeout=10)
     resolved = {}
     for profile in profiles:
         wanted = profile.config.ble_device
         if profile.config.ble_direct_address:
-            device = next((item for item in discovered if item.address == wanted), None)
+            device = next((item for item, _ in discovered if item.address == wanted), None)
         else:
-            device = next((item for item in discovered if item.name == wanted), None)
+            device = next((item for item, advertisement in discovered
+                           if advertised_name(item, advertisement) == wanted), None)
         if device is None:
             visible = ', '.join(
-                f'{item.name or "unnamed"} ({item.address})' for item in discovered
+                f'{advertised_name(item, advertisement) or "unnamed"} ({item.address})'
+                for item, advertisement in discovered
             ) or 'none'
             raise RuntimeError(
                 f'BLE device {wanted!r} for {profile.name} was not found in the fleet scan. '
@@ -151,7 +153,7 @@ async def run_fleet(args, profiles):
     traffic = TrafficController(config, ignore_arena_boundary=ignore_boundary,
                                 disable_avoidance=disable_avoidance)
     if disable_avoidance:
-        logging.warning('AVOIDANCE OFF: no arena, building, peer or stopping-clearance checks')
+        logging.warning('DIRECT MODE: no arena, building, route or stopping-clearance checks; peer tag bubbles remain')
     elif ignore_boundary:
         logging.warning('Saved arena boundary DISABLED for this run; camera-frame, building and peer clearance remain active')
     destinations = DestinationController(robots, config)
@@ -294,7 +296,7 @@ async def run_fleet(args, profiles):
             if traffic:
                 lines.append('TRAFFIC: ' + traffic.reason)
                 if disable_avoidance:
-                    lines.append('AVOIDANCE OFF | SPACE stops BOTH')
+                    lines.append('DIRECT MODE + PEER TAG BUBBLES | SPACE stops BOTH')
                 elif ignore_boundary:
                     lines.append('ARENA BOUNDARY OFF | saved rectangle is reference only')
             if bridge:
@@ -331,7 +333,20 @@ async def run_fleet(args, profiles):
                     if target:
                         cv2.putText(frame, robot.profile.name, (int(target[0]) + 15, int(target[1])),
                                     cv2.FONT_HERSHEY_SIMPLEX, .6, COLORS[index], 2)
-                if traffic and not disable_avoidance:
+                if traffic and disable_avoidance:
+                    insets = [traffic.camera_inset(robot, frame.shape[:2])
+                              for robot in robots if robot.pose]
+                    if insets:
+                        inset = int(max(insets))
+                        height, width = frame.shape[:2]
+                        cv2.rectangle(frame, (inset, inset),
+                                      (width - inset, height - inset),
+                                      (0, 165, 255), 1)
+                    for robot in robots:
+                        if robot.pose:
+                            cv2.circle(frame, (int(robot.pose.center_x), int(robot.pose.center_y)),
+                                       int(traffic.peer_radius(robot, frame.shape[:2])), (0, 165, 255), 2)
+                elif traffic:
                     for robot in robots:
                         if robot.pose:
                             cv2.circle(frame, (int(robot.pose.center_x),int(robot.pose.center_y)),

@@ -1,6 +1,8 @@
 import asyncio
 from bleak import BleakScanner, BleakClient
 
+from app.robots.client import advertised_name, discover_devices
+
 DEVICE_NAME = "WALL-Y"
 COMMAND_CHAR_UUID = "abcdefab-1234-5678-1234-abcdefabcdef"
 
@@ -9,12 +11,12 @@ async def main():
 
     print("Scanning for WALL-Y...")
 
-    devices = await BleakScanner.discover()
+    devices = await discover_devices(BleakScanner, timeout=10)
 
     target = None
 
-    for device in devices:
-        if device.name == DEVICE_NAME:
+    for device, advertisement in devices:
+        if advertised_name(device, advertisement) == DEVICE_NAME:
             target = device
             break
 

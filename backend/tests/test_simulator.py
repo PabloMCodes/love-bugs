@@ -492,15 +492,15 @@ class SimulationRunnerTests(unittest.TestCase):
         milo = completed.robots[1]
         self.assertIsNone(milo.task)
         self.assertEqual(milo.game.inventory['crop'].quantity, 1)
-        self.assertEqual(milo.game.money, 64)
-        self.assertEqual(completed.game.goal.current, 104)
+        self.assertEqual(milo.game.money, 24)
+        self.assertEqual(completed.game.goal.current, 64)
         self.assertEqual(completed.game.stage, 1)
         self.assertEqual(completed.events[-1].type, 'task_completed')
 
         revision = completed.revision
         simulator.tick()
         self.assertEqual(store.snapshot().revision, revision)
-        self.assertEqual(store.snapshot().robots[1].game.money, 64)
+        self.assertEqual(store.snapshot().robots[1].game.money, 24)
 
     def test_sale_cannot_complete_goal_before_final_stage(self):
         world = default_world()
@@ -532,7 +532,7 @@ class SimulationRunnerTests(unittest.TestCase):
 
         completed = store.snapshot()
         self.assertEqual(completed.game.status, 'RUNNING')
-        self.assertEqual(completed.game.goal.current, 104)
+        self.assertEqual(completed.game.goal.current, 64)
         self.assertIsNotNone(completed.robots[0].task)
         self.assertIsNone(completed.robots[1].task)
         self.assertNotIn('task_cancelled', [event.type for event in completed.events])
@@ -540,6 +540,8 @@ class SimulationRunnerTests(unittest.TestCase):
 
     def test_clean_round_collects_sells_and_completes_shared_goal_once(self):
         world = default_world()
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
         world['fishing'] = {
             'min_duration_seconds': 2.5,
             'max_duration_seconds': 2.5,
@@ -683,7 +685,10 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertEqual(context.exception.code, 'GAME_NOT_RUNNING')
 
     def test_buy_executes_once_and_updates_wallet_inventory_and_stock(self):
-        store = WorldStore()
+        world = default_world()
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
+        store = WorldStore(world)
         store.start_game()
         store.assign_task(TaskRequest(
             request_id='simulation-buy-001',
@@ -715,6 +720,8 @@ class SimulationRunnerTests(unittest.TestCase):
 
     def test_competing_purchase_rechecks_stock_at_execution(self):
         world = default_world()
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
         world['game']['stage'] = 3
         next(
             item for item in world['market']['items']

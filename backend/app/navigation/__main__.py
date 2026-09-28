@@ -186,7 +186,7 @@ def main():
     parser.add_argument('--ignore-arena-boundary', action='store_true',
                         help='Temporarily allow travel outside the saved arena, within the camera frame')
     parser.add_argument('--disable-avoidance', action='store_true',
-                        help='Direct driving without arena, building or peer avoidance; tracking/BLE stops remain')
+                        help='Direct driving without arena/building routes; retains tag-radius peer separation')
     parser.add_argument('--layout', choices=('calibrated', 'full-camera'), default='calibrated',
                         help='full-camera uses preset locations across the live image; requires --disable-avoidance')
     sources = parser.add_mutually_exclusive_group()

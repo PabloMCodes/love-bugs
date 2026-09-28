@@ -67,7 +67,7 @@ def default_world(mode: str = 'simulation') -> dict:
         'mode': mode,
         'game': {
             'status': 'READY',
-            'goal': {'type': 'earn_gold', 'target': 200, 'current': 80},
+            'goal': {'type': 'earn_gold', 'target': 200, 'current': 40},
             'stage': 1,
         },
         'map': {
@@ -114,8 +114,14 @@ def default_world(mode: str = 'simulation') -> dict:
                 },
                 'game': {
                     'location': 'homebase',
-                    'money': 40,
-                    'inventory': {},
+                    'money': 0,
+                    'inventory': {
+                        'seeds': {
+                            'name': 'Wheat Seeds',
+                            'quantity': 1,
+                            'sell_price': None,
+                        },
+                    },
                 },
                 'task': None,
             },

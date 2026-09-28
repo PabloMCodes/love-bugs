@@ -151,12 +151,12 @@ function RobotCard({ robot }) {
                         <h4 className="text-xs font-semibold uppercase tracking-wide text-sky-700">
                             Task
                         </h4>
-                        <span className="text-xs text-sky-700">
+                        <span className="text-[13px] text-sky-700">
                             {robot.task ? `${taskProgress}%` : 'Idle'}
                         </span>
                     </div>
 
-                    <p className="mt-1 text-sm">
+                    <p className="mt-1 text-[15px]">
                         {robot.task
                             ? `${formatLabel(robot.task.action)} · ${formatLabel(robot.task.status)}`
                             : 'Waiting for assignment'

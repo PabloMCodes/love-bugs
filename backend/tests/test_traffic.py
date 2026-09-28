@@ -28,25 +28,154 @@ def config():
 
 
 class TrafficTests(unittest.TestCase):
-    def test_avoidance_off_drives_directly_but_marker_loss_stops_both(self):
+    def test_direct_mode_brief_marker_loss_stops_then_auto_resumes(self):
         c = replace(config(),calibrated=False,arena=[200,100,800,700],
                     obstacles=[[100,150,500,250]])
-        robots = [robot('robot-a',100,200,(700,200)),robot('robot-b',120,200,(700,200))]
+        robots = [robot('robot-a',100,200,(700,200)),robot('robot-b',500,500,(700,500))]
         for r in robots:
             r.desired = r.geometry.command
         t = TrafficController(c,disable_avoidance=True)
         self.assertEqual(t.update(robots,10,(800,1000),4),{'robot-a':'F','robot-b':'F'})
         self.assertFalse(t.blocked)
+        pose = robots[0].pose
         robots[0].pose = None
         self.assertEqual(set(t.update(robots,10.1,(800,1000),4).values()),{'S'})
+        self.assertFalse(t.blocked)
+        self.assertTrue(all(r.gate.armed for r in robots))
+        self.assertIn('waiting to reacquire', t.reason)
+
+        robots[0].pose = pose
+        robots[0].last_seen = 10.2
+        self.assertEqual(t.update(robots,10.43,(800,1000),4),
+                         {'robot-a':'F','robot-b':'F'})
+        self.assertTrue(all(r.gate.armed for r in robots))
+
+        robots[0].pose = None
+        self.assertEqual(set(t.update(robots,11.8,(800,1000),4).values()),{'S'})
+        self.assertTrue(t.blocked)
         self.assertFalse(any(r.gate.armed for r in robots))
+
+    def test_direct_mode_turns_apart_then_resumes_original_targets(self):
+        robots = [robot('robot-a',100,200,(700,200)), robot('robot-b',160,200,(700,300))]
+        robots[0].pose.marker_radius = robots[1].pose.marker_radius = 20
+        robots[0].pose.heading, robots[1].pose.heading = 0, 180
+        for item in robots:
+            item.geometry = steer(item.pose, item.target, item.config)
+            item.desired = item.geometry.command
+        targets = [item.target for item in robots]
+        traffic = TrafficController(replace(config(), obstacles=[[110,150,150,250]]),
+                                    disable_avoidance=True)
+
+        backing = traffic.update(robots, 10, (800,1000), 3)
+        self.assertEqual(backing, {'robot-a':'B', 'robot-b':'B'})
+        self.assertTrue(traffic.peer_escaping)
+        self.assertIn('backing apart', traffic.reason)
+        self.assertEqual([item.target for item in robots], targets)
+
+        # Even if reversing creates enough distance, a head-on encounter stays
+        # latched until both robots turn to opposite sides and pass forward.
+        robots[0].pose.center_x, robots[1].pose.center_x = 40, 220
+        avoiding = traffic.update(robots, 10.7, (800,1000), 3)
+        self.assertEqual(avoiding, {'robot-a':'R', 'robot-b':'R'})
+        self.assertIn('head-on turn', traffic.reason)
+        self.assertTrue(traffic.peer_escaping)
+        self.assertEqual([item.target for item in robots], targets)
+
+        robots[0].pose.heading, robots[1].pose.heading = 90, 270
+        passing = traffic.update(robots, 10.8, (800,1000), 3)
+        self.assertEqual(passing, {'robot-a':'F', 'robot-b':'F'})
+        self.assertIn('passing apart', traffic.reason)
+        self.assertTrue(traffic.peer_escaping)
+
+        robots[0].pose.center_x, robots[1].pose.center_x = 60, 260
+        robots[0].pose.heading = robots[1].pose.heading = 0
+        for item in robots:
+            item.geometry = steer(item.pose, item.target, item.config)
+            item.desired = item.geometry.command
+        resumed = traffic.update(robots, 11.5, (800,1000), 3)
+        self.assertFalse(traffic.peer_escaping)
+        self.assertEqual(resumed, {'robot-a':'F', 'robot-b':'F'})
+
+    def test_direct_peer_radius_falls_back_when_tag_size_is_unavailable(self):
+        robots = [robot('robot-a',100,200,(700,200)), robot('robot-b',140,200,(700,200))]
+        traffic = TrafficController(config(), disable_avoidance=True)
+        self.assertGreater(traffic.peer_radius(robots[0], (800,1000)), 0)
+        self.assertEqual(traffic.update(robots, 10, (800,1000), 3),
+                         {'robot-a':'B', 'robot-b':'B'})
+        self.assertTrue(traffic.peer_escaping)
+        self.assertIn('backing apart', traffic.reason)
+
+    def test_direct_shared_target_yields_without_disarming(self):
+        robots = [robot('robot-a',100,200,(700,200)), robot('robot-b',400,200,(700,200))]
+        for item in robots:
+            item.desired = item.geometry.command
+        traffic = TrafficController(config(), disable_avoidance=True)
+        commands = traffic.update(robots, 10, (800,1000), 4)
+        self.assertEqual(list(commands.values()).count('F'), 1)
+        self.assertEqual(list(commands.values()).count('S'), 1)
+        self.assertTrue(all(robot.gate.armed for robot in robots))
+
+    def test_full_camera_shared_target_uses_vertical_waiting_point(self):
+        geometry = full_camera_config(1000, 800)
+        market = tuple(geometry.service_points['market'])
+        robots = [robot('robot-a',500,400,market), robot('robot-b',700,400,market)]
+        for item in robots:
+            item.desired = item.geometry.command
+        traffic = TrafficController(geometry, disable_avoidance=True)
+        commands = traffic.update(robots, 10, (800,1000), 3)
+        self.assertNotEqual(commands['robot-a'], 'S')
+        self.assertNotEqual(commands['robot-b'], 'S')
+        self.assertIn('waiting point', traffic.reason)
+        self.assertEqual(geometry.waiting_points['market'], [750,360])
+
+    def test_direct_escape_moves_idle_peer_only_during_authorized_pulse(self):
+        robots = [robot('robot-a',100,200,(700,200)), robot('robot-b',140,200,None)]
+        robots[0].pose.marker_radius = robots[1].pose.marker_radius = 20
+        robots[0].pose.heading, robots[1].pose.heading = 0, 180
+        robots[0].desired = robots[0].geometry.command
+        robots[1].gate.stop()
+        robots[0].gate.started = 9.8  # normal task pulse is currently paused
+        traffic = TrafficController(config(), disable_avoidance=True)
+
+        commands = traffic.update(robots, 10, (800,1000), 4)
+        self.assertEqual(commands, {'robot-a':'B', 'robot-b':'B'})
+
+        robots[0].gate.stop()
+        commands = traffic.update(robots, 10.1, (800,1000), 4)
+        self.assertEqual(set(commands.values()), {'S'})
+
+    def test_direct_mode_turns_inward_before_tag_bubble_reaches_camera_edge(self):
+        robots = [robot('robot-a',65,200,(0,200)),
+                  robot('robot-b',500,500,(700,500))]
+        robots[0].pose.marker_radius = 40
+        robots[1].pose.marker_radius = 20
+        robots[0].pose.heading = 180
+        for item in robots:
+            item.geometry = steer(item.pose, item.target, item.config)
+            item.desired = item.geometry.command
+        traffic = TrafficController(config(), disable_avoidance=True)
+
+        recovering = traffic.update(robots, 10, (800,1000), 3)
+        self.assertEqual(robots[0].desired, 'F')
+        self.assertEqual(recovering['robot-a'], 'L')
+        self.assertIn('CAMERA EDGE', traffic.reason)
+        self.assertEqual(robots[0].target, (0,200))
+
+        robots[0].pose.center_x = 150
+        robots[0].geometry = steer(robots[0].pose, robots[0].target, robots[0].config)
+        robots[0].desired = robots[0].geometry.command
+        resumed = traffic.update(robots, 10.1, (800,1000), 3)
+        self.assertEqual(resumed['robot-a'], 'F')
+        self.assertIn('tasks drive directly', traffic.reason)
 
     def test_full_camera_preset_scales_to_resolution_and_backend_map(self):
         for width,height in ((640,480),(1920,1080)):
             c = full_camera_config(width,height)
             self.assertEqual(c.arena,[0,0,width,height])
-            self.assertEqual(c.service_points['homebase'],[.5*width,.85*height])
-            self.assertEqual(c.world_locations(100,100)['farm'],{'x':15.,'y':15.})
+            self.assertEqual(c.service_points['homebase'],[.5*width,.75*height])
+            self.assertEqual(c.waiting_points['homebase'],[.5*width,.55*height])
+            self.assertEqual(c.waiting_points['farm'],[.25*width,.45*height])
+            self.assertEqual(c.world_locations(100,100)['farm'],{'x':25.,'y':25.})
             self.assertFalse(c.calibrated)  # A preset is never a measured calibration.
 
     def test_temporary_boundary_override_keeps_peer_building_and_frame_checks(self):

@@ -24,6 +24,8 @@ class HardwareGameplayTests(unittest.IsolatedAsyncioTestCase):
     async def test_camera_paces_two_agent_tasks_and_resource_loop(self):
         geometry = full_camera_config()
         world = default_world('hardware')
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
         world['map']['locations'] = geometry.world_locations(100,100)
         for crop in world['farm']['crops']:
             crop['grow_seconds'] = .01
@@ -96,10 +98,17 @@ class HardwareGameplayTests(unittest.IsolatedAsyncioTestCase):
                 snapshot = (await api.get('/world')).json()
                 self.assertAlmostEqual(snapshot['robots'][0]['physical']['pose']['x'],62.5)
                 self.assertEqual(snapshot['robots'][0]['game']['money'],initial_money[0])
-                for rid in positions:
-                    positions[rid] = list(geometry.service_points['market'])
+                positions['robot-a'] = list(geometry.service_points['market'])
+                positions['robot-b'] = list(geometry.waiting_points['market'])
                 await pump(.15)
                 self.assertEqual([r.game.money for r in store.snapshot().robots],initial_money)
+                await pump(.65)
+                self.assertIsNone(store.robot('robot-a').task)
+                self.assertIsNotNone(store.robot('robot-b').task)
+                # Apply the peer-clearance motion that the synthetic camera does
+                # not derive from BLE commands before the yielder approaches.
+                positions['robot-a'] = list(geometry.waiting_points['market'])
+                positions['robot-b'] = list(geometry.service_points['market'])
                 await pump(.65)
                 self.assertTrue(all(r.task is None for r in store.snapshot().robots))
                 self.assertTrue(all(r.game.money < initial_money[i] for i,r in enumerate(store.snapshot().robots)))
@@ -115,6 +124,9 @@ class HardwareGameplayTests(unittest.IsolatedAsyncioTestCase):
                             if not k.endswith('seeds') and v.quantity > 0)
                 quantity = store.robot('robot-a').game.inventory[crop].quantity
                 before_sale = store.robot('robot-a').game.money
+                # The synthetic harness does not apply peer-escape motor output;
+                # represent the idle peer having cleared the shared market slot.
+                positions['robot-b'] = list(geometry.service_points['homebase'])
                 await submit_and_arrive('SELL','market',{'item':crop,'quantity':quantity})
                 self.assertGreater(store.robot('robot-a').game.money,before_sale)
                 task = await submit_and_arrive('FISH','lake',{})

@@ -18,11 +18,19 @@ class WorldRouteTests(unittest.TestCase):
         self.assertEqual(world['schema_version'], 4)
         self.assertEqual([robot['id'] for robot in world['robots']], ['robot-a', 'robot-b'])
         self.assertTrue(all(robot['game']['location'] == 'homebase' for robot in world['robots']))
-        self.assertTrue(all(robot['game']['inventory'] == {} for robot in world['robots']))
+        self.assertEqual(world['robots'][0]['game']['inventory'], {})
+        self.assertEqual(world['robots'][1]['game']['money'], 0)
+        self.assertEqual(world['robots'][1]['game']['inventory'], {
+            'seeds': {
+                'name': 'Wheat Seeds',
+                'quantity': 1,
+                'sell_price': None,
+            },
+        })
         self.assertEqual(world['game']['goal'], {
             'type': 'earn_gold',
             'target': 200,
-            'current': 80,
+            'current': 40,
         })
         self.assertEqual(world['game']['stage'], 1)
         self.assertEqual(world['market']['items'], [

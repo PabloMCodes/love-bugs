@@ -40,6 +40,7 @@ class TrackingTests(unittest.TestCase):
         self.assertAlmostEqual(by_id[0].y, 79.5 / 399, places=3)
         self.assertAlmostEqual(by_id[0].heading, 270, delta=1)
         self.assertAlmostEqual(by_id[1].heading, 180, delta=1)
+        self.assertAlmostEqual(by_id[0].marker_radius, 80 / 2 ** .5, delta=2)
         self.assertEqual(by_id[0].to_dict()['robot_id'], 'robot-a')
         self.assertEqual(len(events), 2)
 

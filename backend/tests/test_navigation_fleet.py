@@ -125,11 +125,27 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
     async def test_single_scan_resolves_both_names(self):
         devices = [SimpleNamespace(name='WALL-Y', address='wall-uuid'),
                    SimpleNamespace(name='Eeva', address='eeva-uuid')]
-        scanner = SimpleNamespace(discover=AsyncMock(return_value=devices))
+        advertisements = [SimpleNamespace(local_name='WALL-Y'),
+                          SimpleNamespace(local_name='Eeva')]
+        scanner = SimpleNamespace(discover=AsyncMock(return_value={
+            device.address: (device, advertisement)
+            for device, advertisement in zip(devices, advertisements)
+        }))
         resolved = await discover_fleet_devices(profiles(), scanner=scanner)
-        scanner.discover.assert_awaited_once_with(timeout=10)
+        scanner.discover.assert_awaited_once_with(timeout=10, return_adv=True)
         self.assertIs(resolved['robot-a'], devices[0])
         self.assertIs(resolved['robot-b'], devices[1])
+
+    async def test_live_advertised_name_wins_over_stale_macos_name(self):
+        wall = SimpleNamespace(name='Eeva', address='stale-wall-uuid')
+        eeva = SimpleNamespace(name='Eeva', address='eeva-uuid')
+        scanner = SimpleNamespace(discover=AsyncMock(return_value={
+            wall.address: (wall, SimpleNamespace(local_name='WALL-Y')),
+            eeva.address: (eeva, SimpleNamespace(local_name='Eeva')),
+        }))
+        resolved = await discover_fleet_devices(profiles(), scanner=scanner)
+        self.assertIs(resolved['robot-a'], wall)
+        self.assertIs(resolved['robot-b'], eeva)
 
     async def test_fleet_scan_reports_missing_robot_and_visible_devices(self):
         scanner = SimpleNamespace(discover=AsyncMock(return_value=[
@@ -294,8 +310,9 @@ class FleetBleTests(unittest.IsolatedAsyncioTestCase):
             await self.run_ui(['w','1','e','4','q'],phase=3,
                               layout='full-camera',disable_avoidance=True)
         self.assertEqual([(call.args[0].profile.robot_id,call.args[1:])
-                          for call in select.call_args_list],
-                         [('robot-a',(300.,340.)),('robot-b',(510.,60.))])
+                         for call in select.call_args_list],
+                         [('robot-a',(300.,.75*400)),
+                          ('robot-b',(.75*600,.25*400))])
 
 
 if __name__ == '__main__':

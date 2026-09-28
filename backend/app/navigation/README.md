@@ -16,19 +16,40 @@ circles. Targets scale with the actual capture resolution:
 
 | Key | Place | Image x / y |
 | --- | --- | --- |
-| 1 | homebase | 50% / 85% |
-| 2 | farm | 15% / 15% |
-| 3 | lake | 15% / 85% |
-| 4 | market | 85% / 15% |
+| 1 | homebase | 50% / 75% |
+| 2 | farm | 25% / 25% |
+| 3 | lake | 25% / 75% |
+| 4 | market | 75% / 25% |
+
+Waiting points keep the same horizontal coordinate and sit 20% of the frame
+height toward the center: 45% for top services and 55% for bottom services.
 
 Select W or E, then the number, then A. SPACE stops both. Hardcoded normalized
-locations live in `FULL_CAMERA_LOCATIONS` in `traffic.py`. Waiting points are
-displayed but do not dispatch movement. A resolution change clears targets and
+locations live in `FULL_CAMERA_LOCATIONS` in `traffic.py`. A resolution change clears targets and
 requires selection/re-arming; keep the camera stationary during a run.
 
-`--disable-avoidance` removes arena/frame clearance, building avoidance, peer
-separation, route reservation and predictive stopping-clearance checks. Both
-robots can move at once. This is direct driving, not collision-protected driving.
+`--disable-avoidance` removes arena/frame clearance, building avoidance, route
+reservation and predictive stopping-clearance checks. Both robots can move at
+once. A small peer-only bubble remains: its radius scales from each detected tag,
+and overlapping bubbles make the robots reverse briefly, then turn away until a
+hysteresis margin is clear before resuming their unchanged task targets. For a
+head-on encounter, both robots turn in the same relative direction and complete
+a forward passing stage before their original targets resume; this prevents the
+pair from repeatedly reversing into the same approach line. Contact
+starts a fresh command pulse so the reverse response is not delayed by a normal
+task pause. Near a
+camera edge, a robot turns toward the frame center once its marker center comes
+within 60% of its bubble radius from the edge, reducing the chance that its
+marker disappears while leaving more usable driving space.
+The orange circles show the peer bubbles; the thin orange rectangle shows the
+camera recovery inset. When both tasks use the same service target, one robot drives to that
+service while the other drives to its vertically separated waiting point, then
+continues without losing its task. This is a simple last-second separation
+behavior, not full collision protection.
+In direct mode, a missing marker stops both motor commands immediately but keeps
+the current task armed for up to 1.5 seconds. Reacquiring the marker during that
+window resumes automatically. A longer loss still disarms both robots and
+requires `A`, remaining below the backend's two-second stale-pose timeout.
 Both visible markers, valid on-image targets, BLE connectivity, pulse timing,
 arrival stopping and emergency stop remain required. The preset is not measured
 geometry, so it requires the explicit avoidance-off flag instead of silently
@@ -157,6 +178,10 @@ Edit `backend/navigation_config.json`, or use `--config /path/to/config.json`.
 | `ble_device` | WALL-Y name, or identifier returned by Bleak on this laptop |
 | `ble_characteristic` | `abcdefab-1234-5678-1234-abcdefabcdef` from the working script |
 | `ble_write_response` | True: acknowledged writes supported by supplied firmware |
+
+Name discovery prefers the current BLE advertisement's `local_name` and falls
+back to the operating system's cached device name. This avoids stale macOS names
+after an ESP32 is reflashed or renamed while preserving direct identifiers.
 
 Stop bypasses throttling. Normal writes happen only on changes or refreshes.
 Pulses reduce average travel, **not motor speed**: F/L/R still operate at the
@@ -358,8 +383,9 @@ market service points; keys 5–8 select their waiting points. Click clear floor
 each marker-center target, then S to save. All eight points are required for
 `--backend-url`. Start the backend with `HARDWARE_TRAFFIC_CONFIG` pointing to the
 same file so its world locations match. Local clicked targets remain compatible
-with older geometry files. Waiting points are currently saved/displayed only;
-automatic parking will be a separate traffic change. See the
+with older geometry files. In direct peer-bubble mode, a robot whose peer is
+using the same service point temporarily follows the matching waiting point;
+manual numbered selections still use service points directly. See the
 [setup guide](../../../CAMERA_SETUP_GUIDE.md#named-service-and-waiting-points).
 
 On the camera laptop, stop navigation and any other robot controller first, then

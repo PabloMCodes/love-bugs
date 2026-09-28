@@ -22,7 +22,10 @@ def ready_wheat_plot(world: dict, plot_index: int = 0) -> str:
 
 class TaskRouteTests(unittest.TestCase):
     def setUp(self):
-        self.store = WorldStore()
+        world = default_world()
+        world['robots'][1]['game'].update(money=40, inventory={})
+        world['game']['goal']['current'] = 80
+        self.store = WorldStore(world)
         self.client = TestClient(create_app(world_store=self.store))
         self.request = {
             'request_id': 'request-001',

@@ -241,6 +241,16 @@ body {
     filter: drop-shadow(0 4px 0 rgb(32 84 112 / 38%));
 }
 
+.chat-message-decision {
+    filter:
+        drop-shadow(0 5px 0 rgb(20 94 135 / 52%))
+        drop-shadow(0 0 4px rgb(123 207 242 / 45%));
+}
+
+.chat-message-conversation {
+    opacity: .9;
+}
+
 .chat-message-feed {
     scroll-behavior: smooth;
 }

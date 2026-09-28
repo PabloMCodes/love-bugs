@@ -104,7 +104,7 @@ class AutonomyRunnerTests(unittest.IsolatedAsyncioTestCase):
         })
 
         self.assertFalse(accepted)
-        self.assertEqual([robot.game.money for robot in store.snapshot().robots], [40, 40])
+        self.assertEqual([robot.game.money for robot in store.snapshot().robots], [40, 0])
         self.assertEqual(store.snapshot().economy.transfers, [])
 
     def test_store_session_check_is_atomic_with_task_assignment(self):

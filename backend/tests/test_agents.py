@@ -188,7 +188,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
                 return await super().decide(world, robot_id)
         orchestrator = AgentOrchestrator(Planner())
         outcomes = await orchestrator.tick(lambda: self.world, self.submit)
-        self.assertEqual([r['action'] for r in self.requests], ['BUY', 'BUY'])
+        self.assertEqual([r['action'] for r in self.requests], ['BUY', 'PLANT'])
         self.assertEqual([o.status for o in outcomes], ['accepted', 'accepted'])
         self.assertIsNotNone(seen[1]['robots'][0]['task'])
         self.assertEqual(await orchestrator.tick(lambda: self.world, self.submit), [])
@@ -213,7 +213,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             self.submit,
         )
 
-        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'BUY'])
+        self.assertEqual([request['action'] for request in self.requests], ['SELL', 'PLANT'])
         self.assertEqual(
             self.requests[0]['parameters'],
             {'item': 'crop', 'quantity': 3},
@@ -250,14 +250,10 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [request['action'] for request in self.requests],
-            ['BUY', 'BUY'],
+            ['BUY', 'PLANT'],
         )
-        self.assertTrue(
-            all(
-                request['parameters'] == {'item': 'seeds', 'quantity': 1}
-                for request in self.requests
-            )
-        )
+        self.assertEqual(self.requests[0]['parameters'], {'item': 'seeds', 'quantity': 1})
+        self.assertEqual(self.requests[1]['parameters']['item'], 'seeds')
         self.assertEqual([outcome.status for outcome in outcomes], ['accepted', 'accepted'])
 
     async def test_mock_planner_prefers_best_unlocked_crop_return(self):
@@ -345,7 +341,7 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [request['action'] for request in self.requests],
-            ['BUY', 'FISH'],
+            ['FISH', 'PLANT'],
         )
 
     async def test_mock_planner_requests_exact_seed_shortfall(self):

@@ -31,8 +31,8 @@ class CalibrationTests(unittest.TestCase):
                 sqlite_path=str(Path(directory)/'preset.sqlite3'))
             with TestClient(create_app(settings=settings,run_simulator=False)) as client:
                 world = client.get('/world').json()
-                self.assertEqual(world['map']['locations']['homebase'],{'x':50.,'y':85.})
-                self.assertEqual(world['map']['locations']['market'],{'x':85.,'y':15.})
+                self.assertEqual(world['map']['locations']['homebase'],{'x':50.,'y':75.})
+                self.assertEqual(world['map']['locations']['market'],{'x':75.,'y':25.})
 
     def test_reverse_drag_clipping_and_small_boxes(self):
         self.assertEqual(rectangle((120,90),(-5,10),100,80),[0,10,100,80])

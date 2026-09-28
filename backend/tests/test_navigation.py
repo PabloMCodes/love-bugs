@@ -86,11 +86,23 @@ class BleTests(unittest.IsolatedAsyncioTestCase):
         self.device = SimpleNamespace(name='WALL-Y', address='macos-uuid')
         self.client = SimpleNamespace(is_connected=True, connect=AsyncMock(),
                                       write_gatt_char=AsyncMock(), disconnect=AsyncMock())
-        self.scanner = SimpleNamespace(discover=AsyncMock(return_value=[self.device]))
+        self.scanner = SimpleNamespace(discover=AsyncMock(return_value={
+            self.device.address: (self.device, SimpleNamespace(local_name='WALL-Y')),
+        }))
         self.factory = Mock(return_value=self.client)
         self.ble = BleController(self.config, client_factory=self.factory,
                                  scanner=self.scanner, clock=lambda: self.now)
         await self.ble.connect()
+
+    async def test_live_advertised_name_overrides_cached_name(self):
+        stale = SimpleNamespace(name='Eeva', address='cached-as-eeva')
+        scanner = SimpleNamespace(discover=AsyncMock(return_value={
+            stale.address: (stale, SimpleNamespace(local_name='WALL-Y')),
+        }))
+        ble = BleController(self.config, client_factory=self.factory,
+                            scanner=scanner, clock=lambda: self.now)
+        await ble.connect()
+        self.factory.assert_called_with(stale, disconnected_callback=ble._disconnected)
 
     async def test_connect_stop_rate_limit_refresh_and_priority_stop(self):
         self.client.write_gatt_char.assert_awaited_once_with('test-uuid', b'S', response=True)

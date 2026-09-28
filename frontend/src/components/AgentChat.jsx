@@ -24,7 +24,7 @@ export default function AgentChat({ world }) {
 
             <div className="market-crate flex min-h-0 w-full flex-1 flex-col overflow-hidden p-5">
                 <div className="chat-controls flex shrink-0 items-center gap-2 px-3 py-2.5">
-                    <span className="min-w-0 flex-1 text-xs font-semibold">
+                    <span className="min-w-0 flex-1 text-[13px] font-semibold">
                         {feed.running
                             ? 'Robots are thinking…'
                             : feed.mode === 'autonomous'
@@ -41,7 +41,7 @@ export default function AgentChat({ world }) {
                 {(error || feed.error) && (
                     <p
                         role="alert"
-                        className="market-parchment-card mt-3 px-3 py-2 text-xs font-semibold text-red-900"
+                        className="market-parchment-card mt-3 px-3 py-2 text-[13px] font-semibold text-red-900"
                     >
                         {error || feed.error}
                     </p>
@@ -58,25 +58,30 @@ export default function AgentChat({ world }) {
                     className="chat-message-feed market-scrollbar mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
                 >
                     {messages.length === 0 && (
-                        <p className="chat-message-bubble px-5 pb-7 pt-4 text-sm text-[#46677c]">
+                        <p className="chat-message-bubble px-5 pb-7 pt-4 text-[19px] text-[#46677c]">
                             Robot decisions will appear here after the game starts.
                         </p>
                     )}
-                    {messages.map((message) => (
-                        <article
-                            key={message.id}
-                            className={`chat-message-bubble px-5 pb-7 pt-4 text-[#15364a] ${
-                                message.robot_id === 'robot-b' ? 'chat-message-bubble-reversed' : ''
-                            } ${message.id === lastMessage ? 'chat-message-enter' : ''}`}
-                        >
-                            <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                    {messages.map((message) => {
+                        const isDecision = !['banter', 'traffic'].includes(message.kind);
+                        return (
+                            <article
+                                key={message.id}
+                                className={`chat-message-bubble px-5 pb-7 pt-4 text-[#15364a] ${
+                                    isDecision ? 'chat-message-decision' : 'chat-message-conversation'
+                                } ${message.robot_id === 'robot-b' ? 'chat-message-bubble-reversed' : ''} ${
+                                    message.id === lastMessage ? 'chat-message-enter' : ''}`}
+                            >
+                            <div className="mb-1 flex items-center justify-between gap-2 text-[13px]">
                                 <span className="font-bold text-[#287aa2]">{message.name}</span>
                                 <time dateTime={message.timestamp} className="text-[#5b7990]">
                                     {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </time>
                             </div>
-                            <p className="break-words text-sm">{message.text}</p>
-                            {!['banter', 'traffic'].includes(message.kind) && <p className="mt-2 text-xs text-[#5b7990]">
+                            <p className={`break-words text-[15px] ${
+                                isDecision ? 'font-bold text-[#0f4f70]' : 'font-medium'
+                            }`}>{message.text}</p>
+                            {isDecision && <p className="mt-2 text-[13px] font-bold text-[#1c668d]">
                                 {message.status === 'accepted'
                                     ? 'Accepted'
                                     : message.status === 'waiting'
@@ -88,8 +93,9 @@ export default function AgentChat({ world }) {
                                     : ''
                                 }
                             </p>}
-                        </article>
-                    ))}
+                            </article>
+                        );
+                    })}
                 </div>
             </div>
         </section>

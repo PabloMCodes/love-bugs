@@ -27,7 +27,7 @@ class GoalRouteTests(unittest.TestCase):
         self.assertEqual(response.json(), {
             'type': 'earn_gold',
             'target': 750,
-            'current': 80,
+            'current': 40,
         })
         self.assertEqual(world['game']['goal'], response.json())
         self.assertEqual(world['revision'], before['revision'] + 1)
@@ -60,7 +60,7 @@ class GoalRouteTests(unittest.TestCase):
     def test_rejects_target_that_is_already_met(self):
         response = self.client.post('/goal', json={
             'type': 'earn_gold',
-            'target': 80,
+            'target': 40,
         })
 
         self.assertEqual(response.status_code, 400)

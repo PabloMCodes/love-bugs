@@ -19,6 +19,7 @@ class RobotPose:
     y: float
     heading: float
     zone: str | None
+    marker_radius: float = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -65,13 +66,15 @@ class ArucoTracker:
             marker_id = int(marker_id)
             points = marker_corners.reshape(4, 2)
             center = points.mean(axis=0)
+            marker_radius = max(float(np.linalg.norm(point - center)) for point in points)
             forward = (points[0] + points[1]) / 2 - center
             heading = degrees(atan2(float(forward[1]), float(forward[0]))) % 360
             x = float(np.clip(center[0] / max(width - 1, 1), 0, 1))
             y = float(np.clip(center[1] / max(height - 1, 1), 0, 1))
             zone = next((z.name for z in self.config.zones if z.contains(x, y)), None)
             robot_id = self.config.marker_to_robot.get(marker_id, f'aruco:{marker_id}')
-            pose = RobotPose(robot_id, marker_id, float(center[0]), float(center[1]), x, y, heading, zone)
+            pose = RobotPose(robot_id, marker_id, float(center[0]), float(center[1]),
+                             x, y, heading, zone, marker_radius)
             poses.append(pose)
             previous = self._last_zones.get(marker_id)
             if previous != zone:
